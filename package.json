@@ -1,0 +1,17 @@
+{
+	"name": "om",
+	"module": "index.ts",
+	"type": "module",
+	"scripts": {
+		"pack": "asar pack builds/default_app ./Om.app/Contents/Resources/default_app.asar",
+		"mac": "NODE_ENV=development ./Om.app/Contents/MacOS/Electron"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@electron/asar": "^3.2.0",
+		"electron": "^34.1.1"
+	},
+	"dependencies": {
+		"@types/electron": "^1.6.12"
+	}
+}

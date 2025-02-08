@@ -1,0 +1,22 @@
+<html lang="en">
+	<head>
+		<title>Om</title>
+		<!-- <meta http-equiv="Content-Security-Policy" content="require-trusted-types-for 'script'; trusted-types electron-default-app" /> -->
+		<!-- <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6PH54BfkNq/EMMhUY7nhHf3c+AxloOwfy7hWyT01CM8='; style-src 'self'; img-src 'self'; connect-src 'self'" /> -->
+		<link href="./styles.css" type="text/css" rel="stylesheet" />
+	</head>
+
+	<body>
+		<div class="container">
+			<div class="versions code">
+				<p class="electron-version"></p>
+				<p class="chrome-version"></p>
+				<p class="node-version"></p>
+				<p class="v8-version"></p>
+			</div>
+		</div>
+		<script>
+			window.electronDefaultApp.initialize();
+		</script>
+	</body>
+</html>

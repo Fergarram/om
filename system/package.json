@@ -1,0 +1,6 @@
+{
+	"name": "om-system",
+	"productName": "Om",
+	"main": "main.js",
+	"type": "module"
+}
