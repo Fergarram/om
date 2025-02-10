@@ -74,19 +74,14 @@ async function loadApplicationPackage(packagePath) {
 			let packageJson;
 			const emitWarning = process.emitWarning;
 			try {
-				process.emitWarning = () => {};
-				packageJson = (
-					await import(url.pathToFileURL(packageJsonPath).toString(), {
-						assert: {
-							type: "json",
-						},
-					})
-				).default;
+			    process.emitWarning = () => {};
+			    const packageJsonContent = fs.readFileSync(packageJsonPath, 'utf8');
+			    packageJson = JSON.parse(packageJsonContent);
 			} catch (e) {
-				showErrorMessage(`Unable to parse ${packageJsonPath}\n\n${e.message}`);
-				return;
+			    showErrorMessage(`Unable to parse ${packageJsonPath}\n\n${e.message}`);
+			    return;
 			} finally {
-				process.emitWarning = emitWarning;
+			    process.emitWarning = emitWarning;
 			}
 			if (packageJson.version) {
 				app.setVersion(packageJson.version);
@@ -288,10 +283,16 @@ Options:
 } else {
 	// Get the app's base directory
 	const appPath = app.getAppPath();
-	const rootDir =
-		process.env.NODE_ENV === "development"
+
+	let rootDir;
+
+	if (process.platform === 'win32') {
+		rootDir = path.dirname(path.dirname(path.dirname(path.dirname(appPath))));
+	} else {
+		rootDir = process.env.NODE_ENV === "development"
 			? process.cwd() // Use current working directory in development
 			: path.dirname(path.dirname(path.dirname(path.dirname(appPath))));
+	}
 
 	const systemPath = path.join(rootDir, "system");
 

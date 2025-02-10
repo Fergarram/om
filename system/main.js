@@ -11,7 +11,7 @@ const window_settings = {
 	width: 1024,
 	height: 600,
 	frame: false,
-	// icon: path.join(__dirname, "./assets/stormicon.png"),
+	icon: path.join(__dirname, "../icons/icon_512x512.png"),
 	autoHideMenuBar: true,
 	webPreferences: {
 		preload: path.join(__dirname, "bridges/index.js"),

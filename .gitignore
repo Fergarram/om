@@ -176,3 +176,6 @@ out
 
 # Om
 Om.app
+builds/Om.app
+builds/windows
+om.lnk

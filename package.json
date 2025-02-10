@@ -3,8 +3,11 @@
 	"module": "index.ts",
 	"type": "module",
 	"scripts": {
-		"pack": "asar pack builds/default_app ./Om.app/Contents/Resources/default_app.asar",
-		"mac": "NODE_ENV=development ./Om.app/Contents/MacOS/Electron"
+		"pack_mac": "asar pack builds/default_app ./Om.app/Contents/Resources/default_app.asar",
+		"pack_win": "asar pack builds/default_app ./builds/windows/resources/default_app.asar",
+		"mac": "NODE_ENV=development ./Om.app/Contents/MacOS/Electron",
+		"win": "cmd /c \"builds\\run.bat\"",
+		"pull_win": "powershell -File ./builds/pull_win.ps1"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
