@@ -1,0 +1,62 @@
+/*  */
+/* Icons */
+/*  */
+
+@font-face {
+	font-family: "Material Symbols";
+	src: url(../assets/material-symbols.ttf);
+}
+
+icon {
+	font-family: "Material Symbols";
+	line-height: 1;
+	letter-spacing: normal;
+	text-transform: none;
+	display: inline-block;
+	white-space: nowrap;
+	word-wrap: normal;
+	direction: ltr;
+	-webkit-font-feature-settings: "liga";
+	font-feature-settings: "liga";
+	-webkit-font-smoothing: antialiased;
+	pointer-events: none;
+	overflow: hidden;
+	/* Defaults */
+	font-size: var(--size-5);
+	font-weight: var(--font-medium);
+}
+
+icon::before {
+	content: attr(name);
+	display: inline-block;
+	/* Defaults */
+	width: var(--size-5);
+	height: var(--size-5);
+}
+
+icon[size="xs"] {
+	font-size: var(--size-4);
+}
+
+icon[size="xs"]::before {
+	width: var(--size-4);
+	height: var(--size-4);
+}
+
+icon[size="sm"] {
+	font-size: var(--size-4_5);
+}
+
+icon[size="sm"]::before {
+	width: var(--size-4_5);
+	height: var(--size-4_5);
+}
+
+icon[size="md"] {
+	font-size: var(--size-5);
+}
+
+icon[size="md"]::before {
+	width: var(--size-5);
+	height: var(--size-5);
+}

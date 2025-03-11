@@ -1,3 +1,3 @@
 cp -r node_modules/electron/dist/Electron.app/ builds/Om.app/
-cp icons/icon.icns builds/Om.app/Contents/Resources/electron.icns
+cp icons/icon.icns builds/Om.app/Contents/Resources/icon.icns
 bun pack_mac

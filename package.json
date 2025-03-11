@@ -1,21 +1,25 @@
 {
 	"name": "om",
-	"module": "index.ts",
-	"type": "module",
+	"version": "1.0.0",
+	"description": "Making computing great again.",
+	"main": "electron.js",
 	"scripts": {
-		"pack_mac": "asar pack builds/default_app ./builds/Om.app/Contents/Resources/default_app.asar",
 		"pack_win": "asar pack builds/default_app ./builds/windows/resources/default_app.asar",
-		"pull_win": "powershell -File ./builds/pull_win.ps1",
+		"pack_mac": "asar pack builds/default_app \"./builds/Om.app/Contents/Resources/default_app.asar\"",
+		"pack_linux": "asar pack builds/default_app ./builds/linux/resources/default_app.asar",
+		"pull_win": "cmd /c \"builds\\pull_win.bat\"",
+		"pull_linux": "sh ./builds/pull_linux.sh",
 		"pull_mac": "sh ./builds/pull_mac.sh",
-		"mac": "NODE_ENV=development ./builds/Om.app/Contents/MacOS/Electron",
+		"mac": "NODE_ENV=development \"./builds/Om.app/Contents/MacOS/Om\"",
+		"linux": "NODE_ENV=development ./builds/linux/om",
 		"win": "cmd /c \"builds\\run.bat\""
 	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
 	"devDependencies": {
-		"@types/bun": "latest",
-		"@electron/asar": "^3.2.0",
-		"electron": "^34.1.1"
-	},
-	"dependencies": {
-		"@types/electron": "^1.6.12"
+		"@types/ps-node": "^0.1.3",
+		"electron": "^34.0.0",
+		"asar": "^3.2.0"
 	}
 }

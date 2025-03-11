@@ -1,0 +1,47 @@
+/*  */
+/* General */
+/*  */
+
+body,
+#om-space {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden;
+	color: white;
+	background: black;
+}
+
+.is-dragging * {
+	user-select: none;
+}
+
+/*  */
+/* Scrollbars */
+/*  */
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-black-15);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-neutral-500);
+	border-radius: var(--size-2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #454545;
+}
+
+::-webkit-scrollbar-corner {
+	background: var(--color-black-15);
+}
