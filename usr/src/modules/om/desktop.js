@@ -1,27 +1,17 @@
-import sys from "./bridge.js";
 import { css, finish, GlobalStyleSheet, is_scrollable } from "../../lib/utils.js";
 import van from "../../lib/van.js";
+import { initialize_background_canvas } from "./background.js";
 const { div, canvas } = van.tags;
 
 //
 // Desktop Setup
 //
 
-GlobalStyleSheet(css`
-	[drag-handle] {
-		position: absolute;
-		z-index: 1;
-		left: 0;
-		top: 0;
-		width: 100%;
-		height: 100%;
-		opacity: 0;
-	}
-`);
-
+let desktop_el = null;
 let surface_el = null;
-const surface_initial_width = 48000;
-const surface_initial_height = 48000 * (window.innerHeight / window.innerWidth);
+
+const surface_initial_width = 100000;
+const surface_initial_height = surface_initial_width * (window.innerHeight / window.innerWidth);
 const applet_shadow_map = div({
 	id: "applet-shadow-map",
 	style: () => css`
@@ -37,9 +27,9 @@ await finish();
 const shadow_root = applet_shadow_map.attachShadow({ mode: "open" });
 
 const HANDLE_CONFIG = {
-	EDGE_SIZE: 12, // Size of edge handles (was 6)
-	CORNER_SIZE: 12, // Size of corner handles (was 6)
-	OFFSET: -6, // Offset from window edge (was -3)
+	EDGE_SIZE: 12,
+	CORNER_SIZE: 12,
+	OFFSET: -6,
 };
 
 const MIN_ZOOM = 0.1;
@@ -54,15 +44,17 @@ let order_change_callbacks = [];
 let camera_x = 0;
 let camera_y = 0;
 let scrolling_timeout = null;
+let zoom_timeout = null;
 let is_panning = false;
 let is_scrolling = false;
-let is_zooming = false;
+let is_zooming = van.state(false);
 let last_middle_click_x = 0;
 let last_middle_click_y = 0;
 let current_scale = 1;
 let pending_mouse_dx = 0;
 let pending_mouse_dy = 0;
 let has_pending_mouse_movement = false;
+const in_danger_zone = van.state(false);
 
 // Applet Interactions
 let last_mouse_x = 0;
@@ -81,6 +73,14 @@ let min_width = 10;
 let min_height = 10;
 let is_resizing = false;
 let resize_edge = null;
+let is_right_resize = false;
+let resize_start_width = 0;
+let resize_start_height = 0;
+let resize_start_x = 0;
+let resize_start_y = 0;
+let resize_quadrant = null;
+let resize_start_left = 0;
+let resize_start_top = 0;
 
 const observer = new MutationObserver((mutations) => {
 	for (let mutation of mutations) {
@@ -112,13 +112,15 @@ const observer = new MutationObserver((mutations) => {
 	}
 });
 
+//
+// Layout and Styles
+
 GlobalStyleSheet(css`
 	#om-desktop {
 		position: relative;
 		width: 100%;
 		height: auto;
 		flex-grow: 1;
-		border-radius: var(--size-2);
 		overflow: scroll;
 	}
 
@@ -128,7 +130,6 @@ GlobalStyleSheet(css`
 		height: auto;
 		bottom: 0;
 		flex-grow: 1;
-		border-radius: var(--size-2);
 		overflow: hidden;
 	}
 
@@ -148,11 +149,18 @@ export async function initialize_desktop(om_space) {
 		},
 		div({
 			id: "om-desktop-surface",
+			style: () => (is_zooming.val ? `will-change: transform, width, height;` : ``),
 		}),
 	);
 
 	const canvas_el = canvas({
 		id: "om-desktop-canvas",
+		style: () =>
+			in_danger_zone.val
+				? `
+			opacity: 0.1;
+		`
+				: "",
 	});
 
 	van.add(om_space, canvas_el);
@@ -160,62 +168,31 @@ export async function initialize_desktop(om_space) {
 
 	await finish();
 
-	// Setup canvas here
-	const ctx = canvas_el.getContext("2d");
-
-	// Load wallpaper image
-	const wallpaper = new Image();
-	wallpaper.src =
-		"https://d2w9rnfcy7mm78.cloudfront.net/7369156/original_f57b4d92d2054b6a282f75d301437b16.jpg?1590049392?bc=0";
-
-	// Wait for the image to load
-	await new Promise((resolve) => {
-		if (wallpaper.complete) {
-			resolve();
-		} else {
-			wallpaper.onload = resolve;
-		}
-	});
-
-	// Initial canvas setup
-	resize_canvas();
-	window.addEventListener("resize", resize_canvas);
+	const { draw_wallpaper, resize_canvas } = await initialize_background_canvas(desktop, canvas_el);
 
 	observer.observe(surface(), { childList: true });
 
 	on_place(handle_applet_placement);
 
+	handle_resize();
+
+	window.addEventListener("resize", handle_resize);
+	window.addEventListener("keydown", handle_keydown);
+	desktop.addEventListener("wheel", desktop_wheel, { passive: false });
+	desktop.addEventListener("scroll", desktop_scroll);
+	surface().addEventListener("mousedown", surface_mousedown);
+	window.addEventListener("mouseleave", window_mouseout);
+	window.addEventListener("mouseout", window_mouseout);
+	window.addEventListener("mouseup", window_mouseup);
+	window.addEventListener("mousemove", window_mousemove);
+
 	function update_surface_scale() {
-		surface().style.width = `${surface_initial_width * current_scale}px`;
-		surface().style.height = `${surface_initial_height * current_scale}px`;
 		surface().style.transform = `scale(${current_scale})`;
 	}
 
-	function resize_canvas() {
-		canvas_el.width = desktop.offsetWidth;
-		canvas_el.height = desktop.offsetHeight;
-		draw_wallpaper();
-	}
-
-	function draw_wallpaper() {
-		if (!ctx || !wallpaper.complete) return;
-
-		ctx.clearRect(0, 0, canvas_el.width, canvas_el.height);
-
-		// Calculate tile size based on current scale
-		const tile_width = wallpaper.width * current_scale;
-		const tile_height = wallpaper.height * current_scale;
-
-		// Calculate offset based on scroll position
-		const offset_x = -(camera_x % tile_width);
-		const offset_y = -(camera_y % tile_height);
-
-		// Draw tiles to cover the entire viewport
-		for (let x = offset_x; x < canvas_el.width; x += tile_width) {
-			for (let y = offset_y; y < canvas_el.height; y += tile_height) {
-				ctx.drawImage(wallpaper, x, y, tile_width, tile_height);
-			}
-		}
+	function handle_resize() {
+		resize_canvas();
+		draw_wallpaper(camera_x, camera_y, current_scale);
 	}
 
 	async function handle_keydown(e) {
@@ -240,12 +217,15 @@ export async function initialize_desktop(om_space) {
 
 			if (e.key === "=") {
 				e.preventDefault();
+				is_zooming.val = true;
 				current_scale = Math.min(current_scale + 0.1, 1.0);
 			} else if (e.key === "-") {
 				e.preventDefault();
+				is_zooming.val = true;
 				current_scale = Math.max(current_scale - 0.1, 0.1);
 			} else if (e.key === "0") {
 				e.preventDefault();
+				is_zooming.val = true;
 				current_scale = 1.0;
 			} else {
 				return;
@@ -264,10 +244,16 @@ export async function initialize_desktop(om_space) {
 				left: new_scroll_x,
 				top: new_scroll_y,
 			});
+
+			// Reset is_zooming after a short delay
+			clearTimeout(zoom_timeout);
+			zoom_timeout = setTimeout(() => {
+				is_zooming.val = false;
+			}, 150);
 		}
 	}
 
-	function desktop_wheel(e) {
+	async function desktop_wheel(e) {
 		let target = e.target;
 		while (target && target !== surface()) {
 			if (is_scrollable(target) && !is_scrolling) {
@@ -284,15 +270,18 @@ export async function initialize_desktop(om_space) {
 		if ((e.ctrlKey || e.metaKey) && !is_panning) {
 			e.preventDefault();
 
+			// Store current scroll position and viewport dimensions
+			const prev_scroll_x = desktop.scrollLeft;
+			const prev_scroll_y = desktop.scrollTop;
+
 			// Get cursor position relative to the viewport
-			const surface_rect = surface().getBoundingClientRect();
 			const rect = desktop.getBoundingClientRect();
 			const cursor_x = e.clientX - rect.left;
 			const cursor_y = e.clientY - rect.top;
 
-			// Calculate the point on the desktop under the cursor before scaling
-			const point_x = (desktop.scrollLeft + cursor_x) / current_scale;
-			const point_y = (desktop.scrollTop + cursor_y) / current_scale;
+			// Calculate origin point before scale change
+			const point_x = (prev_scroll_x + cursor_x) / current_scale;
+			const point_y = (prev_scroll_y + cursor_y) / current_scale;
 
 			// Calculate a scale factor that's smaller at low zoom levels
 			// The 0.05 at scale 1.0 will reduce to 0.005 at scale 0.1
@@ -302,22 +291,13 @@ export async function initialize_desktop(om_space) {
 			const delta = e.deltaY > 0 ? -scale_factor : scale_factor;
 			let new_scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current_scale + delta));
 
-			// With this percentage-based buffer approach:
-			const is_zooming_out = delta < 0;
-			const buffer = 15; // 15% buffer before stopping zoom out
-			const width_buffer = desktop.offsetWidth * (buffer / 100);
-			const height_buffer = desktop.offsetHeight * (buffer / 100);
-
-			if (
-				is_zooming_out &&
-				(surface_rect.width <= desktop.offsetWidth + width_buffer ||
-					surface_rect.height <= desktop.offsetHeight + height_buffer)
-			) {
-				return;
-			}
 			// Only proceed if the scale actually changed
 			if (new_scale !== current_scale) {
+				is_zooming.val = true;
 				current_scale = new_scale;
+
+				// Update the scale immediately
+				update_surface_scale();
 
 				// Calculate new scroll position to maintain cursor point
 				const new_scroll_x = point_x * current_scale - cursor_x;
@@ -328,6 +308,12 @@ export async function initialize_desktop(om_space) {
 					left: new_scroll_x,
 					top: new_scroll_y,
 				});
+
+				// Reset is_zooming after a short delay
+				clearTimeout(zoom_timeout);
+				zoom_timeout = setTimeout(() => {
+					is_zooming.val = false;
+				}, 150);
 			}
 		}
 	}
@@ -339,6 +325,22 @@ export async function initialize_desktop(om_space) {
 		scrolling_timeout = setTimeout(() => {
 			is_scrolling = false;
 		}, 150);
+
+		const rect = surface().getBoundingClientRect();
+		const max_x = rect.width - desktop.offsetWidth; //- desktop.offsetWidth * (current_scale / MIN_ZOOM);
+		const max_y = rect.height - desktop.offsetHeight; //- desktop.offsetHeight * (current_scale / MIN_ZOOM);
+
+		let new_x = desktop.scrollLeft;
+		let new_y = desktop.scrollTop;
+
+		if (new_x >= max_x) {
+			new_x = max_x;
+		}
+
+		if (new_y >= max_y) {
+			new_y = max_y;
+		}
+
 		camera_x = desktop.scrollLeft;
 		camera_y = desktop.scrollTop;
 	}
@@ -379,15 +381,6 @@ export async function initialize_desktop(om_space) {
 		}
 	}
 
-	window.addEventListener("keydown", handle_keydown);
-	desktop.addEventListener("wheel", desktop_wheel, { passive: false });
-	desktop.addEventListener("scroll", desktop_scroll);
-	surface().addEventListener("mousedown", surface_mousedown);
-	window.addEventListener("mouseleave", window_mouseout);
-	window.addEventListener("mouseout", window_mouseout);
-	window.addEventListener("mouseup", window_mouseup);
-	window.addEventListener("mousemove", window_mousemove);
-
 	function step() {
 		// Process any pending mouse movements in the animation frame
 		if (has_pending_mouse_movement && is_panning) {
@@ -407,18 +400,34 @@ export async function initialize_desktop(om_space) {
 			camera_y = 0;
 		}
 
-		if (camera_x >= surface().offsetWidth - desktop.offsetWidth) {
-			camera_x = surface().offsetWidth - desktop.offsetWidth;
+		const rect = surface().getBoundingClientRect();
+		const max_x = rect.width - desktop.offsetWidth;
+		const max_y = rect.height - desktop.offsetHeight;
+
+		// This might not even be the actual danger zone lol...
+		const danger_x = rect.width - desktop.offsetWidth - desktop.offsetWidth * (current_scale / MIN_ZOOM) * 2;
+		const danger_y = rect.height - desktop.offsetHeight - desktop.offsetHeight * (current_scale / MIN_ZOOM) * 2;
+
+		// I just need to prevent scrolling past the edge of the surface or highjack the point_x and point_y calculations in the wheel event
+
+		// if (camera_x >= danger_x || camera_y >= danger_y) {
+		// 	in_danger_zone.val = true;
+		// } else {
+		// 	in_danger_zone.val = false;
+		// }
+
+		if (camera_x >= max_x) {
+			camera_x = max_x;
 		}
 
-		if (camera_y >= surface().offsetHeight - desktop.offsetHeight) {
-			camera_y = surface().offsetHeight - desktop.offsetHeight;
+		if (camera_y >= max_y) {
+			camera_y = max_y;
 		}
 
 		if (is_panning) {
 			desktop.scroll({
-				top: camera_y,
 				left: camera_x,
+				top: camera_y,
 				behavior: "instant",
 			});
 		}
@@ -427,12 +436,30 @@ export async function initialize_desktop(om_space) {
 		update_surface_scale();
 
 		// Draw the wallpaper with the current scroll and zoom
-		draw_wallpaper();
+		draw_wallpaper(camera_x, camera_y, current_scale);
 
 		requestAnimationFrame(step);
 	}
 
 	requestAnimationFrame(step);
+}
+
+export function get_camera_position() {
+	return { x: camera_x, y: camera_y };
+}
+
+export function get_camera_center() {
+	return {
+		x: (camera_x + desktop().offsetWidth / 2) / current_scale,
+		y: (camera_y + desktop().offsetHeight / 2) / current_scale,
+	};
+}
+
+export function desktop() {
+	if (!desktop_el) {
+		desktop_el = document.getElementById("om-desktop");
+	}
+	return desktop_el;
 }
 
 export function surface() {
@@ -544,19 +571,11 @@ async function handle_applet_placement(applet, first_mount = false) {
 		applet.style.removeProperty("will-change");
 	}
 
-	applet.addEventListener("mousedown", handle_mousedown_focus);
-
-	const drag_handle = applet.querySelector("[drag-handle]");
-	if (drag_handle) drag_handle.addEventListener("mousedown", handle_mousedown);
-
-	async function handle_mousedown_focus(e) {
-		if (e.button !== 0) return;
-		const tsid = applet.getAttribute("om-tsid");
-		lift(tsid);
-	}
+	applet.addEventListener("contextmenu", prevent_context_menu);
+	applet.addEventListener("mousedown", handle_mousedown);
 
 	async function handle_mousedown(e) {
-		if (!e.target || dragged_applet !== null || is_panning || is_zooming) return;
+		if (!e.target || dragged_applet !== null || is_panning) return;
 
 		current_mouse_button = e.button;
 
@@ -565,20 +584,63 @@ async function handle_applet_placement(applet, first_mount = false) {
 
 		if (
 			applet.getAttribute("om-motion") !== "idle" ||
-			(target.tagName !== "H2" &&
-				(target.tagName === "A" ||
-					target.tagName === "BUTTON" ||
-					target.tagName === "INPUT" ||
-					target.tagName === "TEXTAREA" ||
-					target.tagName === "SELECT" ||
-					is_contenteditable ||
-					(target.tagName === "IMG" && target.getAttribute("draggable") !== "false")))
+			target.tagName === "A" ||
+			target.tagName === "BUTTON" ||
+			target.tagName === "INPUT" ||
+			target.tagName === "TEXTAREA" ||
+			target.tagName === "SELECT" ||
+			is_contenteditable ||
+			(target.tagName === "IMG" && target.getAttribute("draggable") !== "false")
 		) {
-			e.preventDefault();
-			return;
+			if (e.metaKey || e.ctrlKey) e.preventDefault();
 		}
 
-		if ((e.metaKey || e.ctrlKey) && current_mouse_button === 0) {
+		if ((e.metaKey || e.ctrlKey) && current_mouse_button === 2) {
+			e.preventDefault();
+
+			// Start resizing with right click
+			is_right_resize = true;
+			dragged_applet = applet;
+
+			// Store initial dimensions and mouse position
+			resize_start_width = applet.offsetWidth;
+			resize_start_height = applet.offsetHeight;
+			resize_start_x = e.clientX;
+			resize_start_y = e.clientY;
+			resize_start_left = parseInt(applet.style.left) || 0;
+			resize_start_top = parseInt(applet.style.top) || 0;
+
+			// Determine which quadrant the click happened in
+			const applet_rect = applet.getBoundingClientRect();
+			const click_x = e.clientX;
+			const click_y = e.clientY;
+
+			// Calculate relative position within the applet
+			const relative_x = (click_x - applet_rect.left) / applet_rect.width;
+			const relative_y = (click_y - applet_rect.top) / applet_rect.height;
+
+			// Determine quadrant (tl, tr, bl, br)
+			if (relative_x < 0.5) {
+				if (relative_y < 0.5) {
+					resize_quadrant = "tl"; // top-left
+				} else {
+					resize_quadrant = "bl"; // bottom-left
+				}
+			} else {
+				if (relative_y < 0.5) {
+					resize_quadrant = "tr"; // top-right
+				} else {
+					resize_quadrant = "br"; // bottom-right
+				}
+			}
+
+			// Set styling for resize operation
+			applet.style.willChange = "width, height, left, top";
+
+			// Lift the applet to the top
+			const tsid = applet.getAttribute("om-tsid");
+			lift(tsid);
+		} else if ((e.metaKey || e.ctrlKey) && current_mouse_button === 0) {
 			document.body.classList.toggle("is-dragging");
 			let x = Number(applet.style.left.replace("px", ""));
 			let y = Number(applet.style.top.replace("px", ""));
@@ -764,7 +826,9 @@ function stop_resize() {
 }
 
 async function handle_mousemove(e) {
+	// Handle regular drag operation
 	if (current_mouse_button === 0) {
+		// Existing drag code
 		delta_x = (last_mouse_x - e.clientX) / current_scale;
 		delta_y = (last_mouse_y - e.clientY) / current_scale;
 		last_mouse_x = e.clientX;
@@ -780,11 +844,68 @@ async function handle_mousemove(e) {
 			dragged_applet.style.top = `${dragging_y}px`;
 		}
 	}
+	// Handle right-click resize operation with quadrants
+	else if (current_mouse_button === 2 && is_right_resize && dragged_applet) {
+		// Calculate how much the mouse has moved since starting the resize
+		const dx = (e.clientX - resize_start_x) / current_scale;
+		const dy = (e.clientY - resize_start_y) / current_scale;
+
+		// Get computed style to respect min-width and min-height CSS properties
+		const computed_style = window.getComputedStyle(dragged_applet);
+		const css_min_width = parseFloat(computed_style.minWidth) || min_width;
+		const css_min_height = parseFloat(computed_style.minHeight) || min_height;
+
+		// Initialize new dimensions and position
+		let new_width = resize_start_width;
+		let new_height = resize_start_height;
+		let new_left = resize_start_left;
+		let new_top = resize_start_top;
+
+		// Apply changes based on which quadrant the resize started in
+		switch (resize_quadrant) {
+			case "br": // bottom-right
+				// Just adjust width and height
+				new_width = Math.max(css_min_width, resize_start_width + dx);
+				new_height = Math.max(css_min_height, resize_start_height + dy);
+				break;
+
+			case "bl": // bottom-left
+				// Adjust width (inversely) and height, and reposition left
+				const width_change_bl = Math.min(dx, resize_start_width - css_min_width);
+				new_width = Math.max(css_min_width, resize_start_width - dx);
+				new_height = Math.max(css_min_height, resize_start_height + dy);
+				new_left = resize_start_left + (resize_start_width - new_width);
+				break;
+
+			case "tr": // top-right
+				// Adjust width and height (inversely), and reposition top
+				new_width = Math.max(css_min_width, resize_start_width + dx);
+				new_height = Math.max(css_min_height, resize_start_height - dy);
+				new_top = resize_start_top + (resize_start_height - new_height);
+				break;
+
+			case "tl": // top-left
+				// Adjust width and height (both inversely), and reposition both
+				new_width = Math.max(css_min_width, resize_start_width - dx);
+				new_height = Math.max(css_min_height, resize_start_height - dy);
+				new_left = resize_start_left + (resize_start_width - new_width);
+				new_top = resize_start_top + (resize_start_height - new_height);
+				break;
+		}
+
+		// Apply the new dimensions and position
+		dragged_applet.style.width = `${new_width}px`;
+		dragged_applet.style.height = `${new_height}px`;
+		dragged_applet.style.left = `${new_left}px`;
+		dragged_applet.style.top = `${new_top}px`;
+	}
 }
 
 async function handle_mouseup(e) {
 	window.removeEventListener("mousemove", handle_mousemove);
 	window.removeEventListener("mouseup", handle_mouseup);
+
+	if (!dragged_applet) return;
 
 	if ((e.metaKey || e.ctrlKey) && current_mouse_button === 0) {
 		document.body.classList.toggle("is-dragging");
@@ -802,10 +923,25 @@ async function handle_mouseup(e) {
 			dragged_applet.style.removeProperty("will-change");
 		}
 	}
+	// Handle completion of right-click resize
+	else if (current_mouse_button === 2 && is_right_resize) {
+		// Clean up
+		is_right_resize = false;
+		resize_quadrant = null;
+		dragged_applet.style.removeProperty("will-change");
+	}
 
 	if (current_mouse_button === 0 || current_mouse_button === 2) {
 		save();
 	}
 
 	dragged_applet = null;
+}
+
+function prevent_context_menu(e) {
+	if ((e.metaKey || e.ctrlKey) && e.button === 2) {
+		e.preventDefault();
+		return false;
+	}
+	return true;
 }

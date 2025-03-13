@@ -51,33 +51,9 @@ export async function StatusBar() {
 		button(
 			{
 				variant: "icon",
-				title: "Toggle Sidebar",
-				"aria-label": "Toggle Sidebar",
-				async onclick(e) {
-					const x = 300;
-					const y = 100;
-					const width = 400;
-					const height = 400;
-					const test = div(
-						{
-							"om-applet": "test",
-							"om-motion": "idle",
-							style: () => css`
-								position: absolute;
-								top: ${y}px;
-								left: ${x}px;
-								min-width: 100px;
-								min-height: 100px;
-								width: ${width}px;
-								height: ${height}px;
-								background-color: var(--color-slate-300);
-							`,
-						},
-						div({ "drag-handle": "" }),
-					);
-
-					van.add(surface(), test);
-				},
+				title: "Toggle Launcher",
+				"aria-label": "Toggle Launcher",
+				async onclick(e) {},
 			},
 			icon({ name: "action_key", size: "sm" }),
 		),

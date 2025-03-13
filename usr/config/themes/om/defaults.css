@@ -30,11 +30,11 @@ body,
 }
 
 ::-webkit-scrollbar-track {
-	background: var(--color-black-15);
+	background: #e8dfd8;
 }
 
 ::-webkit-scrollbar-thumb {
-	background: var(--color-neutral-500);
+	background: #cd2430;
 	border-radius: var(--size-2);
 }
 
@@ -43,5 +43,5 @@ body,
 }
 
 ::-webkit-scrollbar-corner {
-	background: var(--color-black-15);
+	background: #e8dfd8;
 }
