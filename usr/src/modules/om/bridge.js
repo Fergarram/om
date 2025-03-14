@@ -99,6 +99,12 @@ const win = {
 	},
 };
 
-const sys = { shell, process, file, dialog, menu, win };
+const appstream = {
+	async select(opts) {
+		return await __sys.invoke("appstream.select", opts);
+	},
+};
+
+const sys = { shell, process, file, dialog, menu, win, appstream };
 
 export default sys;

@@ -581,6 +581,7 @@ async function handle_applet_placement(applet, first_mount = false) {
 
 		const target = e.target;
 		const is_contenteditable = target.isContentEditable || target.closest('[contenteditable="true"]');
+		const is_drag_handle = target.hasAttribute("drag-handle");
 
 		if (
 			applet.getAttribute("om-motion") !== "idle" ||
@@ -640,7 +641,7 @@ async function handle_applet_placement(applet, first_mount = false) {
 			// Lift the applet to the top
 			const tsid = applet.getAttribute("om-tsid");
 			lift(tsid);
-		} else if ((e.metaKey || e.ctrlKey) && current_mouse_button === 0) {
+		} else if ((e.metaKey || e.ctrlKey || is_drag_handle) && current_mouse_button === 0) {
 			document.body.classList.toggle("is-dragging");
 			let x = Number(applet.style.left.replace("px", ""));
 			let y = Number(applet.style.top.replace("px", ""));
@@ -907,7 +908,7 @@ async function handle_mouseup(e) {
 
 	if (!dragged_applet) return;
 
-	if ((e.metaKey || e.ctrlKey) && current_mouse_button === 0) {
+	if (current_mouse_button === 0) {
 		document.body.classList.toggle("is-dragging");
 
 		if (!e.shiftKey) {

@@ -39,7 +39,7 @@ export function create_window(space) {
 		width: 1024,
 		height: 600,
 		show: false,
-		fullscreen: true,
+		alwaysOnTop: true,
 		backgroundColor: "#000000",
 		frame: false,
 		autoHideMenuBar: true,

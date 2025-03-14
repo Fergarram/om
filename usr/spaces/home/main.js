@@ -8,6 +8,7 @@ import { initialize_desktop } from "../../src/modules/om/desktop.js";
 // Modules
 import "../../src/modules/om/applets/test.js";
 import "../../src/modules/om/applets/sticky.js";
+import "../../src/modules/om/applets/appview.js";
 
 // DOM Setup
 const { main } = van.tags;

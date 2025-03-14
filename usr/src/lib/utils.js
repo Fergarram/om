@@ -1,3 +1,16 @@
+export async function try_catch(func) {
+	try {
+		const result = func();
+		// Check if the result is a promise
+		if (result instanceof Promise) {
+			return [await result, null];
+		}
+		return [result, null];
+	} catch (error) {
+		return [null, error];
+	}
+}
+
 export function is_scrollable(element) {
 	if (!element) return false;
 	const style = window.getComputedStyle(element);

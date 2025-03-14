@@ -5,10 +5,26 @@ import van from "../../../lib/van.js";
 const { div } = van.tags;
 
 const PASTEL_COLORS = [
-	{ bg: "var(--color-yellow-200)", text: "var(--color-yellow-900)" }, // 1
-	{ bg: "var(--color-blue-200)", text: "var(--color-blue-900)" }, // 2
-	{ bg: "var(--color-green-200)", text: "var(--color-green-900)" }, // 3
-	{ bg: "var(--color-pink-200)", text: "var(--color-pink-900)" }, // 4
+	{
+		bg: "var(--color-yellow-200)",
+		handle: "var(--color-yellow-300)",
+		text: "var(--color-yellow-900)",
+	},
+	{
+		bg: "var(--color-blue-200)",
+		handle: "var(--color-blue-300)",
+		text: "var(--color-blue-900)",
+	},
+	{
+		bg: "var(--color-green-200)",
+		handle: "var(--color-green-300)",
+		text: "var(--color-green-900)",
+	},
+	{
+		bg: "var(--color-pink-200)",
+		handle: "var(--color-pink-300)",
+		text: "var(--color-pink-900)",
+	},
 ];
 
 window.addEventListener("keydown", (e) => {
@@ -76,6 +92,16 @@ async function add_sticky(colorIndex = 0) {
 				color: ${color_scheme.text};
 			`,
 		},
+		div({
+			"drag-handle": true,
+			style: css`
+				height: var(--size-6);
+				width: 100%;
+				background-color: ${color_scheme.handle};
+				cursor: move;
+				user-select: none;
+			`,
+		}),
 		div({
 			class: "content",
 			spellcheck: "false",
