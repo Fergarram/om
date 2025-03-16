@@ -1,5 +1,5 @@
 import { css, finish, GlobalStyleSheet } from "../../../lib/utils.js";
-import { get_camera_center, surface } from "../desktop.js";
+import { get_camera_center, surface, on_applet_remove } from "../desktop.js";
 import van from "../../../lib/van.js";
 
 const { div } = van.tags;
@@ -38,29 +38,6 @@ window.addEventListener("keydown", (e) => {
 	}
 });
 
-GlobalStyleSheet(css`
-	[om-applet="sticky"] {
-		position: absolute;
-		min-width: 150px;
-		min-height: 150px;
-		font-family: var(--font-mono);
-		line-height: 1.5;
-		border-radius: 2px;
-		box-shadow: var(--fast-thickness-1);
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-
-		.content {
-			flex: 1;
-			padding: 10px;
-			outline: none;
-			overflow-y: auto;
-			word-wrap: break-word;
-		}
-	}
-`);
-
 async function add_sticky(colorIndex = 0) {
 	let { x, y } = get_camera_center();
 
@@ -78,6 +55,8 @@ async function add_sticky(colorIndex = 0) {
 
 	// Use the color corresponding to the pressed number key
 	const color_scheme = PASTEL_COLORS[colorIndex];
+
+	const is_resizing = van.state(false);
 
 	const sticky = div(
 		{
@@ -104,7 +83,33 @@ async function add_sticky(colorIndex = 0) {
 		div({
 			class: "content",
 			spellcheck: "false",
-			contenteditable: "true",
+			contenteditable: () => (is_resizing.val ? "false" : "true"),
+			onkeydown(e) {
+				// Close the sticky note with Cmd+W (Mac) or Ctrl+W (Windows/Linux)
+				if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w") {
+					sticky.remove();
+				}
+
+				// Check for Cmd+Shift+V (Mac) or Ctrl+Shift+V (Windows/Linux)
+				if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "v") {
+					e.preventDefault();
+
+					// Get clipboard content as plain text
+					navigator.clipboard
+						.readText()
+						.then((text) => {
+							// Save current selection for undo functionality
+							const selection = window.getSelection();
+							const range = selection.getRangeAt(0);
+
+							// Use execCommand which registers with the undo stack
+							document.execCommand("insertText", false, text);
+						})
+						.catch((err) => {
+							console.error("Failed to read clipboard contents: ", err);
+						});
+				}
+			},
 		}),
 	);
 
@@ -114,4 +119,53 @@ async function add_sticky(colorIndex = 0) {
 
 	// Focus the content area to start typing immediately
 	sticky.querySelector(".content").focus();
+
+	window.addEventListener("applet-resize-start", handle_applet_resize_start);
+	window.addEventListener("applet-resize-stop", handle_applet_resize_stop);
+
+	on_applet_remove((a) => {
+		if (a === sticky) {
+			window.removeEventListener("applet-resize-start", handle_applet_resize_start);
+			window.removeEventListener("applet-resize-stop", handle_applet_resize_stop);
+		}
+	});
+
+	function handle_applet_resize_start(e) {
+		if (e.detail.applet === sticky) {
+			is_resizing.val = true;
+		}
+	}
+
+	function handle_applet_resize_stop(e) {
+		if (e.detail.applet === sticky) {
+			is_resizing.val = false;
+		}
+	}
 }
+
+//
+// Styles
+//
+
+GlobalStyleSheet(css`
+	[om-applet="sticky"] {
+		position: absolute;
+		min-width: 150px;
+		min-height: 150px;
+		font-family: var(--font-mono);
+		line-height: 1.5;
+		border-radius: 2px;
+		box-shadow: var(--fast-thickness-1);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+
+		.content {
+			flex: 1;
+			padding: 10px;
+			outline: none;
+			overflow-y: auto;
+			word-wrap: break-word;
+		}
+	}
+`);

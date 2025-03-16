@@ -34,7 +34,7 @@ const HANDLE_CONFIG = {
 };
 
 const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 1.5;
+const MAX_ZOOM = 1;
 
 let applet_initializers = {};
 let place_callbacks = [];
@@ -169,7 +169,7 @@ export async function initialize_desktop(om_space) {
 
 	observer.observe(surface(), { childList: true });
 
-	on_place(handle_applet_placement);
+	on_applet_place(handle_applet_placement);
 
 	handle_resize();
 
@@ -467,11 +467,11 @@ export function register_applet_initializer(window_name, initializer) {
 	applet_initializers[window_name] = initializer;
 }
 
-export function on_place(callback) {
+export function on_applet_place(callback) {
 	place_callbacks.push(callback);
 }
 
-export function on_remove(callback) {
+export function on_applet_remove(callback) {
 	remove_callbacks.push(callback);
 }
 
@@ -490,14 +490,6 @@ export async function place_applet(applet, first_mount = false) {
 
 		if (!first_mount) {
 			add_shadow_clone(applet, uuid);
-		}
-	}
-
-	const window_name = applet.getAttribute("om-applet");
-	if (applet_initializers && applet_initializers[window_name]) {
-		const destructor = applet_initializers[window_name](applet);
-		if (destructor && typeof destructor === "function") {
-			on_remove(destructor);
 		}
 	}
 
@@ -748,6 +740,8 @@ async function handle_applet_placement(applet, first_mount = false) {
 				e.stopPropagation();
 
 				is_resizing = true;
+				const ev = new CustomEvent("applet-resize-start", { detail: { applet } });
+				window.dispatchEvent(ev);
 				applet.setAttribute("om-motion", "resizing");
 				document.body.classList.add("is-resizing");
 				resize_edge = edge;
@@ -814,6 +808,8 @@ function handle_resize(e) {
 function stop_resize() {
 	if (is_resizing) {
 		is_resizing = false;
+		const ev = new CustomEvent("applet-resize-stop", { detail: { applet: dragged_applet } });
+		window.dispatchEvent(ev);
 		dragged_applet.setAttribute("om-motion", "idle");
 		document.body.classList.remove("is-resizing");
 		resize_edge = null;
@@ -898,9 +894,14 @@ async function handle_mousemove(e) {
 		dragged_applet.style.left = `${new_left}px`;
 		dragged_applet.style.top = `${new_top}px`;
 
-		// Add body class
-		document.body.classList.add("is-resizing");
-		dragged_applet.setAttribute("om-motion", "resizing");
+		// Set state
+		if (!is_resizing) {
+			is_resizing = true;
+			const ev = new CustomEvent("applet-resize-start", { detail: { applet: dragged_applet } });
+			window.dispatchEvent(ev);
+			document.body.classList.add("is-resizing");
+			dragged_applet.setAttribute("om-motion", "resizing");
+		}
 	}
 }
 
@@ -929,7 +930,10 @@ async function handle_mouseup(e) {
 	// Handle completion of right-click resize
 	else if (current_mouse_button === 2 && is_right_resize) {
 		// Clean up
+		is_resizing = false;
 		is_right_resize = false;
+		const ev = new CustomEvent("applet-resize-stop", { detail: { applet: dragged_applet } });
+		window.dispatchEvent(ev);
 		resize_quadrant = null;
 		dragged_applet.style.removeProperty("will-change");
 		dragged_applet.setAttribute("om-motion", "idle");
