@@ -1,6 +1,11 @@
 const { ipcRenderer } = require("electron");
 
 function handle_webview_keydown(e) {
+	// Devtools
+	if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") {
+		ipcRenderer.sendToHost("devtools");
+	}
+
 	if ((e.ctrlKey || e.metaKey) && e.key === "r") {
 		e.preventDefault();
 		location.reload();

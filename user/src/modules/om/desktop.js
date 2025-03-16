@@ -1,7 +1,6 @@
 import { css, finish, GlobalStyleSheet, is_scrollable } from "../../lib/utils.js";
 import van from "../../lib/van.js";
 import { initialize_background_canvas } from "./background.js";
-import sys from "./bridge.js";
 const { div, canvas } = van.tags;
 
 //

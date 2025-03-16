@@ -121,6 +121,9 @@ const browser = {
 	async capture_page(webcontents_id) {
 		return await __sys.invoke("browser.capture_page", webcontents_id);
 	},
+	async open_webview_devtools(target_webview_wcid, devtools_webview_wcid) {
+		return await __sys.invoke("browser.open_webview_devtools", target_webview_wcid, devtools_webview_wcid);
+	},
 };
 
 const sys = { shell, process, file, dialog, menu, win, appstream, browser };

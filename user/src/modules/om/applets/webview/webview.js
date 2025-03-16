@@ -45,8 +45,13 @@ async function add_webview(props) {
 	// State
 	//
 
+	const is_devtools_webview = van.state(props.devtools_requester ? true : false);
 	const query = van.state(props.url || "");
-	const src = van.state("");
+	const src = van.state(
+		props.devtools_requester
+			? `devtools://devtools/bundled/inspector.html?ws=localhost:0/${props.devtools_requester.getWebContentsId()}`
+			: "",
+	);
 	const last_render = van.state("");
 	const focused = van.state(false);
 	const loading = van.state(false);
@@ -64,14 +69,25 @@ async function add_webview(props) {
 	// Layout
 	//
 
-	const webview_el = webview({
-		src: () => src.val,
-		allowpopups: true,
+	const webview_config = {
 		nodeintegration: false,
 		useragent:
-			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-		webpreferences: `contextIsolation=true, sandbox=true`,
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
 		preload: "../../src/modules/om/applets/webview/preload.js",
+		webpreferences: "contextIsolation=true,sandbox=true,allowRunningInsecureContent=true",
+	};
+
+	if (props.devtools_requester) {
+		delete webview_config.preload;
+		delete webview_config.webpreferences;
+		delete webview_config.nodeintegration;
+		delete webview_config.useragent;
+	}
+
+	const webview_el = webview({
+		...webview_config,
+		src: () => src.val,
+		allowpopups: true,
 		"has-error": () => !!load_error.val,
 		"is-loading": () => loading.val,
 		// CSS Hack to fix Electron bug
@@ -85,6 +101,7 @@ async function add_webview(props) {
 		{
 			"om-applet": "webview",
 			"om-motion": "idle",
+			"is-devtools": () => is_devtools_webview.val,
 			focus: () => focused.val,
 			style: () => css`
 				top: ${props.y}px;
@@ -96,7 +113,7 @@ async function add_webview(props) {
 		header(
 			{
 				"drag-handle": "",
-				"new-tab": () => src.val === "",
+				"new-tab": () => src.val === "" && !is_devtools_webview.val,
 			},
 			input({
 				variant: "minimal",
@@ -118,7 +135,7 @@ async function add_webview(props) {
 		),
 		webview_el,
 		img({
-			empty: () => src.val === "",
+			empty: () => src.val === "" && !is_devtools_webview.val,
 			src: last_render,
 			alt: "",
 		}),
@@ -146,8 +163,13 @@ async function add_webview(props) {
 		}
 	});
 
-	webview_el.addEventListener("console-message", (e) => {
-		console.log("Guest page logged a message:", e.message);
+	webview_el.addEventListener("dom-ready", async () => {
+		if (props.devtools_requester) {
+			await sys.browser.open_webview_devtools(props.devtools_requester.getWebContentsId(), webview_el.getWebContentsId());
+			props.devtools_requester.openDevTools({
+				mode: "detach",
+			});
+		}
 	});
 
 	webview_el.addEventListener("did-start-loading", () => {
@@ -171,8 +193,26 @@ async function add_webview(props) {
 		query.val = event.url;
 	});
 
-	webview_el.addEventListener("ipc-message", (e) => {
+	webview_el.addEventListener("ipc-message", async (e) => {
 		switch (e.channel) {
+			case "devtools": {
+				const current_width = applet.offsetWidth;
+				const current_height = applet.offsetHeight;
+				const current_x = applet.offsetLeft;
+				const current_y = applet.offsetTop;
+				const random_x_offset = Math.floor(Math.random() * 150) - 48;
+				const random_y_offset = Math.floor(Math.random() * 150) - 48;
+
+				await add_webview({
+					width: current_width,
+					height: current_height,
+					x: current_x + current_width + random_x_offset,
+					y: current_y + random_y_offset,
+					devtools_requester: webview_el,
+				});
+
+				break;
+			}
 			case "new-window": {
 				const url = e.args[0];
 				sys.browser.new_window(url);
@@ -323,6 +363,8 @@ async function add_webview(props) {
 		// If it's not an obvious URL, treat it as a search query
 		return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 	}
+
+	return applet;
 }
 
 //
@@ -399,6 +441,17 @@ GlobalStyleSheet(css`
 		outline: var(--size-2) solid var(--color-white-70);
 	}
 
+	[om-applet="webview"][is-devtools="true"] header {
+		display: none;
+	}
+
+	[om-applet="webview"][om-motion="resizing"] webview {
+		display: none;
+	}
+	[om-applet="webview"][om-motion="resizing"] img[empty="false"] {
+		display: block;
+	}
+
 	.is-dragging webview,
 	.is-panning webview,
 	.is-zooming webview,
@@ -409,14 +462,5 @@ GlobalStyleSheet(css`
 
 	.super-key-down [om-applet="webview"] overlay {
 		pointer-events: auto;
-	}
-
-	.is-resizing {
-		[om-applet="webview"] webview {
-			display: none;
-		}
-		[om-applet="webview"] img[empty="false"] {
-			display: block;
-		}
 	}
 `);

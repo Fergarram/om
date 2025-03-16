@@ -21,3 +21,9 @@ ipcMain.handle("browser.capture_page", async (event, webcontents_id) => {
 	const image = await contents.capturePage();
 	return image.toDataURL();
 });
+
+ipcMain.handle("browser.open_webview_devtools", async (event, target_webview_wcid, devtools_webview_wcid) => {
+	const target = webContents.fromId(target_webview_wcid);
+	const devtools = webContents.fromId(devtools_webview_wcid);
+	target.setDevToolsWebContents(devtools);
+});
