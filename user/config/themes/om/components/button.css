@@ -41,6 +41,18 @@ button[variant] {
 	color: var(--color-white);
 }
 
+/* Default */
+button[variant="default"] {
+	background-color: var(--color-neutral-700);
+	transition: background 150ms var(--ease-in);
+	padding: var(--size-2) var(--size-3);
+	border-radius: var(--size-1);
+}
+
+button[variant="default"]:hover {
+	background-color: color-mix(in oklch, var(--color-neutral-700), transparent 10%);
+}
+
 /* Text */
 button[variant="text"] {
 	transition: background 150ms var(--ease-in);
@@ -55,7 +67,8 @@ button[variant="text"]:hover {
 /* Icon */
 button[variant="icon"] {
 	transition: background 150ms var(--ease-in);
-	padding: var(--size-2);
+	width: var(--size-7);
+	height: var(--size-7);
 	border-radius: var(--size-1);
 }
 
@@ -63,12 +76,12 @@ button[variant="icon"]:hover {
 	background-color: var(--color-white-15);
 }
 
-/* Bare */
-button[variant="bare"] {
+/* Minimal */
+button[variant="minimal"] {
 	transition: opacity 150ms var(--ease-in);
 }
 
-button[variant="bare"]:hover {
+button[variant="minimal"]:hover {
 	opacity: 0.75;
 }
 

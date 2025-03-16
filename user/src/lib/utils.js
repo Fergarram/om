@@ -1,3 +1,7 @@
+export function fade(color, opacity) {
+	return `color-mix(in oklch, var(${color}), transparent ${100 - opacity}%)`;
+}
+
 export async function try_catch(func) {
 	try {
 		const result = func();

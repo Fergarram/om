@@ -11,6 +11,22 @@ GlobalStyleSheet(css`
 		align-items: center;
 		background-color: var(--color-black);
 		color: var(--color-white);
+		app-region: drag;
+		height: var(--size-8);
+		padding: 0 var(--size-1);
+
+		button,
+		button * {
+			app-region: no-drag;
+		}
+
+		.indicators {
+			display: flex;
+			width: fit-content;
+			flex-grow: 1;
+			justify-content: flex-end;
+			align-items: center;
+		}
 	}
 `);
 
@@ -57,15 +73,31 @@ export async function StatusBar() {
 			},
 			icon({ name: "action_key", size: "sm" }),
 		),
-		button(
+		div(
 			{
-				variant: "text",
-				size: "sm",
-				title: "Toggle Date Details",
-				"aria-label": "Toggle Date Details",
-				onclick() {},
+				class: "indicators",
 			},
-			() => span(current_date.val),
+			button(
+				{
+					variant: "icon",
+					title: () => (window.is_trackpad.val ? "Using trackpad" : "Using mouse"),
+					"aria-label": "Toggle Input Device",
+					onclick() {
+						window.is_trackpad.val = !window.is_trackpad.val;
+					},
+				},
+				icon({ name: () => (window.is_trackpad.val ? "trackpad_input_2" : "mouse"), size: "sm" }),
+			),
+			button(
+				{
+					variant: "text",
+					size: "sm",
+					title: "Toggle Date Details",
+					"aria-label": "Toggle Date Details",
+					onclick() {},
+				},
+				() => span(current_date.val),
+			),
 		),
 	);
 }

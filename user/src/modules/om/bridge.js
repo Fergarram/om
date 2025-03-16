@@ -97,6 +97,15 @@ const win = {
 	async open_in_browser(url) {
 		return await __sys.invoke("win.open_in_browser", url);
 	},
+	async devtools_opened(callback) {
+		return await __sys.on("win.devtools_opened", callback);
+	},
+	async devtools_closed(callback) {
+		return await __sys.on("win.devtools_closed", callback);
+	},
+	async is_devtools_open() {
+		return await __sys.invoke("win.is_devtools_open");
+	},
 };
 
 const appstream = {
@@ -105,6 +114,15 @@ const appstream = {
 	},
 };
 
-const sys = { shell, process, file, dialog, menu, win, appstream };
+const browser = {
+	async new_window(url) {
+		return await __sys.invoke("browser.new_window", url);
+	},
+	async capture_page(webcontents_id) {
+		return await __sys.invoke("browser.capture_page", webcontents_id);
+	},
+};
+
+const sys = { shell, process, file, dialog, menu, win, appstream, browser };
 
 export default sys;

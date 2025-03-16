@@ -1,6 +1,7 @@
 import { css, finish, GlobalStyleSheet, is_scrollable } from "../../lib/utils.js";
 import van from "../../lib/van.js";
 import { initialize_background_canvas } from "./background.js";
+import sys from "./bridge.js";
 const { div, canvas } = van.tags;
 
 //
@@ -47,14 +48,16 @@ let scrolling_timeout = null;
 let zoom_timeout = null;
 let is_panning = false;
 let is_scrolling = false;
-let is_zooming = van.state(false);
 let last_middle_click_x = 0;
 let last_middle_click_y = 0;
 let current_scale = 1;
 let pending_mouse_dx = 0;
 let pending_mouse_dy = 0;
 let has_pending_mouse_movement = false;
-const in_danger_zone = van.state(false);
+const zoom_level = van.state(1);
+const is_zooming = van.state(false);
+const scroll_thumb_x = van.state(0);
+const scroll_thumb_y = van.state(0);
 
 // Applet Interactions
 let last_mouse_x = 0;
@@ -121,7 +124,7 @@ GlobalStyleSheet(css`
 		width: 100%;
 		height: auto;
 		flex-grow: 1;
-		overflow: scroll;
+		overflow: hidden;
 	}
 
 	#om-desktop-canvas {
@@ -155,12 +158,6 @@ export async function initialize_desktop(om_space) {
 
 	const canvas_el = canvas({
 		id: "om-desktop-canvas",
-		style: () =>
-			in_danger_zone.val
-				? `
-			opacity: 0.1;
-		`
-				: "",
 	});
 
 	van.add(om_space, canvas_el);
@@ -177,7 +174,7 @@ export async function initialize_desktop(om_space) {
 	handle_resize();
 
 	window.addEventListener("resize", handle_resize);
-	window.addEventListener("keydown", handle_keydown);
+	window.addEventListener("keydown", handle_global_keydown);
 	desktop.addEventListener("wheel", desktop_wheel, { passive: false });
 	desktop.addEventListener("scroll", desktop_scroll);
 	surface().addEventListener("mousedown", surface_mousedown);
@@ -185,9 +182,21 @@ export async function initialize_desktop(om_space) {
 	window.addEventListener("mouseout", window_mouseout);
 	window.addEventListener("mouseup", window_mouseup);
 	window.addEventListener("mousemove", window_mousemove);
+	requestAnimationFrame(step);
+
+	scroll_to_center();
+
+	function scroll_to_center() {
+		const rect = surface().getBoundingClientRect();
+		desktop.scroll({
+			left: rect.width / 2 - desktop.offsetWidth / 2,
+			top: rect.height / 2 - desktop.offsetHeight / 2,
+		});
+	}
 
 	function update_surface_scale() {
 		surface().style.transform = `scale(${current_scale})`;
+		zoom_level.val = current_scale;
 	}
 
 	function handle_resize() {
@@ -195,16 +204,8 @@ export async function initialize_desktop(om_space) {
 		draw_wallpaper(camera_x, camera_y, current_scale);
 	}
 
-	async function handle_keydown(e) {
+	async function handle_global_keydown(e) {
 		if (e.metaKey || e.ctrlKey) {
-			// Prevent reload and closing as before
-			if (e.key.toLowerCase() === "r") {
-				e.preventDefault();
-			}
-			if (e.key.toLowerCase() === "w") {
-				e.preventDefault();
-			}
-
 			// Store current scroll position and viewport dimensions
 			const prev_scroll_x = desktop.scrollLeft;
 			const prev_scroll_y = desktop.scrollTop;
@@ -262,12 +263,16 @@ export async function initialize_desktop(om_space) {
 			target = target.parentElement;
 		}
 
-		if (!e.altKey) {
+		if (window.is_trackpad.val && window.superkeydown && e.shiftKey && !e.ctrlKey) {
 			e.preventDefault();
-			e.stopPropagation();
-		}
-
-		if ((e.ctrlKey || e.metaKey) && !is_panning) {
+			desktop.scrollTo({
+				left: camera_x + e.deltaX,
+				top: camera_y + e.deltaY,
+			});
+		} else if (
+			(window.superkeydown && !is_panning) ||
+			(window.is_trackpad.val && window.superkeydown && e.shiftKey && e.ctrlKey)
+		) {
 			e.preventDefault();
 
 			// Store current scroll position and viewport dimensions
@@ -327,8 +332,8 @@ export async function initialize_desktop(om_space) {
 		}, 150);
 
 		const rect = surface().getBoundingClientRect();
-		const max_x = rect.width - desktop.offsetWidth; //- desktop.offsetWidth * (current_scale / MIN_ZOOM);
-		const max_y = rect.height - desktop.offsetHeight; //- desktop.offsetHeight * (current_scale / MIN_ZOOM);
+		const max_x = rect.width - desktop.offsetWidth;
+		const max_y = rect.height - desktop.offsetHeight;
 
 		let new_x = desktop.scrollLeft;
 		let new_y = desktop.scrollTop;
@@ -343,13 +348,16 @@ export async function initialize_desktop(om_space) {
 
 		camera_x = desktop.scrollLeft;
 		camera_y = desktop.scrollTop;
+
+		scroll_thumb_x.val = (desktop.scrollLeft / rect.width) * 100;
+		scroll_thumb_y.val = (desktop.scrollTop / rect.height) * 100;
 	}
 
 	function surface_mousedown(e) {
-		if (e.button === 1) {
+		if ((window.superkeydown && e.button === 1) || (window.superkeydown && e.button === 0 && e.target === surface())) {
 			e.preventDefault();
 			is_panning = true;
-			document.body.classList.toggle("is-panning");
+			document.body.classList.add("is-panning");
 			last_middle_click_x = e.clientX;
 			last_middle_click_y = e.clientY;
 		}
@@ -362,9 +370,9 @@ export async function initialize_desktop(om_space) {
 	}
 
 	function window_mouseup(e) {
-		if (e.button === 1) {
+		if (e.button === 1 || e.button === 0) {
 			is_panning = false;
-			document.body.classList.toggle("is-panning");
+			document.body.classList.remove("is-panning");
 		}
 	}
 
@@ -404,18 +412,6 @@ export async function initialize_desktop(om_space) {
 		const max_x = rect.width - desktop.offsetWidth;
 		const max_y = rect.height - desktop.offsetHeight;
 
-		// This might not even be the actual danger zone lol...
-		const danger_x = rect.width - desktop.offsetWidth - desktop.offsetWidth * (current_scale / MIN_ZOOM) * 2;
-		const danger_y = rect.height - desktop.offsetHeight - desktop.offsetHeight * (current_scale / MIN_ZOOM) * 2;
-
-		// I just need to prevent scrolling past the edge of the surface or highjack the point_x and point_y calculations in the wheel event
-
-		// if (camera_x >= danger_x || camera_y >= danger_y) {
-		// 	in_danger_zone.val = true;
-		// } else {
-		// 	in_danger_zone.val = false;
-		// }
-
 		if (camera_x >= max_x) {
 			camera_x = max_x;
 		}
@@ -440,8 +436,6 @@ export async function initialize_desktop(om_space) {
 
 		requestAnimationFrame(step);
 	}
-
-	requestAnimationFrame(step);
 }
 
 export function get_camera_position() {
@@ -593,10 +587,10 @@ async function handle_applet_placement(applet, first_mount = false) {
 			is_contenteditable ||
 			(target.tagName === "IMG" && target.getAttribute("draggable") !== "false")
 		) {
-			if (e.metaKey || e.ctrlKey) e.preventDefault();
+			if (window.superkeydown) e.preventDefault();
 		}
 
-		if ((e.metaKey || e.ctrlKey) && current_mouse_button === 2) {
+		if (window.superkeydown && current_mouse_button === 2) {
 			e.preventDefault();
 
 			// Start resizing with right click
@@ -641,8 +635,8 @@ async function handle_applet_placement(applet, first_mount = false) {
 			// Lift the applet to the top
 			const tsid = applet.getAttribute("om-tsid");
 			lift(tsid);
-		} else if ((e.metaKey || e.ctrlKey || is_drag_handle) && current_mouse_button === 0) {
-			document.body.classList.toggle("is-dragging");
+		} else if ((window.superkeydown || is_drag_handle) && current_mouse_button === 0) {
+			document.body.classList.add("is-dragging");
 			let x = Number(applet.style.left.replace("px", ""));
 			let y = Number(applet.style.top.replace("px", ""));
 
@@ -754,6 +748,8 @@ async function handle_applet_placement(applet, first_mount = false) {
 				e.stopPropagation();
 
 				is_resizing = true;
+				applet.setAttribute("om-motion", "resizing");
+				document.body.classList.add("is-resizing");
 				resize_edge = edge;
 				dragged_applet = applet;
 
@@ -818,6 +814,8 @@ function handle_resize(e) {
 function stop_resize() {
 	if (is_resizing) {
 		is_resizing = false;
+		dragged_applet.setAttribute("om-motion", "idle");
+		document.body.classList.remove("is-resizing");
 		resize_edge = null;
 		dragged_applet = null;
 		window.removeEventListener("mousemove", handle_resize);
@@ -899,6 +897,10 @@ async function handle_mousemove(e) {
 		dragged_applet.style.height = `${new_height}px`;
 		dragged_applet.style.left = `${new_left}px`;
 		dragged_applet.style.top = `${new_top}px`;
+
+		// Add body class
+		document.body.classList.add("is-resizing");
+		dragged_applet.setAttribute("om-motion", "resizing");
 	}
 }
 
@@ -909,7 +911,7 @@ async function handle_mouseup(e) {
 	if (!dragged_applet) return;
 
 	if (current_mouse_button === 0) {
-		document.body.classList.toggle("is-dragging");
+		document.body.classList.remove("is-dragging");
 
 		if (!e.shiftKey) {
 			dragged_applet.style.left = `${dragging_x}px`;
@@ -930,6 +932,8 @@ async function handle_mouseup(e) {
 		is_right_resize = false;
 		resize_quadrant = null;
 		dragged_applet.style.removeProperty("will-change");
+		dragged_applet.setAttribute("om-motion", "idle");
+		document.body.classList.remove("is-resizing");
 	}
 
 	if (current_mouse_button === 0 || current_mouse_button === 2) {

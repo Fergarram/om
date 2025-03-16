@@ -16,32 +16,28 @@ body,
 	background: black;
 }
 
-.is-dragging * {
-	user-select: none;
-}
-
 /*  */
 /* Scrollbars */
 /*  */
 
-::-webkit-scrollbar {
+#om-desktop::-webkit-scrollbar {
 	width: 10px;
 	height: 10px;
 }
 
-::-webkit-scrollbar-track {
+#om-desktop::-webkit-scrollbar-track {
 	background: #e8dfd8;
 }
 
-::-webkit-scrollbar-thumb {
+#om-desktop::-webkit-scrollbar-thumb {
 	background: #cd2430;
 	border-radius: var(--size-2);
 }
 
-::-webkit-scrollbar-thumb:hover {
+#om-desktop::-webkit-scrollbar-thumb:hover {
 	background: #454545;
 }
 
-::-webkit-scrollbar-corner {
+#om-desktop::-webkit-scrollbar-corner {
 	background: #e8dfd8;
 }

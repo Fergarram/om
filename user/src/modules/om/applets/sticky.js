@@ -99,7 +99,6 @@ async function add_sticky(colorIndex = 0) {
 				width: 100%;
 				background-color: ${color_scheme.handle};
 				cursor: move;
-				user-select: none;
 			`,
 		}),
 		div({

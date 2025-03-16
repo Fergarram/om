@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 
 ipcMain.handle("win.close", (event) => {
 	const window = BrowserWindow.fromWebContents(event.sender);
+	window.will_close_manually = true;
 	window.close();
 });
 
@@ -30,6 +31,11 @@ ipcMain.handle("win.is_maximized", (event) => {
 	return window.isMaximized();
 });
 
+ipcMain.handle("win.is_devtools_open", (event) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	return window.webContents.isDevToolsOpened();
+});
+
 ipcMain.handle("win.open_in_browser", (event, url) => {
 	shell.openExternal(url);
 });
@@ -39,7 +45,6 @@ export function create_window(space) {
 		width: 1024,
 		height: 600,
 		show: false,
-		alwaysOnTop: true,
 		backgroundColor: "#000000",
 		frame: false,
 		autoHideMenuBar: true,
@@ -48,6 +53,12 @@ export function create_window(space) {
 			webviewTag: true,
 			enableHardwareAcceleration: true,
 		},
+	});
+
+	new_window.on("close", (event) => {
+		if (!new_window.will_close_manually) {
+			event.preventDefault();
+		}
 	});
 
 	new_window.on("maximize", () => {
@@ -62,7 +73,15 @@ export function create_window(space) {
 		new_window.webContents.send("win.minimize");
 	});
 
-	new_window.loadFile(`../usr/spaces/${space}/index.html`);
+	new_window.webContents.on("devtools-opened", () => {
+		new_window.webContents.send("win.devtools_opened");
+	});
+
+	new_window.webContents.on("devtools-closed", () => {
+		new_window.webContents.send("win.devtools_closed");
+	});
+
+	new_window.loadFile(`../user/spaces/${space}/index.html`);
 
 	new_window.webContents.on("did-finish-load", () => {
 		new_window.show();

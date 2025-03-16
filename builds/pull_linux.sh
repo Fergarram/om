@@ -11,4 +11,4 @@ cd builds/linux
 
 # Create symbolic links
 ln -s ../../sys sys
-ln -s ../../usr usr
+ln -s ../../user user
