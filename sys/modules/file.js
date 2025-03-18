@@ -16,8 +16,13 @@ ipcMain.handle("file.exists", async (event, filepath) => {
 		await fs.access(filepath);
 		return true;
 	} catch {
-		return false;
+		// Return the absolute path when the file doesn't exist
+		return path.resolve(filepath);
 	}
+});
+
+ipcMain.handle("file.resolve", async (event, filepath) => {
+	return path.resolve(filepath);
 });
 
 ipcMain.handle("file.is_dir", async (event, filepath) => {

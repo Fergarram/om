@@ -25,6 +25,9 @@ const file = {
 	async dirname(filepath) {
 		return await __sys.invoke("file.dirname", filepath);
 	},
+	async resolve(filepath) {
+		return await __sys.invoke("file.resolve", filepath);
+	},
 	async exists(filepath) {
 		return await __sys.invoke("file.exists", filepath);
 	},
@@ -126,6 +129,49 @@ const browser = {
 	},
 };
 
-const sys = { shell, process, file, dialog, menu, win, appstream, browser };
+const shortcuts = {
+	async register(options) {
+		const { accelerator, name, description, callback } = options;
+
+		__sys.on("shortcuts.triggered", (event, triggered_name) => {
+			if (triggered_name === name && typeof callback === "function") {
+				callback();
+			}
+		});
+
+		return await __sys.invoke("shortcuts.register", {
+			accelerator,
+			name,
+			description,
+		});
+	},
+
+	async unregister(name) {
+		return await __sys.invoke("shortcuts.unregister", name);
+	},
+
+	async get_all() {
+		return await __sys.invoke("shortcuts.get_all");
+	},
+
+	async on_trigger(callback) {
+		return await __sys.on("shortcuts.triggered", (event, name) => {
+			callback(name);
+		});
+	},
+};
+
+// Export the updated sys object with shortcuts included
+const sys = {
+	shell,
+	process,
+	file,
+	dialog,
+	menu,
+	win,
+	appstream,
+	browser,
+	shortcuts,
+};
 
 export default sys;

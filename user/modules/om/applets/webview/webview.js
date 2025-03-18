@@ -1,13 +1,26 @@
-import { css, fade, finish, GlobalStyleSheet, try_catch } from "../../../../lib/utils.js";
+import { css, fade, finish, GlobalStyleSheet } from "../../../../lib/utils.js";
 import { get_camera_center, surface } from "../../desktop.js";
 import van from "../../../../lib/van.js";
-import sys from "../../bridge.js";
+import sys from "../../../../lib/bridge.js";
 const { div, header, img, input, webview } = van.tags;
 
-window.addEventListener("keydown", (e) => {
-	if (e.metaKey && e.key.toLowerCase() === "6") {
-		add_webview();
-	}
+const DEFAULT_WIDTH = 414;
+const DEFAULT_HEIGHT = 700;
+
+sys.shortcuts.register({
+	accelerator: "CmdOrCtrl+t",
+	name: "new-webview",
+	description: "Open a new webview",
+	async callback() {
+		let { x: center_x, y: center_y } = get_camera_center();
+		const random_x_offset = Math.floor(Math.random() * 150) - 48;
+		const random_y_offset = Math.floor(Math.random() * 150) - 48;
+
+		await add_webview({
+			x: center_x + random_x_offset - DEFAULT_WIDTH / 2,
+			y: center_y + random_y_offset - DEFAULT_HEIGHT / 2,
+		});
+	},
 });
 
 async function add_webview(props) {
@@ -15,7 +28,6 @@ async function add_webview(props) {
 	// Props
 	//
 
-	let { x: center_x, y: center_y } = get_camera_center();
 	if (!props) {
 		props = {
 			x: center_x - 207,
@@ -26,12 +38,14 @@ async function add_webview(props) {
 	}
 
 	if (!props.width) {
-		props.width = 414;
+		props.width = DEFAULT_WIDTH;
 	}
 
 	if (!props.height) {
-		props.height = 700;
+		props.height = DEFAULT_HEIGHT;
 	}
+
+	let { x: center_x, y: center_y } = get_camera_center();
 
 	if (!props.x) {
 		props.x = center_x - 207;
@@ -53,27 +67,27 @@ async function add_webview(props) {
 			: "",
 	);
 	const last_render = van.state("");
-	const focused = van.state(false);
 	const loading = van.state(false);
 	const load_error = van.state("");
+	const keyboard_shortcut_could_trigger = van.state(false);
 
-	van.derive(() => {
-		if (focused.val) {
-			document.body.classList.add("webview-focused");
-		} else {
-			document.body.classList.remove("webview-focused");
-		}
-	});
+	const modkeys = {
+		Control: false,
+		Shift: false,
+		Meta: false, // Command/Windows key
+	};
 
 	//
 	// Layout
 	//
 
+	const preload_path = await sys.file.resolve("user/modules/om/applets/webview/preload.js");
+
 	const webview_config = {
 		nodeintegration: false,
 		useragent:
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
-		preload: "../../src/modules/om/applets/webview/preload.js",
+		preload: preload_path,
 		webpreferences: "contextIsolation=true,sandbox=true,allowRunningInsecureContent=true",
 	};
 
@@ -87,9 +101,7 @@ async function add_webview(props) {
 	const webview_el = webview({
 		...webview_config,
 		src: () => src.val,
-		allowpopups: true,
-		"has-error": () => !!load_error.val,
-		"is-loading": () => loading.val,
+		allowpopups: false,
 		// CSS Hack to fix Electron bug
 		style: css`
 			width: 100%;
@@ -102,7 +114,9 @@ async function add_webview(props) {
 			"om-applet": "webview",
 			"om-motion": "idle",
 			"is-devtools": () => is_devtools_webview.val,
-			focus: () => focused.val,
+			"keyboard-focus": () => keyboard_shortcut_could_trigger.val,
+			"has-error": () => !!load_error.val,
+			"is-loading": () => loading.val,
 			style: () => css`
 				top: ${props.y}px;
 				left: ${props.x}px;
@@ -132,6 +146,7 @@ async function add_webview(props) {
 					}
 				},
 			}),
+			div({ class: "loading-indicator" }),
 		),
 		webview_el,
 		img({
@@ -147,6 +162,9 @@ async function add_webview(props) {
 	van.add(surface(), applet);
 
 	await finish();
+
+	// Go to initial url if provided
+	if (query.val) src.val = process_query(query.val);
 
 	//
 	// Events
@@ -165,10 +183,14 @@ async function add_webview(props) {
 
 	webview_el.addEventListener("dom-ready", async () => {
 		if (props.devtools_requester) {
-			await sys.browser.open_webview_devtools(props.devtools_requester.getWebContentsId(), webview_el.getWebContentsId());
-			props.devtools_requester.openDevTools({
-				mode: "detach",
-			});
+			// Open devtools as applet
+			await sys.browser.open_webview_devtools(
+				// Target webview
+				props.devtools_requester.getWebContentsId(),
+				// Devtools webview
+				webview_el.getWebContentsId(),
+			);
+			props.devtools_requester.openDevTools({ mode: "detach" });
 		}
 	});
 
@@ -252,9 +274,18 @@ async function add_webview(props) {
 					},
 				});
 				window.dispatchEvent(ev);
+
+				// Track individual modifier keys
+				if (key === "Control" || key === "Shift" || key === "Meta") {
+					modkeys[key] = true;
+					keyboard_shortcut_could_trigger.val = true;
+				}
+
+				// Close webview on Ctrl/Cmd + W
 				if ((opts.ctrlKey || opts.metaKey) && key.toLowerCase() === "w") {
 					close_webview();
 				}
+
 				break;
 			}
 			case "keyup": {
@@ -266,6 +297,14 @@ async function add_webview(props) {
 					},
 				});
 				window.dispatchEvent(ev);
+
+				// Update modifier key state
+				if (key === "Control" || key === "Shift" || key === "Meta") {
+					modkeys[key] = false;
+
+					// Only set to false if no modifier keys are pressed
+					keyboard_shortcut_could_trigger.val = modkeys.Control || modkeys.Shift || modkeys.Meta;
+				}
 				break;
 			}
 			case "visibilitychange": {
@@ -276,16 +315,9 @@ async function add_webview(props) {
 					},
 				});
 				window.dispatchEvent(ev);
-
-				if (e.args[0]) {
-					focused.val = false;
-				} else {
-					focused.val = true;
-				}
 				break;
 			}
 			case "focus": {
-				focused.val = true;
 				const ev = new CustomEvent("webview-focus", {
 					detail: {
 						webview: webview_el,
@@ -295,13 +327,18 @@ async function add_webview(props) {
 				break;
 			}
 			case "blur": {
-				focused.val = false;
 				const ev = new CustomEvent("webview-blur", {
 					detail: {
 						webview: webview_el,
 					},
 				});
 				window.dispatchEvent(ev);
+
+				// Remove keyboard focus state
+				modkeys.Control = false;
+				modkeys.Shift = false;
+				modkeys.Meta = false;
+				keyboard_shortcut_could_trigger.val = false;
 				break;
 			}
 		}
@@ -312,7 +349,6 @@ async function add_webview(props) {
 	//
 
 	function close_webview() {
-		focused.val = false;
 		applet.remove();
 	}
 
@@ -383,17 +419,33 @@ GlobalStyleSheet(css`
 		transition-property: outline;
 		transition-duration: 0.1s;
 		transition-timing-function: var(--ease-in-out);
-		outline: 0px solid var(--color-white-70);
 		display: flex;
 		flex-direction: column;
 		padding: var(--size-2);
 
 		header {
 			display: flex;
+			position: relative;
 			justify-content: space-between;
 			align-items: center;
 			height: fit-content;
 			padding-bottom: var(--size-1_5);
+
+			.loading-indicator {
+				position: absolute;
+				right: var(--size-1);
+				top: 50%;
+				transform: translateY(-50%);
+				display: none;
+				min-width: var(--size-2);
+				min-height: var(--size-2);
+				background-color: transparent;
+				transition-property: background-color;
+				transition-duration: 0.15s;
+				transition-timing-function: var(--ease-in-out);
+				border-radius: var(--size-64);
+				margin-top: var(--size-neg-1);
+			}
 		}
 
 		header[new-tab="true"] {
@@ -417,9 +469,17 @@ GlobalStyleSheet(css`
 		webview {
 			overflow: hidden;
 			border-radius: var(--size-2);
-			box-shadow: var(--fast-thickness-1);
 			width: 100%;
 			height: 100%;
+			background-color: var(--color-neutral-700);
+			outline: 0px solid var(--color-white-70);
+			transition-property: outline;
+			transition-duration: 0.15s;
+			transition-timing-function: var(--ease-in-out);
+
+			error {
+				color: var(--color-white);
+			}
 		}
 
 		header[new-tab="true"] ~ webview {
@@ -437,8 +497,25 @@ GlobalStyleSheet(css`
 		}
 	}
 
-	[om-applet="webview"][focus="true"] {
-		outline: var(--size-2) solid var(--color-white-70);
+	[om-applet="webview"][is-loading="true"] .loading-indicator {
+		display: block;
+		animation: pulse-loading-background 1.5s infinite;
+	}
+
+	@keyframes pulse-loading-background {
+		0% {
+			background-color: var(--color-blue-300);
+		}
+		50% {
+			background-color: var(--color-blue-600);
+		}
+		100% {
+			background-color: var(--color-blue-300);
+		}
+	}
+
+	[om-applet="webview"][keyboard-focus="true"] {
+		outline: var(--size-2) solid ${fade("--color-slate-600", 80)};
 	}
 
 	[om-applet="webview"][is-devtools="true"] header {

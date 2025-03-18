@@ -340,7 +340,6 @@
 	/*  */
 
 	--aspect-video: 16 / 9;
-	--size-0: 0px;
 	--size-px: 1px;
 	--size-0_5: 0.125rem; /* 2px */
 	--size-1: 0.25rem; /* 4px */
@@ -428,6 +427,94 @@
 	--size-496: 124rem; /* 1984px */
 	--size-504: 126rem; /* 2016px */
 	--size-512: 128rem; /* 2048px */
+
+	--size-neg-px: -1px;
+	--size-neg-0_5: -0.125rem;
+	--size-neg-1: -0.25rem;
+	--size-neg-1_5: -0.375rem;
+	--size-neg-2: -0.5rem;
+	--size-neg-2_5: -0.625rem;
+	--size-neg-3: -0.75rem;
+	--size-neg-3_5: -0.875rem;
+	--size-neg-4: -1rem;
+	--size-neg-4_5: -1.125rem;
+	--size-neg-5: -1.25rem;
+	--size-neg-6: -1.5rem;
+	--size-neg-7: -1.75rem;
+	--size-neg-8: -2rem;
+	--size-neg-9: -2.25rem;
+	--size-neg-10: -2.5rem;
+	--size-neg-11: -2.75rem;
+	--size-neg-12: -3rem;
+	--size-neg-14: -3.5rem;
+	--size-neg-16: -4rem;
+	--size-neg-20: -5rem;
+	--size-neg-24: -6rem;
+	--size-neg-28: -7rem;
+	--size-neg-32: -8rem;
+	--size-neg-36: -9rem;
+	--size-neg-40: -10rem;
+	--size-neg-44: -11rem;
+	--size-neg-48: -12rem;
+	--size-neg-52: -13rem;
+	--size-neg-56: -14rem;
+	--size-neg-60: -15rem;
+	--size-neg-64: -16rem;
+	--size-neg-72: -18rem;
+	--size-neg-80: -20rem;
+	--size-neg-96: -24rem;
+	--size-neg-104: -26rem;
+	--size-neg-112: -28rem;
+	--size-neg-120: -30rem;
+	--size-neg-128: -32rem;
+	--size-neg-136: -34rem;
+	--size-neg-144: -36rem;
+	--size-neg-152: -38rem;
+	--size-neg-160: -40rem;
+	--size-neg-168: -42rem;
+	--size-neg-176: -44rem;
+	--size-neg-184: -46rem;
+	--size-neg-192: -48rem;
+	--size-neg-200: -50rem;
+	--size-neg-208: -52rem;
+	--size-neg-216: -54rem;
+	--size-neg-224: -56rem;
+	--size-neg-232: -58rem;
+	--size-neg-240: -60rem;
+	--size-neg-248: -62rem;
+	--size-neg-256: -64rem;
+	--size-neg-264: -66rem;
+	--size-neg-272: -68rem;
+	--size-neg-280: -70rem;
+	--size-neg-288: -72rem;
+	--size-neg-296: -74rem;
+	--size-neg-304: -76rem;
+	--size-neg-312: -78rem;
+	--size-neg-320: -80rem;
+	--size-neg-328: -82rem;
+	--size-neg-336: -84rem;
+	--size-neg-344: -86rem;
+	--size-neg-352: -88rem;
+	--size-neg-360: -90rem;
+	--size-neg-368: -92rem;
+	--size-neg-376: -94rem;
+	--size-neg-384: -96rem;
+	--size-neg-392: -98rem;
+	--size-neg-400: -100rem;
+	--size-neg-408: -102rem;
+	--size-neg-416: -104rem;
+	--size-neg-424: -106rem;
+	--size-neg-432: -108rem;
+	--size-neg-440: -110rem;
+	--size-neg-448: -112rem;
+	--size-neg-456: -114rem;
+	--size-neg-464: -116rem;
+	--size-neg-472: -118rem;
+	--size-neg-480: -120rem;
+	--size-neg-488: -122rem;
+	--size-neg-496: -124rem;
+	--size-neg-504: -126rem;
+	--size-neg-512: -128rem;
 
 	/*  */
 	/* Shadows */

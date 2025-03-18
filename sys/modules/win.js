@@ -49,6 +49,7 @@ export function create_window(space) {
 		frame: false,
 		autoHideMenuBar: true,
 		webPreferences: {
+			zoomFactor: 1.0,
 			preload: path.join(__dirname, "../preload.js"),
 			webviewTag: true,
 			enableHardwareAcceleration: true,

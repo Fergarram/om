@@ -179,6 +179,8 @@ export async function initialize_desktop(om_space) {
 	surface().addEventListener("mousedown", surface_mousedown);
 	window.addEventListener("mouseleave", window_mouseout);
 	window.addEventListener("mouseout", window_mouseout);
+	window.addEventListener("dblclick", window_dblclick);
+	window.addEventListener("mousedown", window_mousedown);
 	window.addEventListener("mouseup", window_mouseup);
 	window.addEventListener("mousemove", window_mousemove);
 	requestAnimationFrame(step);
@@ -204,7 +206,16 @@ export async function initialize_desktop(om_space) {
 	}
 
 	async function handle_global_keydown(e) {
-		if (e.metaKey || e.ctrlKey) {
+		// Prevent default window zooming
+		if ((e.ctrlKey || e.metaKey) && e.key === "=") {
+			e.preventDefault();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+			e.preventDefault();
+		} else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+			e.preventDefault();
+		}
+
+		if (e.altKey) {
 			// Store current scroll position and viewport dimensions
 			const prev_scroll_x = desktop.scrollLeft;
 			const prev_scroll_y = desktop.scrollTop;
@@ -367,6 +378,12 @@ export async function initialize_desktop(om_space) {
 		is_panning = false;
 		document.body.classList.remove("is-panning");
 	}
+
+	function window_dblclick(e) {
+		// if (e.)
+	}
+
+	function window_mousedown(e) {}
 
 	function window_mouseup(e) {
 		if (e.button === 1 || e.button === 0) {

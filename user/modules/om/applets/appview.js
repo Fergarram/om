@@ -1,7 +1,7 @@
 import { css, finish, GlobalStyleSheet, try_catch } from "../../../lib/utils.js";
 import { get_camera_center, surface } from "../desktop.js";
 import van from "../../../lib/van.js";
-import sys from "../bridge.js";
+import sys from "../../../lib/bridge.js";
 const { div, button, canvas, video, source } = van.tags;
 
 window.addEventListener("keydown", (e) => {

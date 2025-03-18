@@ -9,6 +9,7 @@ import "./modules/dialog.js";
 import "./modules/menu.js";
 import "./modules/browser.js";
 import "./modules/appstream.js";
+import "./modules/shortcuts.js";
 
 // I need to recompile to same version of nodejs
 // Meanwhile I'd have to set it up as an external node server

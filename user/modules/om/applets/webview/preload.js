@@ -61,46 +61,55 @@ function handle_visibility_change() {
 
 function handle_mousedown(e) {
 	ipcRenderer.sendToHost("mousedown", e.button);
-
-	// Check if this is a click on a link
-	const link_el = find_parent_link(e.target);
-
-	// Send new-tab event for ctrl/cmd + left click or middle mouse button click on links
-	if (link_el) {
-		if ((e.ctrlKey || e.metaKey) && e.button === 0) {
-			// Ctrl/Cmd + left click
-			ipcRenderer.sendToHost("new-tab", link_el.href);
-			e.preventDefault();
-		} else if (e.button === 1) {
-			// Middle mouse button
-			ipcRenderer.sendToHost("new-tab", link_el.href);
-			e.preventDefault();
-		} else if (e.shiftKey && e.button === 0) {
-			// Open new window
-			// ipcRenderer.sendToHost("new-window", link_el.href);
-			e.preventDefault();
-		}
-	}
-
-	function find_parent_link(element) {
-		while (element !== null) {
-			if (element.tagName && element.tagName.toLowerCase() === "a" && element.href) {
-				return element;
-			}
-			element = element.parentElement;
-		}
-		return null;
-	}
 }
 
 function handle_mouseup(e) {
 	ipcRenderer.sendToHost("mouseup", e.button);
 }
 
+function handle_link_click(e) {
+	// Check if this is a click on a link
+	const link_el = find_parent_link(e.target);
+
+	function find_parent_link(target) {
+		while (target !== null) {
+			if (target.tagName && target.tagName.toLowerCase() === "a" && target.href) {
+				return target;
+			}
+			target = target.parentElement;
+		}
+		return null;
+	}
+
+	// Send new-tab event for ctrl/cmd + left click or middle mouse button click on links
+	if (link_el) {
+		if ((e.ctrlKey || e.metaKey) && e.button === 0) {
+			// Ctrl/Cmd + left click
+			e.preventDefault();
+			e.stopPropagation();
+			ipcRenderer.sendToHost("new-tab", link_el.href);
+			return false;
+		} else if (e.button === 1) {
+			// Middle mouse button
+			e.preventDefault();
+			e.stopPropagation();
+			ipcRenderer.sendToHost("new-tab", link_el.href);
+			return false;
+		} else if (e.shiftKey && e.button === 0) {
+			// Open new window
+			e.preventDefault();
+			e.stopPropagation();
+			ipcRenderer.sendToHost("new-window", link_el.href);
+			return false;
+		}
+	}
+}
+
 window.addEventListener("keydown", handle_webview_keydown);
 window.addEventListener("keyup", handle_webview_keyup);
 window.addEventListener("mousedown", handle_mousedown);
 window.addEventListener("mouseup", handle_mouseup);
+window.addEventListener("click", handle_link_click, true);
 
 window.addEventListener("blur", handle_window_blur);
 window.addEventListener("focus", handle_window_focus);

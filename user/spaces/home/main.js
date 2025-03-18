@@ -1,5 +1,6 @@
-import van from "../../src/lib/van.js";
-import { finish } from "../../src/lib/utils.js";
+import van from "../../lib/van.js";
+import { finish } from "../../lib/utils.js";
+import sys from "../../lib/bridge.js";
 
 // Global state ???
 window.is_trackpad = van.state(false);
@@ -20,16 +21,15 @@ window.addEventListener("beforeunload", (e) => {
 });
 
 // Om Modules
-import { StatusBar } from "../../src/modules/om/ui/statusbar.js";
-import { initialize_desktop } from "../../src/modules/om/desktop.js";
-import "../../src/modules/om/superkey.js";
+import { StatusBar } from "../../modules/om/ui/statusbar.js";
+import { initialize_desktop } from "../../modules/om/desktop.js";
+import "../../modules/om/superkey.js";
 
 // Applets
-import "../../src/modules/om/applets/test.js";
-import "../../src/modules/om/applets/sticky.js";
-import "../../src/modules/om/applets/appview.js";
-import "../../src/modules/om/applets/webview/webview.js";
-import sys from "../../src/modules/om/bridge.js";
+import "../../modules/om/applets/test.js";
+import "../../modules/om/applets/sticky.js";
+import "../../modules/om/applets/appview.js";
+import "../../modules/om/applets/webview/webview.js";
 
 // DOM Setup
 const { main } = van.tags;
