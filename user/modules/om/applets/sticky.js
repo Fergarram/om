@@ -28,13 +28,10 @@ const PASTEL_COLORS = [
 ];
 
 window.addEventListener("keydown", (e) => {
-	if (e.metaKey) {
-		// Check for number keys 1-4
-		const keyNum = parseInt(e.key);
-		if (keyNum >= 1 && keyNum <= 4) {
-			add_sticky(keyNum - 1); // Convert to 0-based index
-			e.preventDefault();
-		}
+	if (e.metaKey && e.key === "1") {
+		const random_color_index = Math.floor(Math.random() * PASTEL_COLORS.length);
+		add_sticky(random_color_index);
+		e.preventDefault();
 	}
 });
 

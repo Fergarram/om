@@ -115,6 +115,28 @@ const appstream = {
 	async select(opts) {
 		return await __sys.invoke("appstream.select", opts);
 	},
+	async get_captured_windows() {
+		return await __sys.invoke("appstream.get_captured_windows");
+	},
+	async get_window_capture(id) {
+		return await __sys.invoke("appstream.get_window_capture", id);
+	},
+	async window_capture_updated(callback) {
+		__sys.on("appstream.window_capture_updated", (e, id) => {
+			callback(id);
+		});
+	},
+	async focus_window(window_id) {
+		return await __sys.invoke("appstream.focus_window", window_id);
+	},
+	async close_window(window_id) {
+		return await __sys.invoke("appstream.close_window", window_id);
+	},
+	async on_window_closed(callback) {
+		return await __sys.on("appstream.window_closed", (e, id) => {
+			callback(id);
+		});
+	},
 };
 
 const browser = {

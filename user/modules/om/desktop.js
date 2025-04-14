@@ -226,15 +226,15 @@ export async function initialize_desktop(om_space) {
 			const center_x = (prev_scroll_x + viewport_width / 2) / current_scale;
 			const center_y = (prev_scroll_y + viewport_height / 2) / current_scale;
 
-			if (e.key === "=") {
+			if (e.key === "≠") {
 				e.preventDefault();
 				is_zooming.val = true;
 				current_scale = Math.min(current_scale + 0.1, 1.0);
-			} else if (e.key === "-") {
+			} else if (e.key === "–") {
 				e.preventDefault();
 				is_zooming.val = true;
 				current_scale = Math.max(current_scale - 0.1, 0.1);
-			} else if (e.key === "0") {
+			} else if (e.key === "º") {
 				e.preventDefault();
 				is_zooming.val = true;
 				current_scale = 1.0;

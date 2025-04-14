@@ -92,7 +92,6 @@ async function add_webview(props) {
 	};
 
 	if (props.devtools_requester) {
-		delete webview_config.preload;
 		delete webview_config.webpreferences;
 		delete webview_config.nodeintegration;
 		delete webview_config.useragent;
@@ -283,6 +282,10 @@ async function add_webview(props) {
 
 				// Close webview on Ctrl/Cmd + W
 				if ((opts.ctrlKey || opts.metaKey) && key.toLowerCase() === "w") {
+					if (props.devtools_requester) {
+						props.devtools_requester.closeDevTools();
+						console.log("Closing devtools");
+					}
 					close_webview();
 				}
 

@@ -1,4 +1,4 @@
-import { shell, BrowserWindow, ipcMain } from "electron";
+import { shell, BrowserWindow, ipcMain, screen } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -41,9 +41,12 @@ ipcMain.handle("win.open_in_browser", (event, url) => {
 });
 
 export function create_window(space) {
+	const primary_display = screen.getPrimaryDisplay();
+	const { width, height } = primary_display.workAreaSize;
+
 	const new_window = new BrowserWindow({
-		width: 1024,
-		height: 600,
+		width,
+		height,
 		show: false,
 		backgroundColor: "#000000",
 		frame: false,
