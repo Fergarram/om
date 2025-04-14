@@ -180,6 +180,22 @@ function connect_to_wm_socket() {
 			return false;
 		}
 	});
+
+	ipcMain.handle("appstream.resize_window", async (event, window_id, dimensions) => {
+		if (!client || !client.writable) {
+			console.error("Socket not connected");
+			return false;
+		}
+
+		try {
+			// Send resize request to window manager
+			client.write(`RESIZE_WINDOW ${window_id} ${dimensions.width} ${dimensions.height}\n`);
+			return true;
+		} catch (error) {
+			console.error("Failed to send resize request:", error);
+			return false;
+		}
+	});
 }
 
 // Handle requests from the renderer for window captures

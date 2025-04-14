@@ -137,6 +137,9 @@ const appstream = {
 			callback(id);
 		});
 	},
+	async resize_window(window_id, dimensions) {
+		return await __sys.invoke("appstream.resize_window", window_id, dimensions);
+	},
 };
 
 const browser = {

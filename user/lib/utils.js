@@ -2,6 +2,46 @@ export function fade(color, opacity) {
 	return `color-mix(in oklch, var(${color}), transparent ${100 - opacity}%)`;
 }
 
+export function debounce(fn, delay) {
+	let timeout_id = null;
+	let resolve_callback = null;
+
+	// Create a promise that we'll resolve when the debounced function actually executes
+	const debounced = (...args) => {
+		if (timeout_id) {
+			clearTimeout(timeout_id);
+		}
+
+		// Create new promise for this call
+		debounced.callback = new Promise((resolve) => {
+			resolve_callback = resolve;
+		});
+
+		timeout_id = setTimeout(() => {
+			const result = fn.apply(null, args);
+			if (resolve_callback) {
+				resolve_callback(result);
+			}
+			timeout_id = null;
+		}, delay);
+
+		return debounced.callback;
+	};
+
+	// Attach the promise as a property of the function
+	debounced.callback = Promise.resolve();
+
+	// Add cancel method
+	debounced.cancel = () => {
+		if (timeout_id) {
+			clearTimeout(timeout_id);
+			timeout_id = null;
+		}
+	};
+
+	return debounced;
+}
+
 export async function try_catch(func) {
 	try {
 		const result = func();
