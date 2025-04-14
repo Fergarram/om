@@ -140,6 +140,9 @@ const appstream = {
 	async resize_window(window_id, dimensions) {
 		return await __sys.invoke("appstream.resize_window", window_id, dimensions);
 	},
+	async set_window_position(window_id, x, y) {
+		return await __sys.invoke("appstream.set_window_position", window_id, x, y);
+	},
 };
 
 const browser = {

@@ -70,14 +70,14 @@ async function add_appview(window_id, window_data) {
 		height: height,
 		onmousedown: async (e) => {
 			if (e.altKey) return;
-
-			// Prevent click from propagating to desktop
 			e.stopPropagation();
 
 			try {
+				const rect = e.target.getBoundingClientRect();
+				await sys.appstream.set_window_position(window_id, Math.round(rect.left), Math.round(rect.top));
 				await sys.appstream.focus_window(window_id);
 			} catch (err) {
-				console.error("Failed to focus window:", err);
+				console.error("Failed to forward mouse press:", err);
 			}
 		},
 	});
@@ -123,10 +123,33 @@ async function add_appview(window_id, window_data) {
 		});
 	}, 150);
 
+	// Handle position updates
+	const handle_position_update = debounce(async () => {
+		try_catch(async () => {
+			const rect = appview.getBoundingClientRect();
+			await sys.appstream.set_window_position(window_id, Math.round(rect.left), Math.round(rect.top));
+		});
+	}, 50);
+
+	// Watch for position changes
+	const position_observer = new MutationObserver((mutations) => {
+		for (const mutation of mutations) {
+			if (mutation.type === "attributes" && mutation.attributeName === "style") {
+				handle_position_update();
+			}
+		}
+	});
+
+	position_observer.observe(appview, {
+		attributes: true,
+		attributeFilter: ["style"],
+	});
+
 	const resize_observer = new ResizeObserver((entries) => {
 		const entry = entries[0];
 		if (entry) {
 			handle_resize_end(entry.contentRect.width, entry.contentRect.height);
+			handle_position_update(); // Also update position on resize
 		}
 	});
 
@@ -135,12 +158,11 @@ async function add_appview(window_id, window_data) {
 	await finish();
 
 	const ctx = canvas_el.getContext("2d");
-
-	// Create image data directly from the ArrayBuffer
 	const image_data = new ImageData(new Uint8ClampedArray(window_data.pixel_data), width, height);
-
-	// Render the image data
 	ctx.putImageData(image_data, 0, 0);
+
+	// Set initial position
+	handle_position_update();
 }
 
 GlobalStyleSheet(css`

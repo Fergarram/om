@@ -196,6 +196,22 @@ function connect_to_wm_socket() {
 			return false;
 		}
 	});
+
+	ipcMain.handle("appstream.set_window_position", async (event, window_id, x, y) => {
+		if (!client || !client.writable) {
+			console.error("Socket not connected");
+			return false;
+		}
+
+		try {
+			console.log(`SET_WINDOW_POSITION ${window_id} ${x} ${y}\n`);
+			client.write(`SET_WINDOW_POSITION ${window_id} ${x} ${y}\n`);
+			return true;
+		} catch (error) {
+			console.error("Failed to send position update:", error);
+			return false;
+		}
+	});
 }
 
 // Handle requests from the renderer for window captures
