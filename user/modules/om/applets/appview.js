@@ -39,8 +39,13 @@ async function add_appview(window_id, window_data) {
 	if (existing_appview) {
 		const canvas_el = existing_appview.querySelector("canvas");
 		if (canvas_el) {
-			existing_appview.style.width = `${width}px`;
-			existing_appview.style.height = `${height}px`;
+			const is_resizing = existing_appview.getAttribute("om-motion") === "resizing";
+
+			if (!is_resizing) {
+				existing_appview.style.width = `${width}px`;
+				existing_appview.style.height = `${height}px`;
+			}
+
 			canvas_el.width = width;
 			canvas_el.height = height;
 
@@ -54,6 +59,10 @@ async function add_appview(window_id, window_data) {
 		}
 		return;
 	}
+
+	let resize_animation_frame = null;
+	let last_resize_width = 0;
+	let last_resize_height = 0;
 
 	let { x, y } = get_camera_center();
 

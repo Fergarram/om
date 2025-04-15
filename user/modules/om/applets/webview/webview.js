@@ -148,11 +148,11 @@ async function add_webview(props) {
 			div({ class: "loading-indicator" }),
 		),
 		webview_el,
-		img({
-			empty: () => src.val === "" && !is_devtools_webview.val,
-			src: last_render,
-			alt: "",
-		}),
+		// img({
+		// 	empty: () => src.val === "" && !is_devtools_webview.val,
+		// 	src: last_render,
+		// 	alt: "",
+		// }),
 		div({
 			class: "overlay",
 		}),
@@ -526,10 +526,10 @@ GlobalStyleSheet(css`
 	}
 
 	[om-applet="webview"][om-motion="resizing"] webview {
-		display: none;
+		/* display: none; */
 	}
 	[om-applet="webview"][om-motion="resizing"] img[empty="false"] {
-		display: block;
+		/* display: block; */
 	}
 
 	.is-dragging webview,
