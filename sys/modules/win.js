@@ -1,5 +1,6 @@
 import { shell, BrowserWindow, ipcMain, screen } from "electron";
 import path from "path";
+import fs from "fs/promises";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,11 +37,27 @@ ipcMain.handle("win.is_devtools_open", (event) => {
 	return window.webContents.isDevToolsOpened();
 });
 
+ipcMain.handle("win.focus", (event) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	return window.webContents.focus();
+});
+
 ipcMain.handle("win.open_in_browser", (event, url) => {
 	shell.openExternal(url);
 });
 
-export function create_window(space) {
+ipcMain.handle("win.get_bounds", (event) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	return window.getBounds();
+});
+
+ipcMain.handle("win.open_space", async (event, space) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	const target_path = path.resolve(__dirname, `../../user/spaces/${space}/index.html`);
+	window.webContents.executeJavaScript(`window.location.href = "file://${target_path}"`);
+});
+
+export function createWindow(space) {
 	const primary_display = screen.getPrimaryDisplay();
 	const { width, height } = primary_display.workAreaSize;
 
@@ -85,10 +102,44 @@ export function create_window(space) {
 		new_window.webContents.send("win.devtools_closed");
 	});
 
+	new_window.webContents.on("will-navigate", (event, url) => {
+		if (!url.startsWith("file://")) {
+			event.preventDefault();
+			console.log(`Navigation to ${url} blocked: only local file:// URLs are allowed`);
+			const bw = new BrowserWindow({
+				webPreferences: {
+					webSecurity: true,
+					allowRunningInsecureContent: false,
+					contextIsolation: true,
+				},
+			});
+
+			bw.loadURL(url);
+		}
+	});
+
+	new_window.webContents.on("will-redirect", (event, url) => {
+		if (!url.startsWith("file://")) {
+			event.preventDefault();
+			console.log(`Redirect to ${url} blocked: only local file:// URLs are allowed`);
+			const bw = new BrowserWindow({
+				webPreferences: {
+					webSecurity: true,
+					allowRunningInsecureContent: false,
+					contextIsolation: true,
+				},
+			});
+
+			bw.loadURL(url);
+		}
+	});
+
 	new_window.loadFile(`../user/spaces/${space}/index.html`);
 
-	new_window.webContents.on("did-finish-load", () => {
+	new_window.webContents.on("did-finish-load", async () => {
 		new_window.show();
+		// const code = await fs.readFile(path.join(__dirname, "../injections/beforeunload.js"), "utf8");
+		// new_window.webContents.executeJavaScript(code);
 	});
 
 	return new_window;

@@ -1,8 +1,8 @@
 import { css, finish, GlobalStyleSheet } from "../../../lib/utils.js";
-import { get_camera_center, surface, on_applet_remove } from "../desktop.js";
-import van from "../../../lib/van.js";
+import { getCameraCenter, surface, onAppletRemove } from "../desktop.js";
+import { useTags } from "../../../lib/ima.js";
 
-const { div } = van.tags;
+const { div } = useTags();
 
 const PASTEL_COLORS = [
 	{
@@ -30,13 +30,13 @@ const PASTEL_COLORS = [
 window.addEventListener("keydown", (e) => {
 	if (e.metaKey && e.key === "1") {
 		const random_color_index = Math.floor(Math.random() * PASTEL_COLORS.length);
-		add_sticky(random_color_index);
+		addSticky(random_color_index);
 		e.preventDefault();
 	}
 });
 
-async function add_sticky(colorIndex = 0) {
-	let { x, y } = get_camera_center();
+async function addSticky(colorIndex = 0) {
+	let { x, y } = getCameraCenter();
 
 	// Randomize width and height
 	const width = 200 + Math.floor(Math.random() * 100);
@@ -53,13 +53,13 @@ async function add_sticky(colorIndex = 0) {
 	// Use the color corresponding to the pressed number key
 	const color_scheme = PASTEL_COLORS[colorIndex];
 
-	const is_resizing = van.state(false);
+	let is_resizing = false;
 
 	const sticky = div(
 		{
 			"om-applet": "sticky",
 			"om-motion": "idle",
-			style: () => css`
+			style: css`
 				top: ${y}px;
 				left: ${x}px;
 				width: ${width}px;
@@ -80,7 +80,7 @@ async function add_sticky(colorIndex = 0) {
 		div({
 			class: "content",
 			spellcheck: "false",
-			contenteditable: () => (is_resizing.val ? "false" : "true"),
+			contenteditable: () => (is_resizing ? "false" : "true"),
 			onkeydown(e) {
 				// Close the sticky note with Cmd+W (Mac) or Ctrl+W (Windows/Linux)
 				if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w") {
@@ -110,32 +110,32 @@ async function add_sticky(colorIndex = 0) {
 		}),
 	);
 
-	van.add(surface(), sticky);
+	surface().appendChild(sticky);
 
 	await finish();
 
 	// Focus the content area to start typing immediately
 	sticky.querySelector(".content").focus();
 
-	window.addEventListener("applet-resize-start", handle_applet_resize_start);
-	window.addEventListener("applet-resize-stop", handle_applet_resize_stop);
+	window.addEventListener("applet-resize-start", handleAppletResizeStart);
+	window.addEventListener("applet-resize-stop", handleAppletResizeStop);
 
-	on_applet_remove((a) => {
+	onAppletRemove((a) => {
 		if (a === sticky) {
-			window.removeEventListener("applet-resize-start", handle_applet_resize_start);
-			window.removeEventListener("applet-resize-stop", handle_applet_resize_stop);
+			window.removeEventListener("applet-resize-start", handleAppletResizeStart);
+			window.removeEventListener("applet-resize-stop", handleAppletResizeStop);
 		}
 	});
 
-	function handle_applet_resize_start(e) {
+	function handleAppletResizeStart(e) {
 		if (e.detail.applet === sticky) {
-			is_resizing.val = true;
+			is_resizing = true;
 		}
 	}
 
-	function handle_applet_resize_stop(e) {
+	function handleAppletResizeStop(e) {
 		if (e.detail.applet === sticky) {
-			is_resizing.val = false;
+			is_resizing = false;
 		}
 	}
 }

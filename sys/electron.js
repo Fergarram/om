@@ -1,6 +1,7 @@
 import { app } from "electron";
 
-import { create_window } from "./modules/win.js";
+import { createWindow } from "./modules/win.js";
+import { createOverlay } from "./modules/overlay.js";
 
 import "./modules/shell.js";
 import "./modules/file.js";
@@ -23,7 +24,8 @@ console.log({
 });
 
 app.whenReady().then(() => {
-	create_window("home");
+	const win = createWindow("home");
+	createOverlay("default", win);
 });
 
 app.on("window-all-closed", () => {

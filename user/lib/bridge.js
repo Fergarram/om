@@ -13,7 +13,7 @@ const process = {
 	async platform() {
 		return await __sys.invoke("process.platform");
 	},
-	async is_win32() {
+	async isWin32() {
 		return (await __sys.invoke("process.platform")) === "win32";
 	},
 	async cwd() {
@@ -31,13 +31,13 @@ const file = {
 	async exists(filepath) {
 		return await __sys.invoke("file.exists", filepath);
 	},
-	async is_dir(filepath) {
+	async isDir(filepath) {
 		return await __sys.invoke("file.is_dir", filepath);
 	},
 	async relative(basepath, filepath) {
 		return await __sys.invoke("file.relative", basepath, filepath);
 	},
-	async parse_path(filepath) {
+	async parsePath(filepath) {
 		return await __sys.invoke("file.parse_path", filepath);
 	},
 	async rename(old_path, new_name) {
@@ -49,16 +49,16 @@ const file = {
 	async write(filepath, content, opt = "utf8") {
 		return await __sys.invoke("file.write", filepath, content, opt);
 	},
-	async get_info(filepath, basepath) {
+	async getInfo(filepath, basepath) {
 		return await __sys.invoke("file.get_info", filepath, basepath);
 	},
-	async directory_tree(dirpath) {
+	async directoryTree(dirpath) {
 		return await __sys.invoke("file.directory_tree", dirpath);
 	},
 };
 
 const dialog = {
-	async show_open(opts) {
+	async showOpen(opts) {
 		return await __sys.invoke("dialog.show_open", opts);
 	},
 };
@@ -67,7 +67,7 @@ const menu = {
 	async show(id, items, x, y) {
 		return await __sys.invoke("menu.show", id, items, x, y);
 	},
-	async on_click(callback) {
+	async onClick(callback) {
 		return await __sys.on("menu.on_click", callback);
 	},
 };
@@ -85,29 +85,38 @@ const win = {
 	async unmaximize() {
 		return await __sys.invoke("win.unmaximize");
 	},
-	async is_maximized() {
+	async isMaximized() {
 		return await __sys.invoke("win.is_maximized");
 	},
-	async on_maximize(callback) {
+	async onMaximize(callback) {
 		return await __sys.on("win.on_maximize", callback);
 	},
-	async on_unmaximize(callback) {
+	async onUnmaximize(callback) {
 		return await __sys.on("win.on_unmaximize", callback);
 	},
-	async on_minimize(callback) {
+	async onMinimize(callback) {
 		return await __sys.on("win.on_minimize", callback);
 	},
-	async open_in_browser(url) {
+	async openInBrowser(url) {
 		return await __sys.invoke("win.open_in_browser", url);
 	},
-	async devtools_opened(callback) {
+	async devtoolsOpened(callback) {
 		return await __sys.on("win.devtools_opened", callback);
 	},
-	async devtools_closed(callback) {
+	async devtoolsClosed(callback) {
 		return await __sys.on("win.devtools_closed", callback);
 	},
-	async is_devtools_open() {
+	async isDevtoolsOpen() {
 		return await __sys.invoke("win.is_devtools_open");
+	},
+	async getBounds() {
+		return await __sys.invoke("win.get_bounds");
+	},
+	async focus() {
+		return await __sys.invoke("win.focus");
+	},
+	async openSpace(space) {
+		return await __sys.invoke("win.open_space", space);
 	},
 };
 
@@ -115,46 +124,61 @@ const appstream = {
 	async select(opts) {
 		return await __sys.invoke("appstream.select", opts);
 	},
-	async get_captured_windows() {
+	async getCapturedWindows() {
 		return await __sys.invoke("appstream.get_captured_windows");
 	},
-	async get_window_capture(id) {
+	async getWindowCapture(id) {
 		return await __sys.invoke("appstream.get_window_capture", id);
 	},
-	async window_capture_updated(callback) {
+	async windowCaptureUpdated(callback) {
 		__sys.on("appstream.window_capture_updated", (e, id) => {
 			callback(id);
 		});
 	},
-	async focus_window(window_id) {
+	async focusWindow(window_id) {
 		return await __sys.invoke("appstream.focus_window", window_id);
 	},
-	async close_window(window_id) {
+	async closeWindow(window_id) {
 		return await __sys.invoke("appstream.close_window", window_id);
 	},
-	async on_window_closed(callback) {
+	async onWindowClosed(callback) {
 		return await __sys.on("appstream.window_closed", (e, id) => {
 			callback(id);
 		});
 	},
-	async resize_window(window_id, dimensions) {
+	async resizeWindow(window_id, dimensions) {
 		return await __sys.invoke("appstream.resize_window", window_id, dimensions);
 	},
-	async set_window_position(window_id, x, y) {
+	async setWindowPosition(window_id, x, y) {
 		return await __sys.invoke("appstream.set_window_position", window_id, x, y);
 	},
 };
 
 const browser = {
-	async new_window(url) {
+	async newWindow(url) {
 		return await __sys.invoke("browser.new_window", url);
 	},
-	async capture_page(webcontents_id) {
+	async capturePage(webcontents_id) {
 		return await __sys.invoke("browser.capture_page", webcontents_id);
 	},
-	async open_webview_devtools(target_webview_wcid, devtools_webview_wcid) {
+	async openWebviewDevtools(target_webview_wcid, devtools_webview_wcid) {
 		return await __sys.invoke("browser.open_webview_devtools", target_webview_wcid, devtools_webview_wcid);
 	},
+};
+
+const overlay = {
+	async focus() {
+		return await __sys.invoke("overlay.focus");
+	},
+	async setHeight(height) {
+		return await __sys.invoke("overlay.set_height", height);
+	},
+	async openDevTools() {
+		return await __sys.invoke("overlay.open_devtools");
+	},
+	// async hideOverlay() {
+	// 	return await __sys.invoke("overlay.hide_overlay");
+	// }
 };
 
 const shortcuts = {
@@ -178,11 +202,11 @@ const shortcuts = {
 		return await __sys.invoke("shortcuts.unregister", name);
 	},
 
-	async get_all() {
+	async getAll() {
 		return await __sys.invoke("shortcuts.get_all");
 	},
 
-	async on_trigger(callback) {
+	async onTrigger(callback) {
 		return await __sys.on("shortcuts.triggered", (event, name) => {
 			callback(name);
 		});
@@ -200,6 +224,7 @@ const sys = {
 	appstream,
 	browser,
 	shortcuts,
+	overlay
 };
 
 export default sys;

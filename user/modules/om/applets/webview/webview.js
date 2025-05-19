@@ -1,29 +1,26 @@
 import { css, fade, finish, GlobalStyleSheet } from "../../../../lib/utils.js";
-import { get_camera_center, surface } from "../../desktop.js";
-import van from "../../../../lib/van.js";
+import { getCameraCenter, surface } from "../../desktop.js";
+import { useTags } from "../../../../lib/ima.js";
 import sys from "../../../../lib/bridge.js";
-const { div, header, img, input, webview } = van.tags;
+const { div, header, img, input, webview } = useTags();
 
 const DEFAULT_WIDTH = 414;
 const DEFAULT_HEIGHT = 700;
 
-sys.shortcuts.register({
-	accelerator: "CmdOrCtrl+t",
-	name: "new-webview",
-	description: "Open a new webview",
-	async callback() {
-		let { x: center_x, y: center_y } = get_camera_center();
+window.addEventListener("keydown", async (e) => {
+	if ((e.metaKey || e.ctrlKey) && e.key.toUpperCase() === "T") {
+		let { x: center_x, y: center_y } = getCameraCenter();
 		const random_x_offset = Math.floor(Math.random() * 150) - 48;
 		const random_y_offset = Math.floor(Math.random() * 150) - 48;
 
-		await add_webview({
+		await addWebview({
 			x: center_x + random_x_offset - DEFAULT_WIDTH / 2,
 			y: center_y + random_y_offset - DEFAULT_HEIGHT / 2,
 		});
-	},
+	}
 });
 
-async function add_webview(props) {
+async function addWebview(props) {
 	//
 	// Props
 	//
@@ -45,7 +42,7 @@ async function add_webview(props) {
 		props.height = DEFAULT_HEIGHT;
 	}
 
-	let { x: center_x, y: center_y } = get_camera_center();
+	let { x: center_x, y: center_y } = getCameraCenter();
 
 	if (!props.x) {
 		props.x = center_x - 207;
@@ -59,17 +56,15 @@ async function add_webview(props) {
 	// State
 	//
 
-	const is_devtools_webview = van.state(props.devtools_requester ? true : false);
-	const query = van.state(props.url || "");
-	const src = van.state(
-		props.devtools_requester
-			? `devtools://devtools/bundled/inspector.html?ws=localhost:0/${props.devtools_requester.getWebContentsId()}`
-			: "",
-	);
-	const last_render = van.state("");
-	const loading = van.state(false);
-	const load_error = van.state("");
-	const keyboard_shortcut_could_trigger = van.state(false);
+	let is_devtools_webview = props.devtools_requester ? true : false;
+	let query = props.url || "";
+	let src = props.devtools_requester
+		? `devtools://devtools/bundled/inspector.html?ws=localhost:0/${props.devtools_requester.getWebContentsId()}`
+		: "";
+	let last_render = "";
+	let loading = false;
+	let load_error = "";
+	let keyboard_shortcut_could_trigger = false;
 
 	const modkeys = {
 		Control: false,
@@ -99,7 +94,7 @@ async function add_webview(props) {
 
 	const webview_el = webview({
 		...webview_config,
-		src: () => src.val,
+		src: () => src,
 		allowpopups: false,
 		// CSS Hack to fix Electron bug
 		style: css`
@@ -112,11 +107,11 @@ async function add_webview(props) {
 		{
 			"om-applet": "webview",
 			"om-motion": "idle",
-			"is-devtools": () => is_devtools_webview.val,
-			"keyboard-focus": () => keyboard_shortcut_could_trigger.val,
-			"has-error": () => !!load_error.val,
-			"is-loading": () => loading.val,
-			style: () => css`
+			"is-devtools": () => is_devtools_webview,
+			"keyboard-focus": () => keyboard_shortcut_could_trigger,
+			"has-error": () => !!load_error,
+			"is-loading": () => loading,
+			style: css`
 				top: ${props.y}px;
 				left: ${props.x}px;
 				width: ${props.width}px;
@@ -126,30 +121,31 @@ async function add_webview(props) {
 		header(
 			{
 				"drag-handle": "",
-				"new-tab": () => src.val === "" && !is_devtools_webview.val,
+				"new-tab": () => src === "" && !is_devtools_webview ? "true" : "false",
 			},
-			input({
-				variant: "minimal",
-				type: "text",
-				value: query,
-				placeholder: "Search or enter URL...",
-				onkeydown(e) {
-					if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w") {
-						close_webview();
-					}
+			() =>
+				input({
+					variant: "minimal",
+					type: "text",
+					placeholder: "Search or enter URL...",
+					value: query,
+					onkeydown(e) {
+						if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w") {
+							closeWebview();
+						}
 
-					if (e.key === "Enter") {
-						query.val = e.target.value;
-						src.val = process_query(query.val);
-						e.target.blur();
-					}
-				},
-			}),
+						if (e.key === "Enter") {
+							query = e.target.value;
+							src = processQuery(query);
+							e.target.blur();
+						}
+					},
+				}),
 			div({ class: "loading-indicator" }),
 		),
 		webview_el,
 		// img({
-		// 	empty: () => src.val === "" && !is_devtools_webview.val,
+		// 	empty: () => src === "" && !is_devtools_webview,
 		// 	src: last_render,
 		// 	alt: "",
 		// }),
@@ -158,24 +154,24 @@ async function add_webview(props) {
 		}),
 	);
 
-	van.add(surface(), applet);
+	surface().appendChild(applet);
 
 	await finish();
 
 	// Go to initial url if provided
-	if (query.val) src.val = process_query(query.val);
+	if (query) src = processQuery(query);
 
 	//
 	// Events
 	//
 
 	applet.addEventListener("mousedown", async (e) => {
-		if (src.val !== "" && applet.getAttribute("om-motion") === "idle" && window.superkeydown && e.button === 2) {
+		if (src !== "" && applet.getAttribute("om-motion") === "idle" && window.superkeydown && e.button === 2) {
 			const webcontents_id = webview_el.getWebContentsId();
-			const url = await sys.browser.capture_page(webcontents_id);
+			const url = await sys.browser.capturePage(webcontents_id);
 
 			if (url) {
-				last_render.val = url;
+				last_render = url;
 			}
 		}
 	});
@@ -183,7 +179,7 @@ async function add_webview(props) {
 	webview_el.addEventListener("dom-ready", async () => {
 		if (props.devtools_requester) {
 			// Open devtools as applet
-			await sys.browser.open_webview_devtools(
+			await sys.browser.openWebviewDevtools(
 				// Target webview
 				props.devtools_requester.getWebContentsId(),
 				// Devtools webview
@@ -194,24 +190,24 @@ async function add_webview(props) {
 	});
 
 	webview_el.addEventListener("did-start-loading", () => {
-		loading.val = true;
+		loading = true;
 	});
 
 	webview_el.addEventListener("did-stop-loading", () => {
-		loading.val = false;
+		loading = false;
 	});
 
 	webview_el.addEventListener("did-fail-load", (event) => {
-		load_error.val = event.errorDescription;
-		loading.val = false;
+		load_error = event.errorDescription;
+		loading = false;
 	});
 
 	webview_el.addEventListener("did-navigate", (event) => {
-		query.val = event.url;
+		query = event.url;
 	});
 
 	webview_el.addEventListener("did-navigate-in-page", (event) => {
-		query.val = event.url;
+		query = event.url;
 	});
 
 	webview_el.addEventListener("ipc-message", async (e) => {
@@ -224,7 +220,7 @@ async function add_webview(props) {
 				const random_x_offset = Math.floor(Math.random() * 150) - 48;
 				const random_y_offset = Math.floor(Math.random() * 150) - 48;
 
-				await add_webview({
+				await addWebview({
 					width: current_width,
 					height: current_height,
 					x: current_x + current_width + random_x_offset,
@@ -236,7 +232,7 @@ async function add_webview(props) {
 			}
 			case "new-window": {
 				const url = e.args[0];
-				sys.browser.new_window(url);
+				sys.browser.newWindow(url);
 				break;
 			}
 			case "new-tab": {
@@ -248,7 +244,7 @@ async function add_webview(props) {
 				const random_x_offset = Math.floor(Math.random() * 150) - 48;
 				const random_y_offset = Math.floor(Math.random() * 150) - 48;
 
-				add_webview({
+				addWebview({
 					width: current_width,
 					height: current_height,
 					x: current_x + (url === "" ? 0 : current_width) + random_x_offset,
@@ -277,7 +273,7 @@ async function add_webview(props) {
 				// Track individual modifier keys
 				if (key === "Control" || key === "Shift" || key === "Meta") {
 					modkeys[key] = true;
-					keyboard_shortcut_could_trigger.val = true;
+					keyboard_shortcut_could_trigger = true;
 				}
 
 				// Close webview on Ctrl/Cmd + W
@@ -286,7 +282,7 @@ async function add_webview(props) {
 						props.devtools_requester.closeDevTools();
 						console.log("Closing devtools");
 					}
-					close_webview();
+					closeWebview();
 				}
 
 				break;
@@ -306,7 +302,7 @@ async function add_webview(props) {
 					modkeys[key] = false;
 
 					// Only set to false if no modifier keys are pressed
-					keyboard_shortcut_could_trigger.val = modkeys.Control || modkeys.Shift || modkeys.Meta;
+					keyboard_shortcut_could_trigger = modkeys.Control || modkeys.Shift || modkeys.Meta;
 				}
 				break;
 			}
@@ -341,7 +337,7 @@ async function add_webview(props) {
 				modkeys.Control = false;
 				modkeys.Shift = false;
 				modkeys.Meta = false;
-				keyboard_shortcut_could_trigger.val = false;
+				keyboard_shortcut_could_trigger = false;
 				break;
 			}
 		}
@@ -351,11 +347,11 @@ async function add_webview(props) {
 	// Functions
 	//
 
-	function close_webview() {
+	function closeWebview() {
 		applet.remove();
 	}
 
-	function process_query(query) {
+	function processQuery(query) {
 		if (!query) {
 			return "";
 		}

@@ -1,7 +1,7 @@
 {
 	"name": "om",
 	"version": "1.0.0",
-	"description": "Making computing great again.",
+	"description": "Portable and customizable desktop environment",
 	"main": "electron.js",
 	"scripts": {
 		"pack_win": "asar pack builds/default_app ./builds/windows/resources/default_app.asar",
@@ -18,7 +18,7 @@
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
-		"electron": "^34.0.0",
+		"electron": "^36.0.0",
 		"asar": "^3.2.0"
 	}
 }

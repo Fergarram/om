@@ -1,20 +1,21 @@
-import { css, finish, GlobalStyleSheet, try_catch, debounce } from "../../../lib/utils.js";
-import { get_camera_center, on_applet_remove, surface } from "../desktop.js";
-import van from "../../../lib/van.js";
+import { css, finish, GlobalStyleSheet, tryCatch, debounce } from "../../../lib/utils.js";
+import { getCameraCenter, onAppletRemove, surface } from "../desktop.js";
+import { useTags } from "../../../lib/ima.js";
 import sys from "../../../lib/bridge.js";
-const { div, header, span, icon, button, canvas, video, source } = van.tags;
 
-sys.appstream.window_capture_updated(async (id) => {
-	const window_data = await sys.appstream.get_window_capture(id);
+const { div, header, span, icon, button, canvas, video, source } = useTags();
+
+sys.appstream.windowCaptureUpdated(async (id) => {
+	const window_data = await sys.appstream.getWindowCapture(id);
 	if (window_data) {
-		add_appview(id, window_data);
+		addAppview(id, window_data);
 	} else {
 		console.error(`Failed to capture window with ID ${id}`);
 	}
 });
 
 // Listen for window close events from the window manager
-sys.appstream.on_window_closed((window_id) => {
+sys.appstream.onWindowClosed((window_id) => {
 	console.log(window_id);
 	const appview = document.getElementById(`appview-${window_id}`);
 	if (appview) {
@@ -23,13 +24,13 @@ sys.appstream.on_window_closed((window_id) => {
 });
 
 // Handle close when element is removed
-on_applet_remove(async (applet) => {
-	try_catch(async () => {
-		await sys.appstream.close_window(applet.id.replace("appview-", ""));
+onAppletRemove(async (applet) => {
+	tryCatch(async () => {
+		await sys.appstream.closeWindow(applet.id.replace("appview-", ""));
 	});
 });
 
-async function add_appview(window_id, window_data) {
+async function addAppview(window_id, window_data) {
 	const id = `appview-${window_id}`;
 	const width = window_data.width;
 	const height = window_data.height;
@@ -64,7 +65,7 @@ async function add_appview(window_id, window_data) {
 	let last_resize_width = 0;
 	let last_resize_height = 0;
 
-	let { x, y } = get_camera_center();
+	let { x, y } = getCameraCenter();
 
 	// Adjust position to center
 	x = x - width / 2;
@@ -83,8 +84,8 @@ async function add_appview(window_id, window_data) {
 
 			try {
 				const rect = e.target.getBoundingClientRect();
-				await sys.appstream.set_window_position(window_id, Math.round(rect.left), Math.round(rect.top));
-				await sys.appstream.focus_window(window_id);
+				await sys.appstream.setWindowPosition(window_id, Math.round(rect.left), Math.round(rect.top));
+				await sys.appstream.focusWindow(window_id);
 			} catch (err) {
 				console.error("Failed to forward mouse press:", err);
 			}
@@ -120,12 +121,12 @@ async function add_appview(window_id, window_data) {
 		canvas_el,
 	);
 
-	van.add(surface(), appview);
+	surface().appendChild(appview);
 
 	// Handle resize
 	const handle_resize_end = debounce(async (new_width, new_height) => {
-		try_catch(async () => {
-			await sys.appstream.resize_window(window_id, {
+		tryCatch(async () => {
+			await sys.appstream.resizeWindow(window_id, {
 				width: Math.round(new_width),
 				height: Math.round(new_height),
 			});
@@ -133,10 +134,10 @@ async function add_appview(window_id, window_data) {
 	}, 150);
 
 	// Handle position updates
-	const handle_position_update = debounce(async () => {
-		try_catch(async () => {
+	const handlePositionUpdate = debounce(async () => {
+		tryCatch(async () => {
 			const rect = appview.getBoundingClientRect();
-			await sys.appstream.set_window_position(window_id, Math.round(rect.left), Math.round(rect.top));
+			await sys.appstream.setWindowPosition(window_id, Math.round(rect.left), Math.round(rect.top));
 		});
 	}, 50);
 
@@ -144,7 +145,7 @@ async function add_appview(window_id, window_data) {
 	const position_observer = new MutationObserver((mutations) => {
 		for (const mutation of mutations) {
 			if (mutation.type === "attributes" && mutation.attributeName === "style") {
-				handle_position_update();
+				handlePositionUpdate();
 			}
 		}
 	});
@@ -158,7 +159,7 @@ async function add_appview(window_id, window_data) {
 		const entry = entries[0];
 		if (entry) {
 			handle_resize_end(entry.contentRect.width, entry.contentRect.height);
-			handle_position_update(); // Also update position on resize
+			handlePositionUpdate(); // Also update position on resize
 		}
 	});
 
@@ -171,7 +172,7 @@ async function add_appview(window_id, window_data) {
 	ctx.putImageData(image_data, 0, 0);
 
 	// Set initial position
-	handle_position_update();
+	handlePositionUpdate();
 }
 
 GlobalStyleSheet(css`

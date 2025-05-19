@@ -118,7 +118,7 @@ out
 # Nuxt.js build / generate output
 
 .nuxt
-#dist
+dist
 
 # Gatsby files
 
@@ -173,18 +173,3 @@ out
 
 # Finder (MacOS) folder config
 .DS_Store
-
-# Om
-Om.app
-builds/Om.app
-builds/Om*.app
-builds/windows
-builds/linux
-om.lnk
-.virtfs_metadata
-.zig-cache
-*.qcow2
-*.fd
-
-# Bun
-sys/bin/*

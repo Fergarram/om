@@ -1,14 +1,14 @@
 import { css, finish, GlobalStyleSheet } from "../../../lib/utils.js";
-import { get_camera_center, surface } from "../desktop.js";
-import van from "../../../lib/van.js";
+import { getCameraCenter, surface } from "../desktop.js";
+import { useTags } from "../../../lib/ima.js";
 import sys from "../../../lib/bridge.js";
-const { div, webview, video, source } = van.tags;
+const { div, webview, video, source } = useTags();
 
 window.addEventListener("keydown", (e) => {
 	if (e.metaKey && e.key.toLowerCase() === "8") {
-		add_applet("webview");
+		addApplet("webview");
 	} else if (e.metaKey && e.key.toLowerCase() === "9") {
-		add_applet("video");
+		addApplet("video");
 	}
 });
 
@@ -35,8 +35,8 @@ GlobalStyleSheet(css`
 	}
 `);
 
-async function add_applet(mode = "webview") {
-	let { x, y } = get_camera_center();
+async function addApplet(mode = "webview") {
+	let { x, y } = getCameraCenter();
 
 	// Randomize width and height
 	const min_size = window.innerWidth * 0.2;
@@ -85,7 +85,7 @@ async function add_applet(mode = "webview") {
 			"om-applet": "test",
 			"om-motion": "idle",
 			"data-mode": mode,
-			style: () => css`
+			style: css`
 				top: ${y}px;
 				left: ${x}px;
 				width: ${width}px;
@@ -95,7 +95,7 @@ async function add_applet(mode = "webview") {
 		media_element,
 	);
 
-	van.add(surface(), test);
+	surface().appendChild(test);
 
 	await finish();
 

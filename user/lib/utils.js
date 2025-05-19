@@ -2,6 +2,10 @@ export function fade(color, opacity) {
 	return `color-mix(in oklch, var(${color}), transparent ${100 - opacity}%)`;
 }
 
+export function docMain() {
+	return document.body.querySelector("main");
+}
+
 export function debounce(fn, delay) {
 	let timeout_id = null;
 	let resolve_callback = null;
@@ -42,7 +46,7 @@ export function debounce(fn, delay) {
 	return debounced;
 }
 
-export async function try_catch(func) {
+export async function tryCatch(func) {
 	try {
 		const result = func();
 		// Check if the result is a promise
@@ -55,7 +59,7 @@ export async function try_catch(func) {
 	}
 }
 
-export function is_scrollable(element) {
+export function isScrollable(element) {
 	if (!element) return false;
 	const style = window.getComputedStyle(element);
 	const overflow_y = style.getPropertyValue("overflow-y");
@@ -67,7 +71,7 @@ export function is_scrollable(element) {
 }
 
 export function GlobalStyleSheet(styles) {
-	const sheet = create_stylesheet("global_styles");
+	const sheet = createStylesheet("global_styles");
 
 	// Remove comments and normalize whitespace
 	const cleaned_css = styles
@@ -107,7 +111,7 @@ export function GlobalStyleSheet(styles) {
 	}
 }
 
-export function create_stylesheet(id) {
+export function createStylesheet(id) {
 	let sheet = document.adoptedStyleSheets.find((sheet) => sheet.id === id);
 	if (!sheet) {
 		sheet = new CSSStyleSheet();
@@ -140,20 +144,20 @@ export function css(strings, ...values) {
 	return strings.reduce((result, str, i) => result + str + (i < values.length ? values[i] : ""), "");
 }
 
-export function convert_from_windows_path(path) {
+export function convertFromWindowsPath(path) {
 	return path.replace(/\\/g, "/");
 }
 
-export function convert_to_windows_path(path) {
+export function convertToWindowsPath(path) {
 	return path.replace(/\//g, "\\");
 }
 
-export function is_image_file(ext) {
+export function isImageFile(ext) {
 	const exts = ["jpg", "jpeg", "png", "gif", "webp"];
 	return exts.includes(ext.toLowerCase());
 }
 
-export function get_image_media_type(filepath) {
+export function getImageMediaType(filepath) {
 	const ext = filepath.toLowerCase();
 	if (ext.endsWith(".jpg") || ext.endsWith(".jpeg")) return "image/jpeg";
 	if (ext.endsWith(".png")) return "image/png";
@@ -162,21 +166,12 @@ export function get_image_media_type(filepath) {
 	return null;
 }
 
-export function is_sound_file(ext) {
+export function isSoundFile(ext) {
 	const exts = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "wma", "aiff", "mid", "midi"];
 	return exts.includes(ext.toLowerCase());
 }
 
-export function is_valid_project_folder(item) {
-	if (!item.is_directory || !item.children) return false;
-
-	const required_files = ["template.html", "stormborn.ts", "index.js"];
-	const folder_files = item.children.map((child) => child.file_name + (child.extension ? "." + child.extension : ""));
-
-	return required_files.every((file) => folder_files.includes(file));
-}
-
-export function get_file_language(filename) {
+export function getFileLanguage(filename) {
 	const extension = filename.split(".").pop().toLowerCase();
 
 	const language_map = {

@@ -1,8 +1,8 @@
-import van from "../../../lib/van.js";
+import { useTags } from "../../../lib/ima.js";
 import { css, GlobalStyleSheet } from "../../../lib/utils.js";
-import { surface } from "../desktop.js";
+import { useCommandPalette } from "./command-palette.js";
 
-const { div, header, button, icon, h2, h1, span } = van.tags;
+const { div, header, button, icon, h2, h1, span } = useTags();
 
 GlobalStyleSheet(css`
 	#space-statusbar {
@@ -47,17 +47,18 @@ const format_date = () => {
 	// Get hours and minutes
 	const hours = now.getHours().toString().padStart(2, "0");
 	const minutes = now.getMinutes().toString().padStart(2, "0");
+	// const seconds = now.getSeconds().toString().padStart(2, "0");
 
 	// Format: "Mon 10 Mar 19:20"
 	return `${day} ${date} ${month} ${hours}:${minutes}`;
 };
 
-const current_date = van.state(format_date());
+let current_date = format_date();
 
 // Update the date every second
 setInterval(() => {
-	current_date.val = format_date();
-}, 1000);
+	current_date = format_date();
+}, 1000 * 60);
 
 export async function StatusBar() {
 	return header(
@@ -69,7 +70,9 @@ export async function StatusBar() {
 				variant: "icon",
 				title: "Toggle Launcher",
 				"aria-label": "Toggle Launcher",
-				async onclick(e) {},
+				async onclick(e) {
+					useCommandPalette();
+				},
 			},
 			icon({ name: "action_key", size: "sm" }),
 		),
@@ -80,13 +83,13 @@ export async function StatusBar() {
 			button(
 				{
 					variant: "icon",
-					title: () => (window.is_trackpad.val ? "Using trackpad" : "Using mouse"),
+					title: () => (window.is_trackpad ? "Using trackpad" : "Using mouse"),
 					"aria-label": "Toggle Input Device",
 					onclick() {
-						window.is_trackpad.val = !window.is_trackpad.val;
+						window.is_trackpad = !window.is_trackpad;
 					},
 				},
-				icon({ name: () => (window.is_trackpad.val ? "trackpad_input_2" : "mouse"), size: "sm" }),
+				icon({ name: () => (window.is_trackpad ? "trackpad_input_2" : "mouse"), size: "sm" }),
 			),
 			button(
 				{
@@ -96,7 +99,7 @@ export async function StatusBar() {
 					"aria-label": "Toggle Date Details",
 					onclick() {},
 				},
-				() => span(current_date.val),
+				span(() => current_date),
 			),
 		),
 	);

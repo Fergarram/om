@@ -1,4 +1,8 @@
-export async function initialize_background_canvas(desktop, canvas) {
+const MAX_TILE = 500;
+// const IMAGE_SRC = "https://d2w9rnfcy7mm78.cloudfront.net/36753338/original_b8bd8d85cbbd92e0e29b0ff44ea14b70.png?1747414329?bc=0";
+const IMAGE_SRC = "https://d2w9rnfcy7mm78.cloudfront.net/2214531/original_449037e617330c3f52dcdb03307a1680.jpg?1527086219?bc=1";
+
+export async function initializeBackgroundCanvas(desktop, canvas) {
 	canvas.width = desktop.offsetWidth;
 	canvas.height = desktop.offsetHeight;
 
@@ -83,8 +87,7 @@ export async function initialize_background_canvas(desktop, canvas) {
 
 	// Load wallpaper image
 	const wallpaper = new Image();
-	wallpaper.src =
-		"https://d2w9rnfcy7mm78.cloudfront.net/2214531/original_449037e617330c3f52dcdb03307a1680.jpg?1527086219?bc=1";
+	wallpaper.src = IMAGE_SRC;
 	wallpaper.crossOrigin = "anonymous"; // Required for WebGL textures from external sources
 
 	// Wait for the image to load
@@ -100,7 +103,7 @@ export async function initialize_background_canvas(desktop, canvas) {
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wallpaper);
 
-	function draw_wallpaper(camera_x, camera_y, current_scale) {
+	function drawWallpaper(camera_x, camera_y, current_scale) {
 		if (!gl || !wallpaper.complete) return;
 
 		// Set canvas size to match display size
@@ -111,8 +114,8 @@ export async function initialize_background_canvas(desktop, canvas) {
 		}
 
 		// Calculate tile size based on current scale
-		const tile_width = Math.min(wallpaper.width, 480) * current_scale;
-		const tile_height = Math.min(wallpaper.height, 480) * current_scale;
+		const tile_width = Math.min(wallpaper.width, MAX_TILE) * current_scale;
+		const tile_height = Math.min(wallpaper.height, MAX_TILE) * current_scale;
 
 		// Calculate offset based on scroll position
 		let offset_x = -(camera_x % tile_width);
@@ -176,7 +179,7 @@ export async function initialize_background_canvas(desktop, canvas) {
 		}
 	}
 
-	function resize_canvas() {
+	function resizeCanvas() {
 		// Resize the canvas to match the desktop dimensions
 		canvas.width = desktop.offsetWidth;
 		canvas.height = desktop.offsetHeight;
@@ -188,7 +191,7 @@ export async function initialize_background_canvas(desktop, canvas) {
 	}
 
 	return {
-		resize_canvas,
-		draw_wallpaper,
+		resizeCanvas,
+		drawWallpaper,
 	};
 }

@@ -1,7 +1,8 @@
-import { css, finish, GlobalStyleSheet, is_scrollable } from "../../lib/utils.js";
-import van from "../../lib/van.js";
-import { initialize_background_canvas } from "./background.js";
-const { div, canvas } = van.tags;
+import { css, finish, GlobalStyleSheet, isScrollable } from "../../lib/utils.js";
+import { useTags } from "../../lib/ima.js";
+import { initializeBackgroundCanvas } from "./background.js";
+
+const { div, canvas } = useTags();
 
 //
 // Desktop Setup
@@ -14,13 +15,13 @@ const surface_initial_width = 100000;
 const surface_initial_height = surface_initial_width * (window.innerHeight / window.innerWidth);
 const applet_shadow_map = div({
 	id: "applet-shadow-map",
-	style: () => css`
+	style: css`
 		pointer-events: none;
 		opacity: 0;
 	`,
 });
 
-van.add(document.body, applet_shadow_map);
+document.body.appendChild(applet_shadow_map);
 
 await finish();
 
@@ -53,10 +54,10 @@ let current_scale = 1;
 let pending_mouse_dx = 0;
 let pending_mouse_dy = 0;
 let has_pending_mouse_movement = false;
-const zoom_level = van.state(1);
-const is_zooming = van.state(false);
-const scroll_thumb_x = van.state(0);
-const scroll_thumb_y = van.state(0);
+let zoom_level = 1;
+let is_zooming = false;
+let scroll_thumb_x = 0;
+let scroll_thumb_y = 0;
 
 // Applet Interactions
 let last_mouse_x = 0;
@@ -94,7 +95,7 @@ const observer = new MutationObserver((mutations) => {
 						node.getAttribute("om-motion") !== "elevated" &&
 						node.hasAttribute("om-applet")
 					) {
-						place_applet(node);
+						placeApplet(node);
 					}
 				});
 			}
@@ -106,7 +107,7 @@ const observer = new MutationObserver((mutations) => {
 						node.getAttribute("om-motion") !== "elevated" &&
 						node.hasAttribute("om-applet")
 					) {
-						remove_applet(node);
+						removeApplet(node);
 					}
 				});
 			}
@@ -116,6 +117,7 @@ const observer = new MutationObserver((mutations) => {
 
 //
 // Layout and Styles
+//
 
 GlobalStyleSheet(css`
 	#om-desktop {
@@ -144,14 +146,14 @@ GlobalStyleSheet(css`
 	}
 `);
 
-export async function initialize_desktop(om_space) {
+export async function initializeDesktop(om_space) {
 	const desktop = div(
 		{
 			id: "om-desktop",
 		},
 		div({
 			id: "om-desktop-surface",
-			style: () => (is_zooming.val ? `will-change: transform, width, height;` : ``),
+			style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 		}),
 	);
 
@@ -159,35 +161,35 @@ export async function initialize_desktop(om_space) {
 		id: "om-desktop-canvas",
 	});
 
-	van.add(om_space, canvas_el);
-	van.add(om_space, desktop);
+	om_space.appendChild(canvas_el);
+	om_space.appendChild(desktop);
 
 	await finish();
 
-	const { draw_wallpaper, resize_canvas } = await initialize_background_canvas(desktop, canvas_el);
+	const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(desktop, canvas_el);
 
 	observer.observe(surface(), { childList: true });
 
-	on_applet_place(handle_applet_placement);
+	onAppletPlace(handleAppleyPlacement);
 
-	handle_resize();
+	handleResize();
 
-	window.addEventListener("resize", handle_resize);
-	window.addEventListener("keydown", handle_global_keydown);
-	desktop.addEventListener("wheel", desktop_wheel, { passive: false });
-	desktop.addEventListener("scroll", desktop_scroll);
-	surface().addEventListener("mousedown", surface_mousedown);
-	window.addEventListener("mouseleave", window_mouseout);
-	window.addEventListener("mouseout", window_mouseout);
-	window.addEventListener("dblclick", window_dblclick);
-	window.addEventListener("mousedown", window_mousedown);
-	window.addEventListener("mouseup", window_mouseup);
-	window.addEventListener("mousemove", window_mousemove);
+	window.addEventListener("resize", handleResize);
+	window.addEventListener("keydown", handleGlobalKeydown);
+	desktop.addEventListener("wheel", desktopWheel, { passive: false });
+	desktop.addEventListener("scroll", desktopScroll);
+	surface().addEventListener("mousedown", surfaceMouseDown);
+	window.addEventListener("mouseleave", windowMouseOut);
+	window.addEventListener("mouseout", windowMouseOut);
+	window.addEventListener("dblclick", windowDblClick);
+	window.addEventListener("mousedown", windowMouseDown);
+	window.addEventListener("mouseup", windowMouseUp);
+	window.addEventListener("mousemove", windowMouseMove);
 	requestAnimationFrame(step);
 
-	scroll_to_center();
+	scrollToCenter();
 
-	function scroll_to_center() {
+	function scrollToCenter() {
 		const rect = surface().getBoundingClientRect();
 		desktop.scroll({
 			left: rect.width / 2 - desktop.offsetWidth / 2,
@@ -195,17 +197,17 @@ export async function initialize_desktop(om_space) {
 		});
 	}
 
-	function update_surface_scale() {
+	function updateSurfaceScale() {
 		surface().style.transform = `scale(${current_scale})`;
-		zoom_level.val = current_scale;
+		zoom_level = current_scale;
 	}
 
-	function handle_resize() {
-		resize_canvas();
-		draw_wallpaper(camera_x, camera_y, current_scale);
+	function handleResize() {
+		resizeCanvas();
+		drawWallpaper(camera_x, camera_y, current_scale);
 	}
 
-	async function handle_global_keydown(e) {
+	async function handleGlobalKeydown(e) {
 		// Prevent default window zooming
 		if ((e.ctrlKey || e.metaKey) && e.key === "=") {
 			e.preventDefault();
@@ -228,22 +230,22 @@ export async function initialize_desktop(om_space) {
 
 			if (e.key === "≠") {
 				e.preventDefault();
-				is_zooming.val = true;
+				is_zooming = true;
 				current_scale = Math.min(current_scale + 0.1, 1.0);
 			} else if (e.key === "–") {
 				e.preventDefault();
-				is_zooming.val = true;
+				is_zooming = true;
 				current_scale = Math.max(current_scale - 0.1, 0.1);
 			} else if (e.key === "º") {
 				e.preventDefault();
-				is_zooming.val = true;
+				is_zooming = true;
 				current_scale = 1.0;
 			} else {
 				return;
 			}
 
 			// Update the scale immediately
-			update_surface_scale();
+			updateSurfaceScale();
 			await finish();
 
 			// Calculate new scroll position to maintain center point
@@ -259,21 +261,21 @@ export async function initialize_desktop(om_space) {
 			// Reset is_zooming after a short delay
 			clearTimeout(zoom_timeout);
 			zoom_timeout = setTimeout(() => {
-				is_zooming.val = false;
+				is_zooming = false;
 			}, 150);
 		}
 	}
 
-	async function desktop_wheel(e) {
+	async function desktopWheel(e) {
 		let target = e.target;
 		while (target && target !== surface()) {
-			if (is_scrollable(target) && !is_scrolling) {
+			if (isScrollable(target) && !is_scrolling) {
 				return;
 			}
 			target = target.parentElement;
 		}
 
-		if (window.is_trackpad.val && window.superkeydown && e.shiftKey && !e.ctrlKey) {
+		if (window.is_trackpad && window.superkeydown && e.shiftKey && !e.ctrlKey) {
 			e.preventDefault();
 			desktop.scrollTo({
 				left: camera_x + e.deltaX,
@@ -281,7 +283,7 @@ export async function initialize_desktop(om_space) {
 			});
 		} else if (
 			(window.superkeydown && !is_panning) ||
-			(window.is_trackpad.val && window.superkeydown && e.shiftKey && e.ctrlKey)
+			(window.is_trackpad && window.superkeydown && e.shiftKey && e.ctrlKey)
 		) {
 			e.preventDefault();
 
@@ -308,11 +310,11 @@ export async function initialize_desktop(om_space) {
 
 			// Only proceed if the scale actually changed
 			if (new_scale !== current_scale) {
-				is_zooming.val = true;
+				is_zooming = true;
 				current_scale = new_scale;
 
 				// Update the scale immediately
-				update_surface_scale();
+				updateSurfaceScale();
 
 				// Calculate new scroll position to maintain cursor point
 				const new_scroll_x = point_x * current_scale - cursor_x;
@@ -327,13 +329,13 @@ export async function initialize_desktop(om_space) {
 				// Reset is_zooming after a short delay
 				clearTimeout(zoom_timeout);
 				zoom_timeout = setTimeout(() => {
-					is_zooming.val = false;
+					is_zooming = false;
 				}, 150);
 			}
 		}
 	}
 
-	function desktop_scroll(e) {
+	function desktopScroll(e) {
 		is_scrolling = true;
 
 		clearTimeout(scrolling_timeout);
@@ -359,11 +361,11 @@ export async function initialize_desktop(om_space) {
 		camera_x = desktop.scrollLeft;
 		camera_y = desktop.scrollTop;
 
-		scroll_thumb_x.val = (desktop.scrollLeft / rect.width) * 100;
-		scroll_thumb_y.val = (desktop.scrollTop / rect.height) * 100;
+		scroll_thumb_x = (desktop.scrollLeft / rect.width) * 100;
+		scroll_thumb_y = (desktop.scrollTop / rect.height) * 100;
 	}
 
-	function surface_mousedown(e) {
+	function surfaceMouseDown(e) {
 		if ((window.superkeydown && e.button === 1) || (window.superkeydown && e.button === 0 && e.target === surface())) {
 			e.preventDefault();
 			is_panning = true;
@@ -373,26 +375,26 @@ export async function initialize_desktop(om_space) {
 		}
 	}
 
-	function window_mouseout(e) {
+	function windowMouseOut(e) {
 		if (e.target.tagName !== "HTML") return;
 		is_panning = false;
 		document.body.classList.remove("is-panning");
 	}
 
-	function window_dblclick(e) {
+	function windowDblClick(e) {
 		// if (e.)
 	}
 
-	function window_mousedown(e) {}
+	function windowMouseDown(e) {}
 
-	function window_mouseup(e) {
+	function windowMouseUp(e) {
 		if (e.button === 1 || e.button === 0) {
 			is_panning = false;
 			document.body.classList.remove("is-panning");
 		}
 	}
 
-	function window_mousemove(e) {
+	function windowMouseMove(e) {
 		if (is_panning) {
 			// Calculate the delta and store it for the next animation frame
 			pending_mouse_dx += e.clientX - last_middle_click_x;
@@ -445,20 +447,20 @@ export async function initialize_desktop(om_space) {
 		}
 
 		// Update the scale consistently in the animation loop
-		update_surface_scale();
+		updateSurfaceScale();
 
 		// Draw the wallpaper with the current scroll and zoom
-		draw_wallpaper(camera_x, camera_y, current_scale);
+		drawWallpaper(camera_x, camera_y, current_scale);
 
 		requestAnimationFrame(step);
 	}
 }
 
-export function get_camera_position() {
+export function getCameraPosition() {
 	return { x: camera_x, y: camera_y };
 }
 
-export function get_camera_center() {
+export function getCameraCenter() {
 	return {
 		x: (camera_x + desktop().offsetWidth / 2) / current_scale,
 		y: (camera_y + desktop().offsetHeight / 2) / current_scale,
@@ -472,30 +474,31 @@ export function desktop() {
 	return desktop_el;
 }
 
-export function surface() {
+export function surface(child) {
 	if (!surface_el) {
 		surface_el = document.getElementById("om-desktop-surface");
 	}
+
 	return surface_el;
 }
 
-export function register_applet_initializer(window_name, initializer) {
+export function registerAppletInitializer(window_name, initializer) {
 	applet_initializers[window_name] = initializer;
 }
 
-export function on_applet_place(callback) {
+export function onAppletPlace(callback) {
 	place_callbacks.push(callback);
 }
 
-export function on_applet_remove(callback) {
+export function onAppletRemove(callback) {
 	remove_callbacks.push(callback);
 }
 
-export function on_order_change(callback) {
+export function onOrderChange(callback) {
 	order_change_callbacks.push(callback);
 }
 
-export async function place_applet(applet, first_mount = false) {
+export async function placeApplet(applet, first_mount = false) {
 	place_callbacks.forEach((c) => c(applet, first_mount));
 
 	if (!applet.hasAttribute("om-tsid")) {
@@ -505,15 +508,15 @@ export async function place_applet(applet, first_mount = false) {
 		applet.setAttribute("om-tsid", uuid);
 
 		if (!first_mount) {
-			add_shadow_clone(applet, uuid);
+			addShadowClone(applet, uuid);
 		}
 	}
 
 	if (!first_mount) save();
 }
 
-export async function remove_applet(applet) {
-	remove_shadow_clone(applet);
+export async function removeApplet(applet) {
+	removeShadowClone(applet);
 	remove_callbacks.forEach((c) => c(applet));
 }
 
@@ -534,7 +537,7 @@ function save() {
 	// console.log("If we want to save the current applet layout");
 }
 
-function add_shadow_clone(win, id) {
+function addShadowClone(win, id) {
 	const shadow_clone = document.createElement("div");
 	shadow_clone.style.position = "absolute";
 	shadow_clone.setAttribute("om-tsid", id);
@@ -545,7 +548,7 @@ function add_shadow_clone(win, id) {
 	order_change_callbacks.forEach((c) => c(win, new_z_index));
 }
 
-function remove_shadow_clone(win) {
+function removeShadowClone(win) {
 	const removed_id = win.getAttribute("om-tsid");
 	const shadow_clone = shadow_root.querySelector(`[om-tsid="${removed_id}"]`);
 	if (shadow_clone) {
@@ -566,14 +569,14 @@ function remove_shadow_clone(win) {
 	}
 }
 
-async function handle_applet_placement(applet, first_mount = false) {
+async function handleAppleyPlacement(applet, first_mount = false) {
 	if (!first_mount) {
 		await finish();
 		applet.setAttribute("om-motion", "idle");
 		applet.style.removeProperty("will-change");
 	}
 
-	applet.addEventListener("contextmenu", prevent_context_menu);
+	applet.addEventListener("contextmenu", preventContextMenu);
 	applet.addEventListener("mousedown", handle_mousedown);
 
 	async function handle_mousedown(e) {
@@ -666,8 +669,8 @@ async function handle_applet_placement(applet, first_mount = false) {
 			dragged_applet = applet;
 		}
 
-		window.addEventListener("mousemove", handle_mousemove);
-		window.addEventListener("mouseup", handle_mouseup);
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
 	}
 
 	add_resize_handles(applet);
@@ -771,8 +774,8 @@ async function handle_applet_placement(applet, first_mount = false) {
 				last_left = parseInt(applet.style.left) || 0;
 				last_top = parseInt(applet.style.top) || 0;
 
-				window.addEventListener("mousemove", handle_resize);
-				window.addEventListener("mouseup", stop_resize);
+				window.addEventListener("mousemove", handleResize);
+				window.addEventListener("mouseup", stopResize);
 			});
 
 			applet.appendChild(handle);
@@ -780,7 +783,7 @@ async function handle_applet_placement(applet, first_mount = false) {
 	}
 }
 
-function handle_resize(e) {
+function handleResize(e) {
 	if (!is_resizing || !dragged_applet) return;
 
 	const dx = (e.clientX - last_mouse_x) / current_scale;
@@ -821,7 +824,7 @@ function handle_resize(e) {
 	dragged_applet.style.top = `${new_top}px`;
 }
 
-function stop_resize() {
+function stopResize() {
 	if (is_resizing) {
 		is_resizing = false;
 		const ev = new CustomEvent("applet-resize-stop", { detail: { applet: dragged_applet } });
@@ -830,13 +833,13 @@ function stop_resize() {
 		document.body.classList.remove("is-resizing");
 		resize_edge = null;
 		dragged_applet = null;
-		window.removeEventListener("mousemove", handle_resize);
-		window.removeEventListener("mouseup", stop_resize);
+		window.removeEventListener("mousemove", handleResize);
+		window.removeEventListener("mouseup", stopResize);
 		save();
 	}
 }
 
-async function handle_mousemove(e) {
+async function handleMouseMove(e) {
 	// Handle regular drag operation
 	if (current_mouse_button === 0) {
 		// Existing drag code
@@ -921,9 +924,9 @@ async function handle_mousemove(e) {
 	}
 }
 
-async function handle_mouseup(e) {
-	window.removeEventListener("mousemove", handle_mousemove);
-	window.removeEventListener("mouseup", handle_mouseup);
+async function handleMouseUp(e) {
+	window.removeEventListener("mousemove", handleMouseMove);
+	window.removeEventListener("mouseup", handleMouseUp);
 
 	if (!dragged_applet) return;
 
@@ -963,7 +966,7 @@ async function handle_mouseup(e) {
 	dragged_applet = null;
 }
 
-function prevent_context_menu(e) {
+function preventContextMenu(e) {
 	if ((e.metaKey || e.ctrlKey) && e.button === 2) {
 		e.preventDefault();
 		return false;

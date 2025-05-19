@@ -8,13 +8,27 @@ const SOCKET_PATH = "/tmp/omwm_socket";
 // Store captured windows
 const captured_windows = new Map();
 
+// Maximum number of connection attempts
+const MAX_CONNECTION_ATTEMPTS = 10;
+let connection_attempts = 0;
+
 function connect_to_wm_socket() {
 	// Check if socket exists
 	if (!fs.existsSync(SOCKET_PATH)) {
 		console.log(`Socket ${SOCKET_PATH} does not exist yet, waiting...`);
+		connection_attempts++;
+		
+		if (connection_attempts >= MAX_CONNECTION_ATTEMPTS) {
+			console.error(`Failed to connect after ${MAX_CONNECTION_ATTEMPTS} attempts. Stopping connection attempts.`);
+			return;
+		}
+		
 		setTimeout(connect_to_wm_socket, 1000);
 		return;
 	}
+	
+	// Reset connection attempts on successful check
+	connection_attempts = 0;
 
 	const client = net.createConnection({ path: SOCKET_PATH });
 	let buffer = Buffer.alloc(0);
@@ -141,11 +155,25 @@ function connect_to_wm_socket() {
 
 	client.on("error", (err) => {
 		console.error("Socket error:", err);
+		connection_attempts++;
+		
+		if (connection_attempts >= MAX_CONNECTION_ATTEMPTS) {
+			console.error(`Failed to connect after ${MAX_CONNECTION_ATTEMPTS} attempts. Stopping connection attempts.`);
+			return;
+		}
+		
 		setTimeout(connect_to_wm_socket, 1000);
 	});
 
 	client.on("close", () => {
 		console.log("Socket connection closed, reconnecting...");
+		connection_attempts++;
+		
+		if (connection_attempts >= MAX_CONNECTION_ATTEMPTS) {
+			console.error(`Failed to connect after ${MAX_CONNECTION_ATTEMPTS} attempts. Stopping reconnection attempts.`);
+			return;
+		}
+		
 		setTimeout(connect_to_wm_socket, 1000);
 	});
 
