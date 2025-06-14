@@ -182,12 +182,3 @@ else
     echo "Warning: Expected directory structure not found in the zip file."
     echo "The binary may have been extracted directly to $DOWNLOAD_DIR"
 fi
-
-# Auto-detect OS and download to current directory
-# ./download-bun.sh
-
-# Download macOS ARM version to a specific directory
-# ./download-bun.sh --os macos-arm --dir ~/bin
-
-# Download Windows version
-# ./download-bun.sh --os windows-x64 --dir ./windows-binaries

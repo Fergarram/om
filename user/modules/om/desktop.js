@@ -153,7 +153,6 @@ export async function initializeDesktop(om_space) {
 		},
 		div({
 			id: "om-desktop-surface",
-			style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 		}),
 	);
 

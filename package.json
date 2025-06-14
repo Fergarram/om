@@ -10,6 +10,7 @@
 		"pull_win": "cmd /c \"builds\\pull_win.bat\"",
 		"pull_linux": "sh ./builds/pull_linux.sh",
 		"pull_mac": "sh ./builds/pull_mac.sh",
+		"pull_bun": "sh ./builds/pull_bun.sh --dir ./bin",
 		"mac": "NODE_ENV=development \"./builds/Om.app/Contents/MacOS/Om\"",
 		"linux": "NODE_ENV=development ./builds/linux/om",
 		"win": "cmd /c \"builds\\run.bat\""
@@ -18,7 +19,7 @@
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
-		"electron": "^36.0.0",
+		"electron": "^34.0.0",
 		"asar": "^3.2.0"
 	}
 }
