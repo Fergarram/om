@@ -2,6 +2,7 @@ import { app } from "electron";
 
 import { createWindow } from "./modules/win.js";
 import { createOverlay } from "./modules/overlay.js";
+import { bundleAll } from "./modules/bundler.js";
 
 import "./modules/shell.js";
 import "./modules/file.js";
@@ -24,6 +25,7 @@ console.log({
 });
 
 app.whenReady().then(() => {
+	bundleAll();
 	const win = createWindow("home");
 	createOverlay("default", win);
 });

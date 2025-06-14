@@ -295,7 +295,7 @@ Options:
 			: path.dirname(path.dirname(path.dirname(path.dirname(appPath))));
 	}
 
-	const systemPath = path.join(rootDir, "sys");
+	const systemPath = path.join(rootDir, "system");
 
 	// Check if the system directory exists
 	if (!fs.existsSync(systemPath)) {

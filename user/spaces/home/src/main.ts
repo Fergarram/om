@@ -1,9 +1,12 @@
-import { useTags } from "../../lib/ima.js";
-import { css, finish, GlobalStyleSheet } from "../../lib/utils.js";
-import sys from "../../lib/bridge.js";
+import { useTags } from "@/lib/ima";
+import { css, finish, GlobalStyleSheet } from "@/lib/utils";
+import sys from "@/lib/bridge";
 
 // Global state ???
+
+// @ts-expect-error
 window.is_trackpad = false;
+// @ts-expect-error
 window.is_devtools_open = await sys.win.isDevtoolsOpen();
 
 // sys.win.devtoolsOpened(() => {
@@ -22,14 +25,14 @@ window.is_devtools_open = await sys.win.isDevtoolsOpen();
 // });
 
 // Om Modules
-import { initializeDesktop } from "../../modules/om/desktop.js";
-import "../../modules/om/superkey.js";
+import { initializeDesktop } from "@/modules/om/desktop";
+import "@/modules/om/superkey";
 
 // Applets
-import "../../modules/om/applets/test.js";
-import "../../modules/om/applets/sticky.js";
-import "../../modules/om/applets/appview.js";
-import "../../modules/om/applets/webview/webview.js";
+import "@/modules/om/applets/test";
+import "@/modules/om/applets/sticky";
+import "@/modules/om/applets/appview";
+import "@/modules/om/applets/webview";
 
 // DOM Setup
 const { main } = useTags();

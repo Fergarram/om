@@ -1,7 +1,8 @@
 import { shell, BrowserWindow, ipcMain, screen } from "electron";
 import path from "path";
-import fs from "fs/promises";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,7 +58,7 @@ ipcMain.handle("win.open_space", async (event, space) => {
 	window.webContents.executeJavaScript(`window.location.href = "file://${target_path}"`);
 });
 
-export function createWindow(space) {
+export function createWindow(initial_space) {
 	const primary_display = screen.getPrimaryDisplay();
 	const { width, height } = primary_display.workAreaSize;
 
@@ -134,13 +135,15 @@ export function createWindow(space) {
 		}
 	});
 
-	new_window.loadFile(`../user/spaces/${space}/index.html`);
+	new_window.webContents.on("will-navigate", (event, url) => {
+		console.log(`Will navigate to ${url}`);
+	});
 
 	new_window.webContents.on("did-finish-load", async () => {
 		new_window.show();
-		// const code = await fs.readFile(path.join(__dirname, "../injections/beforeunload.js"), "utf8");
-		// new_window.webContents.executeJavaScript(code);
 	});
+
+	new_window.loadFile(`../user/spaces/${initial_space}/index.html`);
 
 	return new_window;
 }

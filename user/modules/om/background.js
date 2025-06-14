@@ -1,6 +1,7 @@
 const MAX_TILE = 500;
 // const IMAGE_SRC = "https://d2w9rnfcy7mm78.cloudfront.net/36753338/original_b8bd8d85cbbd92e0e29b0ff44ea14b70.png?1747414329?bc=0";
-const IMAGE_SRC = "https://d2w9rnfcy7mm78.cloudfront.net/2214531/original_449037e617330c3f52dcdb03307a1680.jpg?1527086219?bc=1";
+const IMAGE_SRC =
+	"https://d2w9rnfcy7mm78.cloudfront.net/37434530/original_f0c16b4c4af17175edd2c76aa8005728.jpg?1749927953?bc=0";
 
 export async function initializeBackgroundCanvas(desktop, canvas) {
 	canvas.width = desktop.offsetWidth;
@@ -114,8 +115,8 @@ export async function initializeBackgroundCanvas(desktop, canvas) {
 		}
 
 		// Calculate tile size based on current scale
-		const tile_width = Math.min(wallpaper.width, MAX_TILE) * current_scale;
-		const tile_height = Math.min(wallpaper.height, MAX_TILE) * current_scale;
+		const tile_width = wallpaper.width * current_scale;
+		const tile_height = wallpaper.height * current_scale;
 
 		// Calculate offset based on scroll position
 		let offset_x = -(camera_x % tile_width);

@@ -10,5 +10,5 @@ mv "builds/linux/electron" "builds/linux/om"
 cd builds/linux
 
 # Create symbolic links
-ln -s ../../sys sys
+ln -s ../../system system
 ln -s ../../user user
