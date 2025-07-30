@@ -1,0 +1,15 @@
+{
+	"name": "blank-sb",
+	"module": "src/game-app.ts",
+	"type": "module",
+	"scripts": {
+		"dev": "bun build.ts --src ./src/game-app.ts --outdir ./public/dist --watch",
+		"build": "bun build.ts --src ./src/game-app.ts --outdir ./public/dist"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0.0"
+	}
+}

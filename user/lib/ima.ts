@@ -1,5 +1,5 @@
 //
-// IMA (今) 0.3.0
+// IMA (今) 0.3.3
 // by fergarram
 //
 
@@ -27,6 +27,7 @@ export type Props = {
 	is?: string;
 	key?: any;
 	ref?: Ref<HTMLElement>;
+	innerHTML?: string | (() => string);
 	[key: string]: any;
 };
 
@@ -69,7 +70,7 @@ export function useTags(namespace?: string): TagsProxy {
 if (typeof window === "undefined") {
 	// In environments without DOM (like Bun/Node server-side), provide no-op versions
 	// of the reactive functions to prevent errors
-	(global as any).document = {
+	(globalThis as any).document = {
 		createElement: () => ({}),
 		createTextNode: () => ({}),
 		createComment: () => ({}),
@@ -98,44 +99,75 @@ function tagGenerator(_: any, name: string, namespace?: string): TagFunction {
 				children = args;
 			}
 			// If first argument is a plain object, treat it as props
-			else if (Object.getPrototypeOf(first_arg ?? 0) === Object.prototype) {
+			else if (Object.getPrototypeOf(first_arg || 0) === Object.prototype) {
 				const [props_arg, ...rest_args] = args;
-				const { is, ref, ...rest_props } = props_arg;
+				const { is, ref, innerHTML, ...rest_props } = props_arg; // Extract innerHTML
 				props_obj = rest_props;
 				children = rest_args;
 
 				// Handle ref assignment
 				if (ref && typeof ref === "object" && "current" in ref) {
-					// We'll assign the element to ref.current after creation
 					el_ref = ref;
+				}
+
+				// Handle innerHTML - set it directly and skip processing children
+				if (innerHTML !== undefined) {
+					const element = namespace ? document.createElementNS(namespace, name) : document.createElement(name);
+
+					if (el_ref) {
+						el_ref.current = element as HTMLElement;
+					}
+
+					// Handle other props/attributes
+					for (const [attr_key, value] of Object.entries(props_obj)) {
+						// Event handlers
+						if (attr_key.startsWith("on") && typeof value === "function") {
+							const event_name = attr_key.substring(2).toLowerCase();
+							element.addEventListener(event_name, value as EventListener);
+							continue;
+						}
+
+						// Reactive attributes
+						if (typeof value === "function" && !attr_key.startsWith("on")) {
+							setupReactiveAttr(element as HTMLElement, attr_key, value);
+							continue;
+						}
+
+						// Regular attributes
+						if (value === true) {
+							element.setAttribute(attr_key, "");
+						} else if (value !== false && value != null) {
+							element.setAttribute(attr_key, String(value));
+						}
+					}
+
+					// Set innerHTML and return early
+					element.innerHTML = String(innerHTML);
+					return element as HTMLElement;
 				}
 			}
 		}
 
-		// Create the element
+		// Rest of the existing function remains the same...
 		const element = namespace ? document.createElementNS(namespace, name) : document.createElement(name);
 
-		// Handle ref assignment - do this early so ref.current is available
 		if (el_ref) {
 			el_ref.current = element as HTMLElement;
 		}
 
-		// Handle props/attributes (rest of the function remains the same)
+		// Handle props/attributes
 		for (const [attr_key, value] of Object.entries(props_obj)) {
-			// Event handlers
 			if (attr_key.startsWith("on") && typeof value === "function") {
-				const event_name = attr_key.substring(2).toLowerCase(); // e.g., "onClick" -> "click"
+				const event_name = attr_key.substring(2).toLowerCase();
 				element.addEventListener(event_name, value as EventListener);
 				continue;
 			}
 
-			// Reactive attributes (functions that don't start with "on")
 			if (typeof value === "function" && !attr_key.startsWith("on")) {
 				setupReactiveAttr(element as HTMLElement, attr_key, value);
 				continue;
 			}
 
-			// Regular attributes
 			if (value === true) {
 				element.setAttribute(attr_key, "");
 			} else if (value !== false && value != null) {
@@ -149,7 +181,6 @@ function tagGenerator(_: any, name: string, namespace?: string): TagFunction {
 				if (child instanceof Node) {
 					element.appendChild(child);
 				} else if (typeof child === "function") {
-					// Handle reactive child
 					const reactive_node = setupReactiveNode(child);
 					element.appendChild(reactive_node);
 				} else {
@@ -268,7 +299,7 @@ function updateReactiveComponents() {
 			}
 		} else {
 			// For text values, compare with current node
-			const new_text = String(new_value ?? "");
+			const new_text = String(new_value || "");
 			if (current_node.nodeType === Node.TEXT_NODE) {
 				needs_update = current_node.textContent !== new_text;
 			} else {
@@ -283,7 +314,7 @@ function updateReactiveComponents() {
 			if (new_value instanceof Node) {
 				new_node = new_value;
 			} else {
-				new_node = document.createTextNode(String(new_value ?? ""));
+				new_node = document.createTextNode(String(new_value || ""));
 			}
 
 			current_node.replaceWith(new_node);
@@ -383,7 +414,7 @@ function setupReactiveNode(callback: () => any): Node {
 	if (initial_value instanceof Node) {
 		initial_node = initial_value;
 	} else {
-		initial_node = document.createTextNode(String(initial_value ?? ""));
+		initial_node = document.createTextNode(String(initial_value || ""));
 	}
 
 	// Create a fragment to hold both the marker and the content
@@ -436,14 +467,76 @@ function staticTagGenerator(_: any, name: string) {
 				children = args;
 			}
 			// If first argument is a plain object, treat it as props
-			else if (Object.getPrototypeOf(first_arg ?? 0) === Object.prototype) {
+			else if (Object.getPrototypeOf(first_arg || 0) === Object.prototype) {
 				const [props_arg, ...rest_args] = args;
-				const { is, ...rest_props } = props_arg;
+				const { is, innerHTML, ...rest_props } = props_arg; // Extract innerHTML
 				props_obj = rest_props;
 				children = rest_args;
+
+				// Handle innerHTML - if present, ignore children and use innerHTML instead
+				if (innerHTML !== undefined) {
+					// Start building the HTML string
+					let html = `<${name}`;
+
+					// Handle props/attributes (excluding innerHTML)
+					for (const [key, value] of Object.entries(props_obj)) {
+						// Skip event handlers and functions
+						if (key.startsWith("on") || typeof value === "function") {
+							continue;
+						}
+
+						// Convert className to class
+						const attr_key = key === "className" ? "class" : key;
+
+						// Regular attributes
+						if (value === true) {
+							html += ` ${attr_key}`;
+						} else if (value !== false && value != null) {
+							// Escape attribute values
+							const escaped_value = String(value)
+								.replace(/&/g, "&amp;")
+								.replace(/"/g, "&quot;")
+								.replace(/'/g, "&#39;")
+								.replace(/</g, "&lt;")
+								.replace(/>/g, "&gt;");
+							html += ` ${attr_key}="${escaped_value}"`;
+						}
+					}
+
+					// Self-closing tags
+					const void_elements = new Set([
+						"area",
+						"base",
+						"br",
+						"col",
+						"embed",
+						"hr",
+						"img",
+						"input",
+						"link",
+						"meta",
+						"param",
+						"source",
+						"track",
+						"wbr",
+					]);
+
+					if (void_elements.has(name)) {
+						return html + "/>";
+					}
+
+					html += ">";
+
+					// Use innerHTML content instead of children
+					const inner_html_content = typeof innerHTML === "function" ? innerHTML() : innerHTML;
+					html += String(inner_html_content);
+
+					return html + `</${name}>`;
+				}
 			}
 		}
 
+		// Rest of the existing function remains the same...
 		// Start building the HTML string
 		let html = `<${name}`;
 

@@ -2,7 +2,6 @@ import { app } from "electron";
 
 import { createWindow } from "./modules/win.js";
 import { createOverlay } from "./modules/overlay.js";
-import { bundleAll } from "./modules/bundler.js";
 
 import "./modules/shell.js";
 import "./modules/file.js";
@@ -12,6 +11,8 @@ import "./modules/menu.js";
 import "./modules/browser.js";
 import "./modules/appstream.js";
 import "./modules/shortcuts.js";
+
+import "./modules/monzon.js";
 
 // I need to recompile to same version of nodejs
 // Meanwhile I'd have to set it up as an external node server
@@ -25,7 +26,6 @@ console.log({
 });
 
 app.whenReady().then(() => {
-	bundleAll();
 	const win = createWindow("home");
 	createOverlay("default", win);
 });

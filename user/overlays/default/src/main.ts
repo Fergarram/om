@@ -3,8 +3,10 @@ import { finish } from "@/lib/utils";
 import sys from "@/lib/bridge";
 import { tw } from "@/lib/tw";
 
+sys.overlay.openDevTools();
+
 // Om Modules
-import { StatusBar } from "@/modules/om/ui/statusbar";
+import { StatusBar } from "./ui/statusbar";
 
 // DOM Setup
 const { main } = useTags();

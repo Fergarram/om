@@ -1,7 +1,7 @@
 import { shell, BrowserWindow, ipcMain, screen } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { bundle } from "./bundler.js";
 import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +61,7 @@ ipcMain.handle("win.open_space", async (event, space) => {
 export function createWindow(initial_space) {
 	const primary_display = screen.getPrimaryDisplay();
 	const { width, height } = primary_display.workAreaSize;
+	let current_space = initial_space;
 
 	const new_window = new BrowserWindow({
 		width,
@@ -76,6 +77,27 @@ export function createWindow(initial_space) {
 			enableHardwareAcceleration: true,
 		},
 	});
+
+	const originalReload = new_window.webContents.reload;
+	const originalReloadIgnoringCache = new_window.webContents.reloadIgnoringCache;
+
+	new_window.webContents.reload = function () {
+		console.log("Reload called, bundling first...");
+		const entry_file = path.join(__dirname, `../../user/spaces/${current_space}/src/main.ts`);
+		const outdir = path.join(__dirname, `../../user/spaces/${current_space}`);
+
+		bundle(entry_file, outdir);
+		return originalReload.call(this);
+	};
+
+	new_window.webContents.reloadIgnoringCache = function () {
+		console.log("Hard reload called, bundling first...");
+		const entry_file = path.join(__dirname, `../../user/spaces/${current_space}/src/main.ts`);
+		const outdir = path.join(__dirname, `../../user/spaces/${current_space}`);
+
+		bundle(entry_file, outdir);
+		return originalReloadIgnoringCache.call(this);
+	};
 
 	new_window.on("close", (event) => {
 		if (!new_window.will_close_manually) {
@@ -116,6 +138,22 @@ export function createWindow(initial_space) {
 			});
 
 			bw.loadURL(url);
+		} else {
+			event.preventDefault();
+
+			const url_parts = url.split("/");
+			const spaces_index = url_parts.indexOf("spaces");
+			const next_space = spaces_index !== -1 && spaces_index + 1 < url_parts.length ? url_parts[spaces_index + 1] : "";
+
+			const entry_file = path.join(__dirname, `../../user/spaces/${next_space}/src/main.ts`);
+			const outdir = path.join(__dirname, `../../user/spaces/${next_space}`);
+
+			bundle(entry_file, outdir);
+
+			current_space = next_space;
+
+			console.log(`Will navigate to ${url}`);
+			new_window.loadURL(url);
 		}
 	});
 
@@ -135,13 +173,14 @@ export function createWindow(initial_space) {
 		}
 	});
 
-	new_window.webContents.on("will-navigate", (event, url) => {
-		console.log(`Will navigate to ${url}`);
-	});
-
 	new_window.webContents.on("did-finish-load", async () => {
 		new_window.show();
 	});
+
+	const entry_file = path.join(__dirname, `../../user/spaces/${initial_space}/src/main.ts`);
+	const outdir = path.join(__dirname, `../../user/spaces/${initial_space}`);
+
+	bundle(entry_file, outdir);
 
 	new_window.loadFile(`../user/spaces/${initial_space}/index.html`);
 

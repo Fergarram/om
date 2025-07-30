@@ -1,0 +1,3 @@
+/* Overrides go here, you have access to special tailwindcss utilities (postcss) */
+
+[component="titlebar"] { }

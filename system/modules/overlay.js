@@ -2,7 +2,7 @@ import { WebContentsView, Menu, ipcMain } from "electron";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
-import fs from "fs";
+import { bundle } from "./bundler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +34,13 @@ export function createOverlay(overlay_id, electron_window) {
 
 	// Important: Set the background color of the WebContentsView to be transparent
 	overlay_view.setBackgroundColor("#00000000");
+
+	overlay_view.webContents.on("did-start-loading", async (event, url) => {
+		const entry_file = path.join(__dirname, `../../user/overlays/${overlay_id}/src/main.ts`);
+		const outdir = path.join(__dirname, `../../user/overlays/${overlay_id}`);
+
+		bundle(entry_file, outdir);
+	});
 
 	// Load overlay content
 	overlay_view.webContents.loadFile(`../user/overlays/${overlay_id}/index.html`);
