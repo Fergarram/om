@@ -1,5 +1,5 @@
-import { css, finish, GlobalStyleSheet, tryCatch, debounce } from "../../../lib/utils.js";
-import { getCameraCenter, onAppletRemove, surface } from "../desktop.js";
+import { css, finish, useGlobalStyles, tryCatch, debounce } from "../../../lib/utils.js";
+import { getCameraCenter, onAppletRemoved, surface } from "../desktop.js";
 import { useTags } from "../../../lib/ima.js";
 import sys from "../../../lib/bridge.js";
 
@@ -24,7 +24,7 @@ sys.appstream.onWindowClosed((window_id) => {
 });
 
 // Handle close when element is removed
-onAppletRemove(async (applet) => {
+onAppletRemoved(async (applet) => {
 	tryCatch(async () => {
 		await sys.appstream.closeWindow(applet.id.replace("appview-", ""));
 	});
@@ -175,7 +175,7 @@ async function addAppview(window_id, window_data) {
 	handlePositionUpdate();
 }
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	[om-applet="appview"] {
 		position: absolute;
 		min-width: 100px;

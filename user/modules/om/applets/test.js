@@ -1,4 +1,4 @@
-import { css, finish, GlobalStyleSheet } from "../../../lib/utils.js";
+import { css, finish, useGlobalStyles } from "../../../lib/utils.js";
 import { getCameraCenter, surface } from "../desktop.js";
 import { useTags } from "../../../lib/ima.js";
 import sys from "../../../lib/bridge.js";
@@ -12,7 +12,7 @@ window.addEventListener("keydown", (e) => {
 	}
 });
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	[om-applet="test"] {
 		position: absolute;
 		min-width: 100px;

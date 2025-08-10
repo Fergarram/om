@@ -84,5 +84,20 @@ ipcMain.handle("monzon.close_window", async (event) => {
 });
 
 ipcMain.handle("monzon.start_runner", async (event) => {
-	await start_runner();
+	const server = await start_runner();
+	const sender_window = BrowserWindow.fromWebContents(event.sender);
+
+	sender_window.on("closed", () => {
+		if (server) {
+			// Force close all connections (Node.js 18.2.0+)
+			if (server.closeAllConnections) {
+				server.closeAllConnections();
+			}
+
+			// Close the server
+			server.close(() => {
+				console.log("Monzon server closed");
+			});
+		}
+	});
 });

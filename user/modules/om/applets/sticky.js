@@ -1,5 +1,5 @@
-import { css, finish, GlobalStyleSheet } from "../../../lib/utils.js";
-import { getCameraCenter, surface, onAppletRemove } from "../desktop.js";
+import { css, finish, useGlobalStyles } from "../../../lib/utils.js";
+import { getCameraCenter, onAppletRemoved, useApplet } from "../desktop.js";
 import { useTags } from "../../../lib/ima.js";
 
 const { div } = useTags();
@@ -110,7 +110,7 @@ async function addSticky(colorIndex = 0) {
 		}),
 	);
 
-	surface().appendChild(sticky);
+	useApplet(sticky);
 
 	await finish();
 
@@ -120,7 +120,7 @@ async function addSticky(colorIndex = 0) {
 	window.addEventListener("applet-resize-start", handleAppletResizeStart);
 	window.addEventListener("applet-resize-stop", handleAppletResizeStop);
 
-	onAppletRemove((a) => {
+	onAppletRemoved((a) => {
 		if (a === sticky) {
 			window.removeEventListener("applet-resize-start", handleAppletResizeStart);
 			window.removeEventListener("applet-resize-stop", handleAppletResizeStop);
@@ -144,7 +144,7 @@ async function addSticky(colorIndex = 0) {
 // Styles
 //
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	[om-applet="sticky"] {
 		position: absolute;
 		min-width: 150px;

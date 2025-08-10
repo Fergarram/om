@@ -1,21 +1,22 @@
 import { tw } from "@/lib/tw";
 import { useTags } from "@/lib/ima";
 import { finish } from "@/lib/utils";
-import { initializeThemeSettings } from "@/monzon/src/settings/theme";
-import "@/monzon/src/settings/global-shortcuts";
 
-import { Titlebar } from "@/monzon/src/ui/titlebar";
-import { Desktop } from "@/monzon/src/ui/desktop";
-import { AppState, AppSettings } from "./lib/state";
-import sys from "@/monzon/src/lib/bridge";
+import "@/monzon/global-shortcuts";
+
+import { Titlebar } from "@/monzon/ui/titlebar";
+import { Desktop } from "@/monzon/ui/desktop";
+import { AppState, AppSettings } from "@/monzon/state";
+import { monzon } from "@/monzon/bridge";
+import { initializeMonzonThemeSystem } from "@/monzon/theme";
 
 const { main } = useTags();
 
-await sys.monzon.start_runner();
+await monzon.startRunner();
 
 // Load settings using the new proxy
 await AppSettings.load();
-const theme = await initializeThemeSettings(AppSettings.theme);
+const theme = await initializeMonzonThemeSystem(AppSettings.theme);
 
 AppState.load();
 
@@ -33,11 +34,3 @@ const app = main(
 document.body.appendChild(app);
 
 await finish();
-
-export function useTheme() {
-	if (!theme) {
-		throw new Error("Theme not initialized yet");
-	}
-
-	return theme;
-}

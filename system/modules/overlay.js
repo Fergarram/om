@@ -7,6 +7,9 @@ import { bundle } from "./bundler.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Map to track overlay views by their webContents id
+const overlay_views_map = new Map();
+
 export function createOverlay(overlay_id, electron_window) {
 	// Create a WebContentsView to serve as the overlay
 	const overlay_view = new WebContentsView({
@@ -35,6 +38,14 @@ export function createOverlay(overlay_id, electron_window) {
 	// Important: Set the background color of the WebContentsView to be transparent
 	overlay_view.setBackgroundColor("#00000000");
 
+	// Store the overlay view in our map using its webContents id as key
+	overlay_views_map.set(overlay_view.webContents.id, overlay_view);
+
+	// Clean up the map when the overlay is destroyed
+	overlay_view.webContents.on("destroyed", () => {
+		overlay_views_map.delete(overlay_view.webContents.id);
+	});
+
 	overlay_view.webContents.on("did-start-loading", async (event, url) => {
 		const entry_file = path.join(__dirname, `../../user/overlays/${overlay_id}/src/main.ts`);
 		const outdir = path.join(__dirname, `../../user/overlays/${overlay_id}`);
@@ -57,23 +68,77 @@ export function createOverlay(overlay_id, electron_window) {
 		});
 	});
 
-	ipcMain.handle("overlay.set_height", (event, height) => {
-		const { x, y, width } = overlay_view.getBounds();
-		overlay_view.setBounds({
-			x,
-			y,
-			width,
-			height,
-		});
-	});
+	// Clean up overlay when window is closed
+	electron_window.on("closed", () => {
+		// Close devtools if open
+		if (overlay_view.webContents.isDevToolsOpened()) {
+			overlay_view.webContents.closeDevTools();
+		}
 
-	ipcMain.handle("overlay.focus", (event) => {
-		overlay_view.webContents.focus();
-	});
+		// Remove from map
+		overlay_views_map.delete(overlay_view.webContents.id);
 
-	ipcMain.handle("overlay.open_devtools", (event) => {
-		overlay_view.webContents.openDevTools({ mode: "detach" });
+		// Destroy the overlay view
+		overlay_view.webContents.close();
 	});
 
 	return overlay_view;
 }
+
+function getOverlayFromEvent(event) {
+	// The event sender is the webContents that sent the IPC message
+	const sender_id = event.sender.id;
+	return overlay_views_map.get(sender_id);
+}
+
+ipcMain.handle("overlay.set_height", (event, height) => {
+	const overlay_view = getOverlayFromEvent(event);
+	if (!overlay_view) {
+		console.warn("Could not find overlay view for set_height request");
+		return;
+	}
+
+	const { x, y, width } = overlay_view.getBounds();
+	overlay_view.setBounds({
+		x,
+		y,
+		width,
+		height,
+	});
+});
+
+ipcMain.handle("overlay.focus", (event) => {
+	const overlay_view = getOverlayFromEvent(event);
+	if (!overlay_view) {
+		console.warn("Could not find overlay view for focus request");
+		return;
+	}
+
+	overlay_view.webContents.focus();
+});
+
+ipcMain.handle("overlay.open_devtools", (event) => {
+	const overlay_view = getOverlayFromEvent(event);
+	if (!overlay_view) {
+		console.warn("Could not find overlay view for open_devtools request");
+		return;
+	}
+
+	overlay_view.webContents.openDevTools({ mode: "detach" });
+});
+
+ipcMain.handle("overlay.load", (event, overlay_id) => {
+	const overlay_view = getOverlayFromEvent(event);
+	if (!overlay_view) {
+		console.warn("Could not find overlay view for load request");
+		return;
+	}
+
+	const entry_file = path.join(__dirname, `../../user/overlays/${overlay_id}/src/main.ts`);
+	const outdir = path.join(__dirname, `../../user/overlays/${overlay_id}`);
+
+	bundle(entry_file, outdir);
+
+	const overlay_path = path.join(__dirname, `../../user/overlays/${overlay_id}/index.html`);
+	overlay_view.webContents.loadFile(overlay_path);
+});

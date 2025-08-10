@@ -305,7 +305,7 @@ async function start_server() {
 
 async function start_runner() {
 	try {
-		await start_server();
+		return await start_server();
 	} catch (error) {
 		console.error("Error:", error);
 	}

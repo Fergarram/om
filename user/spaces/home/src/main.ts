@@ -1,5 +1,5 @@
 import { useTags } from "@/lib/ima";
-import { css, finish, GlobalStyleSheet } from "@/lib/utils";
+import { css, finish, useGlobalStyles } from "@/lib/utils";
 import sys from "@/lib/bridge";
 
 // Global state ???
@@ -25,14 +25,14 @@ window.is_devtools_open = await sys.win.isDevtoolsOpen();
 // });
 
 // Om Modules
-import { initializeDesktop } from "@/modules/om/desktop";
-import "@/modules/om/superkey";
+import { initializeDesktop } from "@/om/desktop";
+import "@/om/superkey";
 
 // Applets
-import "@/modules/om/applets/test";
-import "@/modules/om/applets/sticky";
-import "@/modules/om/applets/appview";
-import "@/modules/om/applets/webview";
+import "@/om/applets/test";
+import "@/om/applets/sticky";
+import "@/om/applets/appview";
+import "@/om/applets/webview";
 
 // DOM Setup
 const { main } = useTags();
@@ -47,7 +47,7 @@ await finish();
 // Initalizations
 await initializeDesktop(OmSpace);
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	#om-space {
 		display: flex;
 		flex-direction: column;

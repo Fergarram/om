@@ -1,21 +1,21 @@
 import { useTags } from "@/lib/ima.js";
-import { css, GlobalStyleSheet } from "@/lib/utils.js";
+import { css, useGlobalStyles } from "@/lib/utils.js";
 import { useCommandPalette } from "./command-palette.js";
 
 const { div, header, button, icon, h2, h1, span } = useTags();
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	#space-statusbar {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		background-color: var(--color-black);
 		color: var(--color-white);
-		/* app-region: drag; */
-		/* height: var(--size-8); */
-		height: 1px;
+		app-region: drag;
+		/*height: var(--size-8);*/
+		 height: 1px;
 		padding: 0 var(--size-1);
-		opacity: 0;
+		 opacity: 0;
 		pointer-events: none;
 
 		button,

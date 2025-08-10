@@ -1,5 +1,5 @@
 //
-// IMA (今) 0.3.3
+// IMA (今) 0.6.0
 // by fergarram
 //
 
@@ -10,8 +10,9 @@
 //
 
 // — Core Types
-// — DOM Element Generation
+// — Tags
 // — Reactive System
+// — Static Generation
 
 //
 // Core Types
@@ -31,9 +32,14 @@ export type Props = {
 	[key: string]: any;
 };
 
-// Define TagArgs to properly handle the overloaded parameter patterns
+export type UseTagsOptions = {
+	namespace?: string;
+	attr?: (name: string, value: any) => { name: string; value: any };
+};
+
+// Define TagArgs to properly handle the parameter patterns
 export type TagArgs =
-	| [] // No arguments
+	| [] // No args
 	| [Props] // Just props
 	| [Child, ...Child[]] // First child followed by more children
 	| [Props, ...Child[]]; // Props followed by children
@@ -45,19 +51,26 @@ export type TagsProxy = {
 };
 
 //
-// Use Tags
+// Tag Generation
 //
 
-export function useTags(namespace?: string): TagsProxy {
+export function useStaticTags(): TagsProxy {
+	return new Proxy({}, { get: staticTagGenerator });
+}
+
+export function useTags(options?: string | UseTagsOptions): TagsProxy {
 	const is_static = typeof window === "undefined";
 
+	// Handle backward compatibility - if options is a string, treat it as namespace
+	const resolved_options: UseTagsOptions = typeof options === "string" ? { namespace: options } : options || {};
+
 	if (is_static) {
-		return new Proxy({}, { get: staticTagGenerator });
+		return useStaticTags();
 	} else {
 		return new Proxy(
 			{},
 			{
-				get: (target, name) => tagGenerator(target, String(name), namespace),
+				get: (target, tag) => tagGenerator(target, String(tag), resolved_options),
 			},
 		);
 	}
@@ -80,99 +93,92 @@ if (typeof window === "undefined") {
 	console.warn("Trying to use client-side tags on server.");
 }
 
-function tagGenerator(_: any, name: string, namespace?: string): TagFunction {
-	return (...args: any[]): HTMLElement => {
-		let props_obj: Props = {};
-		let el_ref: Ref<HTMLElement> | undefined;
-		let children: (HTMLElement | Node | null | undefined | string | boolean | number | (() => any))[] = args;
+// Shared parsing logic
+export type ParsedArgs = {
+	props: Props;
+	children: Child[];
+	ref?: Ref<HTMLElement>;
+	innerHTML?: string | (() => string);
+};
 
-		if (args.length > 0) {
-			const first_arg = args[0];
+export function parseTagArgs(args: any[]): ParsedArgs {
+	let props: Props = {};
+	let children: Child[] = args;
+	let ref: Ref<HTMLElement> | undefined;
+	let innerHTML: string | (() => string) | undefined;
 
-			// If first argument is a string, number, or HTMLElement, all args are children
-			if (
-				typeof first_arg === "string" ||
-				typeof first_arg === "number" ||
-				first_arg instanceof HTMLElement ||
-				typeof first_arg === "function"
-			) {
-				children = args;
-			}
-			// If first argument is a plain object, treat it as props
-			else if (Object.getPrototypeOf(first_arg || 0) === Object.prototype) {
-				const [props_arg, ...rest_args] = args;
-				const { is, ref, innerHTML, ...rest_props } = props_arg; // Extract innerHTML
-				props_obj = rest_props;
-				children = rest_args;
+	if (args.length > 0) {
+		const first_arg = args[0];
 
-				// Handle ref assignment
-				if (ref && typeof ref === "object" && "current" in ref) {
-					el_ref = ref;
-				}
-
-				// Handle innerHTML - set it directly and skip processing children
-				if (innerHTML !== undefined) {
-					const element = namespace ? document.createElementNS(namespace, name) : document.createElement(name);
-
-					if (el_ref) {
-						el_ref.current = element as HTMLElement;
-					}
-
-					// Handle other props/attributes
-					for (const [attr_key, value] of Object.entries(props_obj)) {
-						// Event handlers
-						if (attr_key.startsWith("on") && typeof value === "function") {
-							const event_name = attr_key.substring(2).toLowerCase();
-							element.addEventListener(event_name, value as EventListener);
-							continue;
-						}
-
-						// Reactive attributes
-						if (typeof value === "function" && !attr_key.startsWith("on")) {
-							setupReactiveAttr(element as HTMLElement, attr_key, value);
-							continue;
-						}
-
-						// Regular attributes
-						if (value === true) {
-							element.setAttribute(attr_key, "");
-						} else if (value !== false && value != null) {
-							element.setAttribute(attr_key, String(value));
-						}
-					}
-
-					// Set innerHTML and return early
-					element.innerHTML = String(innerHTML);
-					return element as HTMLElement;
-				}
-			}
+		// If first argument is a string, number, HTMLElement, or function, all args are children
+		if (
+			typeof first_arg === "string" ||
+			typeof first_arg === "number" ||
+			(typeof window !== "undefined" && first_arg instanceof HTMLElement) ||
+			typeof first_arg === "function"
+		) {
+			children = args;
 		}
+		// If first argument is a plain object, treat it as props
+		else if (Object.getPrototypeOf(first_arg || 0) === Object.prototype) {
+			const [props_arg, ...rest_args] = args;
+			const { is, ref: prop_ref, innerHTML: prop_innerHTML, ...rest_props } = props_arg;
+			props = rest_props;
+			children = rest_args;
+			ref = prop_ref;
+			innerHTML = prop_innerHTML;
+		}
+	}
 
-		// Rest of the existing function remains the same...
-		const element = namespace ? document.createElementNS(namespace, name) : document.createElement(name);
+	return { props, children, ref, innerHTML };
+}
 
-		if (el_ref) {
-			el_ref.current = element as HTMLElement;
+export function tagGenerator(_: any, tag: string, options?: UseTagsOptions): TagFunction {
+	return (...args: any[]): HTMLElement => {
+		const { props, children, ref, innerHTML } = parseTagArgs(args);
+
+		const element = options?.namespace ? document.createElementNS(options.namespace, tag) : document.createElement(tag);
+
+		if (ref) {
+			ref.current = element as HTMLElement;
 		}
 
 		// Handle props/attributes
-		for (const [attr_key, value] of Object.entries(props_obj)) {
-			if (attr_key.startsWith("on") && typeof value === "function") {
-				const event_name = attr_key.substring(2).toLowerCase();
-				element.addEventListener(event_name, value as EventListener);
+		for (const [attr_key, value] of Object.entries(props)) {
+			let processed_name = attr_key;
+			let processed_value = value;
+
+			// Apply custom attribute processing if provided
+			if (options?.attr) {
+				const result = options.attr(attr_key, value);
+				processed_name = result.name;
+				processed_value = result.value;
+			}
+
+			if (processed_name.startsWith("on") && typeof processed_value === "function") {
+				const event_name = processed_name.substring(2).toLowerCase();
+				element.addEventListener(event_name, processed_value as EventListener);
 				continue;
 			}
 
-			if (typeof value === "function" && !attr_key.startsWith("on")) {
-				setupReactiveAttr(element as HTMLElement, attr_key, value);
+			if (typeof processed_value === "function" && !processed_name.startsWith("on")) {
+				setupReactiveAttr(element as HTMLElement, processed_name, processed_value);
 				continue;
 			}
 
-			if (value === true) {
-				element.setAttribute(attr_key, "");
-			} else if (value !== false && value != null) {
-				element.setAttribute(attr_key, String(value));
+			if (processed_value === true) {
+				element.setAttribute(processed_name, "true");
+			} else if (processed_value === false) {
+				element.setAttribute(processed_name, "false");
+			} else if (processed_value !== null && processed_value !== undefined) {
+				element.setAttribute(processed_name, String(processed_value));
 			}
+		}
+
+		// Handle innerHTML - set it directly and skip processing children
+		if (innerHTML !== undefined) {
+			element.innerHTML = String(innerHTML);
+			return element as HTMLElement;
 		}
 
 		// Process children and append to element
@@ -193,13 +199,6 @@ function tagGenerator(_: any, name: string, namespace?: string): TagFunction {
 	};
 }
 
-export const tags: TagsProxy = new Proxy(
-	{},
-	{
-		get: (target, name) => tagGenerator(target, String(name)),
-	},
-);
-
 //
 // Reactive System
 //
@@ -208,7 +207,7 @@ export const tags: TagsProxy = new Proxy(
 const reactive_markers: (Comment | null)[] = [];
 const reactive_callbacks: ((() => any) | null)[] = [];
 const reactive_prev_values: (Node | string | null)[] = [];
-let reactive_count = 0;
+let reactive_node_count = 0;
 
 // Reactive attributes
 const reactive_attr_elements: (HTMLElement | null)[] = [];
@@ -266,7 +265,7 @@ function updateReactiveComponents() {
 	}
 
 	// Update reactive nodes
-	for (let i = 0; i < reactive_count; i++) {
+	for (let i = 0; i < reactive_node_count; i++) {
 		const marker = reactive_markers[i];
 
 		// Track if we find disconnected markers
@@ -324,7 +323,6 @@ function updateReactiveComponents() {
 	// Only perform cleanup if we found disconnected components
 	if (found_disconnected_attrs || found_disconnected_nodes) {
 		cleanup_counter++;
-		// Clean up immediately if we have many disconnected components, otherwise wait for the timer
 		if (cleanup_counter >= 60) {
 			cleanup_counter = 0;
 			cleanupDisconnectedReactives();
@@ -341,7 +339,7 @@ function updateReactiveComponents() {
 function cleanupDisconnectedReactives() {
 	// Cleanup reactive nodes
 	let write_index = 0;
-	for (let read_index = 0; read_index < reactive_count; read_index++) {
+	for (let read_index = 0; read_index < reactive_node_count; read_index++) {
 		const marker = reactive_markers[read_index];
 		const callback = reactive_callbacks[read_index];
 		const prev_value = reactive_prev_values[read_index];
@@ -358,12 +356,12 @@ function cleanupDisconnectedReactives() {
 	}
 
 	// Clear the remaining slots and update count
-	for (let i = write_index; i < reactive_count; i++) {
+	for (let i = write_index; i < reactive_node_count; i++) {
 		reactive_markers[i] = null;
 		reactive_callbacks[i] = null;
 		reactive_prev_values[i] = null;
 	}
-	reactive_count = write_index;
+	reactive_node_count = write_index;
 
 	// Cleanup reactive attributes
 	write_index = 0;
@@ -400,7 +398,7 @@ export function getFrameTime() {
 }
 
 function setupReactiveNode(callback: () => any): Node {
-	const node_index = reactive_count++;
+	const node_index = reactive_node_count++;
 
 	// Create a marker comment node
 	const marker = document.createComment(`reactive-${node_index}`);
@@ -438,12 +436,14 @@ function setupReactiveAttr(element: HTMLElement, attr_name: string, callback: ()
 
 	// Set the initial attribute value
 	if (initial_value === true) {
-		element.setAttribute(attr_name, "");
-	} else if (initial_value !== false && initial_value != null) {
+		element.setAttribute(attr_name, "true");
+	} else if (initial_value === false) {
+		element.setAttribute(attr_name, "false");
+	} else if (initial_value !== null && initial_value !== undefined) {
 		element.setAttribute(attr_name, String(initial_value));
 	}
 
-	// Store data in our parallel arrays
+	// Store references
 	reactive_attr_elements[attr_index] = element;
 	reactive_attr_names[attr_index] = attr_name;
 	reactive_attr_callbacks[attr_index] = callback;
@@ -454,140 +454,72 @@ function setupReactiveAttr(element: HTMLElement, attr_name: string, callback: ()
 // Static Generation
 //
 
-function staticTagGenerator(_: any, name: string) {
+// Void elements that are self-closing
+const VOID_ELEMENTS = new Set([
+	"area",
+	"base",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"link",
+	"meta",
+	"param",
+	"source",
+	"track",
+	"wbr",
+]);
+
+export function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
+export function buildAttributesHtml(props: Props): string {
+	let html = "";
+
+	for (const [key, value] of Object.entries(props)) {
+		// Skip event handlers and functions
+		if (key.startsWith("on") || typeof value === "function") {
+			continue;
+		}
+		// Regular attributes
+		if (value === true) {
+			html += ` ${key}`;
+		} else if (value !== false && value != null) {
+			html += ` ${key}="${escapeHtml(String(value))}"`;
+		}
+	}
+
+	return html;
+}
+
+function staticTagGenerator(_: any, tag: string) {
 	return (...args: any[]): string => {
-		let props_obj: Props = {};
-		let children: (string | null | undefined | boolean | number | (() => any))[] = args;
+		const { props, children, innerHTML } = parseTagArgs(args);
 
-		if (args.length > 0) {
-			const first_arg = args[0];
-
-			// If first argument is a string, number, or function, all args are children
-			if (typeof first_arg === "string" || typeof first_arg === "number" || typeof first_arg === "function") {
-				children = args;
-			}
-			// If first argument is a plain object, treat it as props
-			else if (Object.getPrototypeOf(first_arg || 0) === Object.prototype) {
-				const [props_arg, ...rest_args] = args;
-				const { is, innerHTML, ...rest_props } = props_arg; // Extract innerHTML
-				props_obj = rest_props;
-				children = rest_args;
-
-				// Handle innerHTML - if present, ignore children and use innerHTML instead
-				if (innerHTML !== undefined) {
-					// Start building the HTML string
-					let html = `<${name}`;
-
-					// Handle props/attributes (excluding innerHTML)
-					for (const [key, value] of Object.entries(props_obj)) {
-						// Skip event handlers and functions
-						if (key.startsWith("on") || typeof value === "function") {
-							continue;
-						}
-
-						// Convert className to class
-						const attr_key = key === "className" ? "class" : key;
-
-						// Regular attributes
-						if (value === true) {
-							html += ` ${attr_key}`;
-						} else if (value !== false && value != null) {
-							// Escape attribute values
-							const escaped_value = String(value)
-								.replace(/&/g, "&amp;")
-								.replace(/"/g, "&quot;")
-								.replace(/'/g, "&#39;")
-								.replace(/</g, "&lt;")
-								.replace(/>/g, "&gt;");
-							html += ` ${attr_key}="${escaped_value}"`;
-						}
-					}
-
-					// Self-closing tags
-					const void_elements = new Set([
-						"area",
-						"base",
-						"br",
-						"col",
-						"embed",
-						"hr",
-						"img",
-						"input",
-						"link",
-						"meta",
-						"param",
-						"source",
-						"track",
-						"wbr",
-					]);
-
-					if (void_elements.has(name)) {
-						return html + "/>";
-					}
-
-					html += ">";
-
-					// Use innerHTML content instead of children
-					const inner_html_content = typeof innerHTML === "function" ? innerHTML() : innerHTML;
-					html += String(inner_html_content);
-
-					return html + `</${name}>`;
-				}
-			}
-		}
-
-		// Rest of the existing function remains the same...
 		// Start building the HTML string
-		let html = `<${name}`;
-
-		// Handle props/attributes
-		for (const [key, value] of Object.entries(props_obj)) {
-			// Skip event handlers and functions
-			if (key.startsWith("on") || typeof value === "function") {
-				continue;
-			}
-
-			// Convert className to class
-			const attr_key = key === "className" ? "class" : key;
-
-			// Regular attributes
-			if (value === true) {
-				html += ` ${attr_key}`;
-			} else if (value !== false && value != null) {
-				// Escape attribute values
-				const escaped_value = String(value)
-					.replace(/&/g, "&amp;")
-					.replace(/"/g, "&quot;")
-					.replace(/'/g, "&#39;")
-					.replace(/</g, "&lt;")
-					.replace(/>/g, "&gt;");
-				html += ` ${attr_key}="${escaped_value}"`;
-			}
-		}
+		let html = `<${tag}${buildAttributesHtml(props)}`;
 
 		// Self-closing tags
-		const void_elements = new Set([
-			"area",
-			"base",
-			"br",
-			"col",
-			"embed",
-			"hr",
-			"img",
-			"input",
-			"link",
-			"meta",
-			"param",
-			"source",
-			"track",
-			"wbr",
-		]);
-
-		if (void_elements.has(name)) {
+		if (VOID_ELEMENTS.has(tag)) {
 			return html + "/>";
 		}
 
 		html += ">";
+
+		// Handle innerHTML - if present, ignore children and use innerHTML instead
+		if (innerHTML !== undefined) {
+			const inner_html_content = typeof innerHTML === "function" ? innerHTML() : innerHTML;
+			html += String(inner_html_content);
+			return html + `</${tag}>`;
+		}
 
 		// Process children
 		for (const child of children.flat(Infinity)) {
@@ -602,8 +534,6 @@ function staticTagGenerator(_: any, name: string) {
 			}
 		}
 
-		return html + `</${name}>`;
+		return html + `</${tag}>`;
 	};
 }
-
-export const staticTags: TagsProxy = new Proxy({}, { get: staticTagGenerator });

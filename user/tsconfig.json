@@ -24,8 +24,9 @@
 
 		// Alias for common paths
 		"paths": {
-			"@/*": ["./*", "./spaces/*"],
+			"@/*": ["./*", "./modules/*"]
 		}
 	},
-	"include": ["**/*.ts"]
+	"include": ["**/*.ts"],
+	"exclude": ["**/assets/*", "**/files/*"]
 }

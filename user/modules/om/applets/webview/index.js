@@ -1,4 +1,4 @@
-import { css, fade, finish, GlobalStyleSheet } from "../../../../lib/utils.js";
+import { css, fade, finish, useGlobalStyles } from "../../../../lib/utils.js";
 import { getCameraCenter, surface } from "../../desktop.js";
 import { useTags } from "../../../../lib/ima.js";
 import sys from "../../../../lib/bridge.js";
@@ -406,7 +406,7 @@ async function addWebview(props) {
 // Styles
 //
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	[om-applet="webview"] {
 		position: absolute;
 		min-width: 100px;

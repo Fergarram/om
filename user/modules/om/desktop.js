@@ -1,4 +1,4 @@
-import { css, finish, GlobalStyleSheet, isScrollable } from "../../lib/utils.js";
+import { css, finish, useGlobalStyles, isScrollable } from "../../lib/utils.js";
 import { useTags } from "../../lib/ima.js";
 import { initializeBackgroundCanvas } from "./background.js";
 
@@ -119,7 +119,7 @@ const observer = new MutationObserver((mutations) => {
 // Layout and Styles
 //
 
-GlobalStyleSheet(css`
+useGlobalStyles(css`
 	#om-desktop {
 		position: relative;
 		width: 100%;
@@ -489,7 +489,7 @@ export function onAppletPlace(callback) {
 	place_callbacks.push(callback);
 }
 
-export function onAppletRemove(callback) {
+export function onAppletRemoved(callback) {
 	remove_callbacks.push(callback);
 }
 
@@ -971,4 +971,8 @@ function preventContextMenu(e) {
 		return false;
 	}
 	return true;
+}
+
+export function useApplet(applet) {
+	surface().appendChild(applet);
 }

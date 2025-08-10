@@ -24,8 +24,8 @@
 
 		// Alias for common paths
 		"paths": {
-			"@/*": ["./src/*"],
-			"$/*": ["../../*"]
+			// "@/*": ["./src/*"],
+			// "$/*": ["../../*"]
 		}
 	},
 	"include": ["src/**/*.ts", "./types.d.ts"]

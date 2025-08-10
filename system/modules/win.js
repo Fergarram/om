@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { bundle } from "./bundler.js";
 import fs from "fs";
+import { createOverlay } from "./overlay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,7 @@ export function createWindow(initial_space) {
 			preload: path.join(__dirname, "../preload.js"),
 			webviewTag: true,
 			enableHardwareAcceleration: true,
+			partition: `persist:${initial_space}`,
 		},
 	});
 
@@ -145,15 +147,34 @@ export function createWindow(initial_space) {
 			const spaces_index = url_parts.indexOf("spaces");
 			const next_space = spaces_index !== -1 && spaces_index + 1 < url_parts.length ? url_parts[spaces_index + 1] : "";
 
-			const entry_file = path.join(__dirname, `../../user/spaces/${next_space}/src/main.ts`);
-			const outdir = path.join(__dirname, `../../user/spaces/${next_space}`);
-
-			bundle(entry_file, outdir);
-
-			current_space = next_space;
+			// @NOTE: Leaving this for future reference - we used to bundle the space and just do loadURL but that brings problems since the same window is recycled and localStoarge and other things are potentially cached or erased etc. It's not stable so we just delete and create a new window each time.
+			// const entry_file = path.join(__dirname, `../../user/spaces/${next_space}/src/main.ts`);
+			// const outdir = path.join(__dirname, `../../user/spaces/${next_space}`);
+			// bundle(entry_file, outdir);
+			if (current_space === next_space) {
+				console.log(`In space navigation?`);
+				return;
+			}
 
 			console.log(`Will navigate to ${url}`);
-			new_window.loadURL(url);
+
+			// Get old window position and dimensions
+			// @NOTE: This would only be required in non-DE mode (Mac, Windows, Linux with DE)
+			const current_bounds = new_window.getBounds();
+			const is_maximized = new_window.isMaximized();
+			new_window.will_close_manually = true;
+			new_window.close();
+
+			const win = createWindow(next_space);
+
+			// Restore window position and dimensions
+			if (is_maximized) {
+				win.maximize();
+			} else {
+				win.setBounds(current_bounds);
+			}
+
+			createOverlay("default", win);
 		}
 	});
 
