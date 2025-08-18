@@ -1,7 +1,8 @@
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
+
 import { initializeThemeSystem } from "@/config/theme";
 import sys from "@/lib/bridge";
 import { useTags } from "@/lib/ima";
-import { tw } from "@/lib/tw";
 import { Button } from "@/om/ui/button";
 import { ComboBox } from "@/om/ui/combobox";
 import { useDialog } from "@/om/ui/dialog";

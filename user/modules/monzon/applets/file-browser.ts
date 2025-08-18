@@ -1,10 +1,12 @@
 import sys from "@/lib/bridge";
 import { useTags } from "@/lib/ima";
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
 import type { DirectoryEntry } from "@/monzon/types";
 import {
+	cn,
 	convertFromWindowsPath,
 	convertToWindowsPath,
+	css,
 	finish,
 	finishFrame,
 	getFileLanguage,
@@ -157,7 +159,9 @@ async function duplicateEntry(entry: DirectoryEntry) {
 	if (await sys.process.isWin32()) {
 		const new_path = parsed_path.dir + "\\" + new_name;
 		if (is_dir) {
-			await sys.shell.exec(`xcopy "${convertToWindowsPath(entry.full_path)}" "${convertToWindowsPath(new_path)}" /E /I /H /K`);
+			await sys.shell.exec(
+				`xcopy "${convertToWindowsPath(entry.full_path)}" "${convertToWindowsPath(new_path)}" /E /I /H /K`,
+			);
 		} else {
 			await sys.shell.exec(`copy "${convertToWindowsPath(entry.full_path)}" "${convertToWindowsPath(new_path)}"`);
 		}
@@ -179,16 +183,15 @@ async function trashEntry(entry: DirectoryEntry, is_in_trash: boolean) {
 			div(
 				{ class: tw("flex flex-col items-center gap-2") },
 				icon({
-					class: tw("text-8 font-200"),
+					class: tw("text-40 font-200"),
 					name: icons.file_browser.trash_dialog,
 				}),
 				div(`"${entry.filename}" will be deleted forever`),
 				div(
-					{ class: tw("flex flex-row gap-1 w-full") },
+					{ class: tw("flex flex-row gap-1 w-full [&_button]:grow") },
 					Button(
 						{
 							variant: "outline",
-							class: tw("grow"),
 							async onclick() {
 								if (await sys.process.isWin32()) {
 									if (await sys.file.isDir(entry.full_path)) {
@@ -207,7 +210,6 @@ async function trashEntry(entry: DirectoryEntry, is_in_trash: boolean) {
 					Button(
 						{
 							variant: "outline",
-							class: tw("grow"),
 							onclick() {
 								closeDialog();
 							},
@@ -288,7 +290,9 @@ async function newPrototype(entry?: DirectoryEntry) {
 
 	// Copy recursively based on platform
 	if (await sys.process.isWin32()) {
-		await sys.shell.exec(`xcopy "${convertToWindowsPath(template_path)}" "${convertToWindowsPath(target_path)}" /E /I /H /K`);
+		await sys.shell.exec(
+			`xcopy "${convertToWindowsPath(template_path)}" "${convertToWindowsPath(target_path)}" /E /I /H /K`,
+		);
 	} else {
 		await sys.shell.exec(`cp -r "${template_path}" "${target_path}"`);
 	}
@@ -423,12 +427,21 @@ async function showFileMenu(e: MouseEvent, entry?: DirectoryEntry) {
 		entry && entry.type === "project" ? SelectSeparator() : null,
 		entry ? SelectItem({ value: "rename" }, "Rename") : null,
 		entry ? SelectItem({ value: "duplicate" }, "Duplicate") : null,
-		entry ? SelectItem({ value: "delete" }, `${is_in_trash ? "Delete" : "Trash"} ${entry.project ? entry.project.type : entry.type}`) : null,
+		entry
+			? SelectItem(
+					{ value: "delete" },
+					`${is_in_trash ? "Delete" : "Trash"} ${entry.project ? entry.project.type : entry.type}`,
+				)
+			: null,
 		entry ? SelectSeparator() : null,
 		SelectItem({ value: "show" }, "Show in file explorer"),
 		!is_in_trash && ((entry && entry.type !== "project") || !entry) ? SelectSeparator() : null,
-		!is_in_trash && ((entry && entry.type !== "project") || !entry) ? SelectItem({ value: "new_prototype" }, "New prototype") : null,
-		!is_in_trash && ((entry && entry.type !== "project") || !entry) ? SelectItem({ value: "new_project" }, "New advanced project") : null,
+		!is_in_trash && ((entry && entry.type !== "project") || !entry)
+			? SelectItem({ value: "new_prototype" }, "New prototype")
+			: null,
+		!is_in_trash && ((entry && entry.type !== "project") || !entry)
+			? SelectItem({ value: "new_project" }, "New advanced project")
+			: null,
 		SelectSeparator(),
 		SelectItem({ value: "new_folder" }, "New folder"),
 		SelectItem({ value: "new_file" }, "New file"),
@@ -474,7 +487,7 @@ export async function openFileBrowser() {
 
 	if (existing_window) {
 		existing_window.focus();
-		const id = existing_window.getAttribute("stb-tsid");
+		const id = existing_window.getAttribute("om-tsid");
 		if (!id) throw new Error("Window ID not found");
 		liftAppletMirror(id);
 		return;
@@ -566,7 +579,9 @@ export async function openFileBrowser() {
 				!AppState.working_directory_name
 					? div(
 							{
-								class: tw("w-full h-full flex flex-col bg-file-browser-bg p-1 items-center justify-center gap-2 px-6"),
+								class: tw(
+									"w-full h-full flex flex-col bg-file-browser-bg p-1 items-center justify-center gap-2 px-6",
+								),
 							},
 							Button(
 								{
@@ -593,10 +608,7 @@ export async function openFileBrowser() {
 				{
 					id: "working-directory",
 					class: () =>
-						tw("component-file-browser-content", {
-							hidden: !AppState.working_directory_name,
-							flex: AppState.working_directory_name,
-						}),
+						cn("component-file-browser-content", !AppState.working_directory_name ? tw("hidden") : tw("flex")),
 					oncontextmenu(e) {
 						if (e.currentTarget === e.target) {
 							showFileMenu(e);
@@ -683,13 +695,22 @@ function renderDirectoryEntry(old_entry: DirectoryEntry & { indent_level: number
 				{
 					draggable: "true",
 					class: () =>
-						tw("component-file-browser-entry", {
-							"component-file-browser-entry-dragover":
-								(last_selected_entry === entry.full_path && !last_dragged_over_entry) ||
-								(last_dragged_over_entry && last_dragged_over_entry.full_path === entry.full_path),
-							"component-file-browser-entry-active":
-								entry.project && AppState.active_project ? AppState.active_project.name === entry.project.name : false,
-						}),
+						cn(
+							tw(
+								"w-full text-left flex items-center px-1 hover:bg-file-browser-entry-hover whitespace-nowrap hover:bg-hover",
+							),
+							(last_selected_entry === entry.full_path && !last_dragged_over_entry) ||
+								(last_dragged_over_entry && last_dragged_over_entry.full_path === entry.full_path)
+								? tw("bg-hover")
+								: "",
+							(
+								entry.project && AppState.active_project
+									? AppState.active_project.name === entry.project.name
+									: false
+							)
+								? tw("font-bold")
+								: "",
+						),
 					onclick() {
 						if (entry.type !== "file") toggleIsOpen(entry);
 						else if (entry.type === "file") {
@@ -778,18 +799,25 @@ function renderDirectoryEntry(old_entry: DirectoryEntry & { indent_level: number
 				}),
 				tags[entry.is_renaming ? "div" : "span"](
 					{
-						class: tw("component-file-browser-entry-text", {
-							"pointer-events-none": !entry.is_renaming,
-							"component-file-browser-entry-open": entry.is_open,
-						}),
+						class: cn(
+							tw("flex items-center"),
+							!entry.is_renaming ? tw("pointer-events-none") : "",
+							entry.is_open ? tw("italic") : "",
+						),
 					},
 					icon({
 						name: getIcon(entry),
 						class: () =>
-							tw("component-file-browser-entry-icon", {
-								"component-file-browser-entry-icon-selected":
-									entry.project && AppState.active_project ? AppState.active_project.name === entry.project.name : false,
-							}),
+							cn(
+								tw("font-200 shrink-0 w-6 h-6 text-24 mr-1 not-italic"),
+								(
+									entry.project && AppState.active_project
+										? AppState.active_project.name === entry.project.name
+										: false
+								)
+									? tw("invert bg-file-browser-icon-selected-bg")
+									: "",
+							),
 					}),
 					() =>
 						entry.is_renaming

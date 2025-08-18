@@ -3,7 +3,7 @@ import { finishFrame, shortcut } from "@/lib/utils";
 import { liftAppletMirror, spawnApplet, mountedApplets, useDesktop } from "@/monzon/ui/desktop";
 import { WindowFrame } from "@/monzon/ui/window-frame";
 import { SelectItem, SelectSeparator, useSelect } from "@/om/ui/select";
-import { tw } from "@/lib/tw.js";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 import sys from "@/lib/bridge";
 import { refreshWorkingDirectory } from "@/monzon/applets/file-browser";
 import type { ShortcutCallback } from "@/monzon/types";
@@ -46,7 +46,7 @@ export async function openSoundViewer(props: SoundViewerProps) {
 
 	if (existing_window) {
 		existing_window.focus();
-		const id = existing_window.getAttribute("stb-tsid");
+		const id = existing_window.getAttribute("om-tsid");
 		if (!id) throw new Error("Window ID not found");
 		liftAppletMirror(id);
 		const active_viewer = active_viewers.get(window_name);
@@ -122,7 +122,7 @@ export async function openSoundViewer(props: SoundViewerProps) {
 
 	const shortcuts: Record<string, ShortcutCallback> = {
 		[shortcut("CmdOrCtrl", "w")]: ({ win }) => {
-			const name = win.getAttribute("stb-window");
+			const name = win.getAttribute("om-applet");
 			if (!name) return;
 			closeWindow(name);
 		},

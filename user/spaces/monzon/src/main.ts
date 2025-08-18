@@ -1,6 +1,6 @@
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
 import { useTags } from "@/lib/ima";
-import { finish } from "@/lib/utils";
+import { cn, finish } from "@/lib/utils";
 
 import "@/monzon/global-shortcuts";
 
@@ -23,9 +23,11 @@ AppState.load();
 const app = main(
 	{
 		class: () =>
-			tw("absolute w-full h-full flex flex-col overflow-hidden", theme.global_classes, {
-				invert: AppSettings.invert_colors,
-			}),
+			cn(
+				tw("absolute w-full h-full flex flex-col overflow-hidden"),
+				theme.global_classes, // this will get removed
+				AppSettings.invert_colors ? tw("invert") : "",
+			),
 	},
 	Titlebar(),
 	await Desktop(),

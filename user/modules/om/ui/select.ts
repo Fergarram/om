@@ -1,9 +1,11 @@
 import { type TagArgs, type Child, type Props, useTags } from "@/lib/ima";
-import { tw } from "@/lib/tw";
-import { finish, isUserTyping } from "@/lib/utils";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
+import { docMain, finish, isUserTyping } from "@/lib/utils";
 
 const tags = useTags();
 
+const fit_class = tw("w-fit");
+const pointer_event_class = tw("pointer-events-none");
 const position_offset = 4;
 
 // Updated types for the Select component
@@ -152,9 +154,7 @@ export function useSelect(...args: SelectArgs): Promise<any> {
 		// Create backdrop for closing when clicking outside
 		backdrop_el = tags.div({
 			component: "select-backdrop",
-			class: tw("fixed inset-0 z-50", {
-				"pointer-events-none": input_el,
-			}),
+			class: input_el ? pointer_event_class : "",
 			oncontextmenu: (e: MouseEvent) => {
 				e.preventDefault();
 				cleanupAndResolve();
@@ -169,7 +169,7 @@ export function useSelect(...args: SelectArgs): Promise<any> {
 		// Determine class based on width
 		let width_class = "";
 		if (width === "fit") {
-			width_class = tw("w-fit");
+			width_class = fit_class;
 		}
 
 		// Create the select dropdown
@@ -185,7 +185,7 @@ export function useSelect(...args: SelectArgs): Promise<any> {
 				}`,
 				tabIndex: -1,
 				...rest_props,
-				class: tw("absolute z-50 overflow-auto", width_class, rest_props.class),
+				class: cn(width_class, rest_props.class),
 			},
 			tags.div({}, ...children),
 		);
@@ -259,8 +259,9 @@ export function useSelect(...args: SelectArgs): Promise<any> {
 		positionDropdown(select_el, click, side, align, width, follow_cursor);
 
 		// Add elements to the DOM
-		document.body.appendChild(backdrop_el);
-		document.body.appendChild(select_el);
+		const container = docMain() || document.body;
+		container.appendChild(backdrop_el);
+		container.appendChild(select_el);
 		current_select = select_el;
 
 		// Set focus to the select element

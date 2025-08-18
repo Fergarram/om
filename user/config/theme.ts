@@ -1,9 +1,10 @@
 import sys from "@/lib/bridge";
-import { initializeCompiler, tw } from "@/lib/tw";
+import { compileTailwindTheme } from "@/lib/tailwind-compiler";
 import type { JSONObject, OmBaseTheme } from "@/lib/types";
 import { css, useGlobalStyles } from "@/lib/utils";
 
 let theme: OmBaseTheme | null = null;
+let theme_css: string = "";
 
 export async function initializeThemeSystem(theme_dir: string, customStyles?: (theme: OmBaseTheme) => string) {
 	const theme_config = await sys.file.read(theme_dir + "/theme.json");
@@ -220,7 +221,7 @@ export async function initializeThemeSystem(theme_dir: string, customStyles?: (t
 		}
 	`);
 
-	await initializeCompiler(css`
+	theme_css = css`
 		@import "tailwindcss";
 
 		@theme {
@@ -291,9 +292,15 @@ export async function initializeThemeSystem(theme_dir: string, customStyles?: (t
 		${await sys.file.read(theme_dir + "/theme.css")}
 
 		${customStyles ? customStyles(theme) : ""}
-	`);
+	`;
 
-	tw("flex"); // @FIXME: The initializeCompiler should do the job but it's not working as expected so we manually trigger it
+	const space_dir = window.location.pathname.replace("/index.html", "");
+	console.log(space_dir);
+	const all_classes = await sys.file.read(`${space_dir}/src/classes.txt`);
+	const class_list = all_classes.trim().split(/\s+/);
+	const sheet = document.createElement("style");
+	sheet.textContent = await compileTailwindTheme(theme_css, class_list);
+	document.head.append(sheet);
 
 	return theme;
 }

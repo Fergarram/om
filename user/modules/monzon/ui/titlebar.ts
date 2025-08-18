@@ -1,6 +1,6 @@
 import sys from "@/lib/bridge";
 import { useTags } from "@/lib/ima";
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 import { Button } from "@/om/ui/button";
 import { RunnerButton } from "@/monzon/ui/runner";
 import { toggleFileBrowser } from "@/monzon/applets/file-browser";

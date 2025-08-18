@@ -1,12 +1,19 @@
 import { useTags } from "@/lib/ima";
 import { finish } from "@/lib/utils";
 import sys from "@/lib/bridge";
-import { tw } from "@/lib/tw";
 
-sys.overlay.openDevTools();
+// sys.overlay.openDevTools();
 
 // Om Modules
 import { StatusBar } from "./ui/statusbar";
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
+import { initializeThemeSystem } from "@/config/theme";
+
+// Initialize theme
+const basepath = await sys.process.cwd();
+const theme_dir = `${basepath}/user/config/themes/om/default`;
+
+await initializeThemeSystem(theme_dir);
 
 // DOM Setup
 const { main } = useTags();

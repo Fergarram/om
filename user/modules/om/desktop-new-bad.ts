@@ -1,6 +1,6 @@
 import { finish, uniqueId } from "@/lib/utils";
 import { useTags } from "@/lib/ima";
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 
 const { div, canvas } = useTags();
 

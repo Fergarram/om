@@ -1,7 +1,7 @@
 import { useTags } from "@/lib/ima.js";
-import { tw } from "@/lib/tw.js";
 import { docMain, finish } from "@/lib/utils.js";
 import sys from "@/lib/bridge.js";
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
 
 const { div, button, icon, span, input } = useTags();
 

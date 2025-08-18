@@ -1,4 +1,12 @@
 /* */
+/* GENERAL */
+/* */
+
+body {
+	@apply text-12;
+}
+
+/* */
 /* ICONS */
 /* */
 
@@ -26,10 +34,6 @@ icon {
 icon::before {
 	content: attr(name);
 	display: inline-block;
-}
-
-body {
-	@apply text-12;
 }
 
 /* */
@@ -145,10 +149,11 @@ body {
 */
 
 [component="select-backdrop"] {
+	@apply fixed inset-0 z-50;
 }
 
 [component="select"] {
-	@apply bg-white shadow-lg ring-1 ring-black focus:outline-none;
+	@apply bg-white shadow-lg ring-1 ring-black focus:outline-none absolute z-50 overflow-auto;
 }
 
 [component="select-separator"] {
@@ -209,12 +214,12 @@ body {
 
 [component="dialog-backdrop"] {
 	&[variant="default"] {
-		@apply bg-black/20 flex items-center justify-center;
+		@apply bg-black/20 flex items-center justify-center fixed inset-0 z-50;
 	}
 }
 
 [component="dialog"] {
 	&[variant="default"] {
-		@apply bg-white text-black p-3 border border-black w-fit max-w-128 h-fit;
+		@apply bg-white text-black p-3 border border-black w-fit max-w-128 h-fit relative;
 	}
 }

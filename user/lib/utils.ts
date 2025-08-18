@@ -300,3 +300,23 @@ export function getFileLanguage(filename: string): string {
 
 	return language_map[extension] || "plaintext";
 }
+
+export function cn(...classes: (string | undefined | Record<string, boolean> | (string | undefined)[])[]): string {
+	return classes
+		.flatMap((cls) => {
+			if (typeof cls === "string" || cls === undefined) {
+				return cls;
+			}
+			if (Array.isArray(cls)) {
+				return cls;
+			}
+			if (typeof cls === "object" && cls !== null) {
+				return Object.entries(cls)
+					.filter(([_, value]) => value)
+					.map(([key, _]) => key);
+			}
+			return undefined;
+		})
+		.filter(Boolean)
+		.join(" ");
+}

@@ -1,6 +1,6 @@
 import { useMonzonTheme } from "@/monzon/theme";
 import { useTags, type Child } from "@/lib/ima";
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 import { css, finish } from "@/lib/utils";
 import { Button } from "@/om/ui/button";
 import { getTopWindow, onAppletRemoved, overrideDraggingPosition, useDesktop } from "./desktop";
@@ -83,14 +83,14 @@ function hideSnapPreview() {
 
 // Check if window is currently snapped
 function isWindowSnapped(win: HTMLElement): "left" | "right" | "top" | null {
-	const snap_value = win.getAttribute("stb-snap");
+	const snap_value = win.getAttribute("om-snap");
 
 	return snap_value ? (snap_value as any) : null;
 }
 
 // Store window state before snapping
 function storeWindowState(win: HTMLElement) {
-	const win_id = win.getAttribute("stb-tsid") || win.getAttribute("stb-window") || "";
+	const win_id = win.getAttribute("om-tsid") || win.getAttribute("om-applet") || "";
 	if (!win_id) return;
 
 	window_restore_state.set(win_id, {
@@ -109,7 +109,7 @@ async function restoreWindowState(
 		drag_start_y: number;
 	},
 ) {
-	const win_id = win.getAttribute("stb-tsid") || win.getAttribute("stb-window") || "";
+	const win_id = win.getAttribute("om-tsid") || win.getAttribute("om-applet") || "";
 	if (!win_id) return;
 
 	const state = window_restore_state.get(win_id);
@@ -149,8 +149,8 @@ async function restoreWindowState(
 	win.style.width = `${state.width}px`;
 	win.style.height = `${state.height}px`;
 
-	// Update stb-snap attribute when unsnapping
-	win.setAttribute("stb-snap", "");
+	// Update om-snap attribute when unsnapping
+	win.setAttribute("om-snap", "");
 
 	window_restore_state.delete(win_id);
 }
@@ -184,8 +184,8 @@ function snapWindow(win: HTMLElement, zone: "left" | "right" | "top", preferred_
 			break;
 	}
 
-	// Update stb-snap attribute when snapping
-	win.setAttribute("stb-snap", zone);
+	// Update om-snap attribute when snapping
+	win.setAttribute("om-snap", zone);
 }
 
 // Detect snap zone based on mouse position
@@ -225,7 +225,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 		return;
 	}
 
-	const window_name = top_window.getAttribute("stb-window");
+	const window_name = top_window.getAttribute("om-applet");
 	if (!window_name || !all_window_shortcuts[window_name]) return;
 
 	for (let [shortcut, callback] of Object.entries(all_window_shortcuts[window_name])) {
@@ -298,9 +298,9 @@ export function WindowFrame({
 	const win = div(
 		{
 			component: "window",
-			"stb-window": name,
-			"stb-motion": "idle",
-			"stb-snap": initial_snap || "",
+			"om-applet": name,
+			"om-motion": "idle",
+			"om-snap": initial_snap || "",
 			class: () => {
 				return tw("component-window-base", classes, {
 					"component-window-floating": !is_snapped,
@@ -427,7 +427,7 @@ export function WindowFrame({
 
 	if (ondidclose) {
 		onAppletRemoved((w) => {
-			if (w.getAttribute("stb-tsid") === win.getAttribute("stb-tsid")) {
+			if (w.getAttribute("om-tsid") === win.getAttribute("om-tsid")) {
 				ondidclose(w);
 			}
 		});
@@ -439,7 +439,7 @@ export function WindowFrame({
 
 	finish().then(() => {
 		if (initial_snap) {
-			const win_id = win.getAttribute("stb-tsid") || win.getAttribute("stb-window") || "";
+			const win_id = win.getAttribute("om-tsid") || win.getAttribute("om-applet") || "";
 			if (win_id) {
 				window_restore_state.set(win_id, {
 					x: x,

@@ -1,7 +1,6 @@
 import { useTags } from "@/lib/ima";
 import { SelectItem, useSelect } from "./select";
 import { useTheme } from "@/config/theme";
-import { tw } from "@/lib/tw";
 
 const { div, input, icon } = useTags();
 
@@ -50,7 +49,7 @@ export function ComboBox({ classes = "", list, value, onselect, variant = "defau
 		{
 			component: "combobox",
 			variant,
-			class: tw(classes),
+			class: classes,
 		},
 		input_el,
 		icon({

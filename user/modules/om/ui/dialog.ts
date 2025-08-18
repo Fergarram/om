@@ -1,6 +1,5 @@
-import { tw } from "@/lib/tw";
 import { useTags, type Ref } from "@/lib/ima";
-import { finish } from "@/lib/utils";
+import { docMain, finish } from "@/lib/utils";
 
 const { div } = useTags();
 
@@ -8,6 +7,8 @@ export interface DialogOptions {
 	ref?: Ref<HTMLDivElement>;
 	onclose?: () => void;
 	variant?: "default" | "none";
+	classes?: string;
+	backdrop_classes?: string;
 }
 
 let active_dialog: (() => void) | null = null;
@@ -19,7 +20,7 @@ export function closeDialog() {
 	}
 }
 
-export function useDialog({ ref, onclose, variant = "default" }: DialogOptions, content: HTMLElement): Promise<void> {
+export function useDialog({ ref, onclose, classes, backdrop_classes, variant = "default" }: DialogOptions, content: HTMLElement): Promise<void> {
 	return new Promise(async (resolve) => {
 		// Close any existing dialog first
 		closeDialog();
@@ -28,7 +29,7 @@ export function useDialog({ ref, onclose, variant = "default" }: DialogOptions, 
 		const backdrop = div({
 			variant,
 			component: "dialog-backdrop",
-			class: tw("fixed inset-0 z-50"),
+			class: backdrop_classes,
 			onclick: (e: MouseEvent) => {
 				// Only close if clicking the backdrop itself, not its children
 				if (e.target === backdrop) {
@@ -43,7 +44,7 @@ export function useDialog({ ref, onclose, variant = "default" }: DialogOptions, 
 				ref,
 				variant,
 				component: "dialog",
-				class: tw("relative"),
+				class: classes,
 				tabindex: -1,
 			},
 			content,
@@ -73,7 +74,8 @@ export function useDialog({ ref, onclose, variant = "default" }: DialogOptions, 
 
 		active_dialog = handleCloseDialog;
 		document.addEventListener("keydown", handleKeydown);
-		document.body.appendChild(backdrop);
+		const container = docMain() || document.body;
+		container.appendChild(backdrop);
 
 		await finish();
 

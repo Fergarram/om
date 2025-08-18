@@ -3,7 +3,7 @@ import { convertFromWindowsPath, convertToWindowsPath, shortcut } from "@/lib/ut
 import { liftAppletMirror, spawnApplet, mountedApplets, useDesktop } from "@/monzon/ui/desktop";
 import { WindowFrame } from "@/monzon/ui/window-frame";
 import { SelectItem, SelectSeparator, useSelect } from "@/om/ui/select";
-import { tw } from "@/lib/tw.js";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 import { ComboBox } from "@/om/ui/combobox";
 import sys from "@/lib/bridge";
 import { Button } from "@/om/ui/button";
@@ -51,7 +51,7 @@ export async function openSettingsWindow() {
 
 	if (existing_window) {
 		existing_window.focus();
-		const id = existing_window.getAttribute("stb-tsid");
+		const id = existing_window.getAttribute("om-tsid");
 		if (!id) throw new Error("Window ID not found");
 		liftAppletMirror(id);
 		return;
@@ -73,19 +73,21 @@ export async function openSettingsWindow() {
 		label: string;
 	}[] = [];
 
-	const anthropic = new Anthropic({
-		// @ts-ignore
-		dangerouslyAllowBrowser: true,
-		apiKey: AppSettings.assistants[AppSettings.default_assistant].key,
-	});
-
-	anthropic.models
-		.list({
-			limit: 10,
-		})
-		.then(({ data }: any) => {
-			available_models = data.map(({ id }: { id: string }) => ({ value: id, label: id }));
+	if (AppSettings.assistants[AppSettings.default_assistant].key) {
+		const anthropic = new Anthropic({
+			// @ts-ignore
+			dangerouslyAllowBrowser: true,
+			apiKey: AppSettings.assistants[AppSettings.default_assistant].key,
 		});
+
+		anthropic.models
+			.list({
+				limit: 10,
+			})
+			.then(({ data }: any) => {
+				available_models = data.map(({ id }: { id: string }) => ({ value: id, label: id }));
+			});
+	}
 
 	let dropdown_selected_assistant = AppSettings.default_assistant;
 
@@ -129,7 +131,7 @@ export async function openSettingsWindow() {
 		},
 		shortcuts: {
 			[shortcut("CmdOrCtrl", "w")]: ({ win }) => {
-				const name = win.getAttribute("stb-window");
+				const name = win.getAttribute("om-applet");
 				if (!name) return;
 				settings_window.remove();
 			},
@@ -241,17 +243,16 @@ export async function openSettingsWindow() {
 									{
 										class: tw("flex items-center gap-2 mb-4 mt-1"),
 									},
-									() =>
-										input({
-											id: "invert_colors",
-											type: "checkbox",
-											"data-checked": AppSettings.invert_colors,
-											checked: AppSettings.invert_colors,
-											onchange(e: InputEvent) {
-												const el = e.target as HTMLInputElement;
-												AppSettings.invert_colors = el.checked;
-											},
-										}),
+									input({
+										id: "invert_colors",
+										type: "checkbox",
+										"data-checked": () => AppSettings.invert_colors ? "true" : "false",
+										checked: () => AppSettings.invert_colors ? "true" : "false",
+										onchange(e: InputEvent) {
+											const el = e.target as HTMLInputElement;
+											AppSettings.invert_colors = el.checked;
+										},
+									}),
 									label(
 										{
 											for: "invert_colors",
@@ -290,14 +291,23 @@ export async function openSettingsWindow() {
 													.showOpen({
 														title: "Select wallpaper",
 														defaultPath: AppSettings.wallpaper_path,
-														filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "webm"] }],
+														filters: [
+															{
+																name: "Images",
+																extensions: ["jpg", "jpeg", "png", "gif", "webp", "webm"],
+															},
+														],
 													})
 													.then((result) => {
 														if (result.canceled) return;
-														AppSettings.wallpaper_path = encodeURI(convertFromWindowsPath(result.filePaths[0]))
+														AppSettings.wallpaper_path = encodeURI(
+															convertFromWindowsPath(result.filePaths[0]),
+														)
 															.replaceAll("(", "\\(")
 															.replaceAll(")", "\\)");
-														const input_el = document.getElementById("wallpaper-input") as HTMLInputElement;
+														const input_el = document.getElementById(
+															"wallpaper-input",
+														) as HTMLInputElement;
 														input_el.value = AppSettings.wallpaper_path;
 													});
 											},
@@ -519,178 +529,209 @@ export async function openSettingsWindow() {
 												{
 													class: "component-settings-fieldset",
 												},
-												...Object.entries(AppSettings.assistants[dropdown_selected_assistant]).map(([key, value]) => {
-													switch (key) {
-														case "model":
-															return div(
-																{
-																	class: tw("flex items-center gap-2"),
-																},
-																div(
+												...Object.entries(AppSettings.assistants[dropdown_selected_assistant]).map(
+													([key, value]) => {
+														switch (key) {
+															case "model":
+																return div(
 																	{
-																		class: tw("component-settings-label min-w-32 w-1/2"),
+																		class: tw("flex items-center gap-2"),
 																	},
-																	key.replace(/_/g, " "),
-																),
-																ComboBox({
-																	classes: tw("grow w-1/2"),
-																	value: value as string,
-																	list: () => available_models,
-																	onselect(selected_model) {
-																		AppSettings.assistants[dropdown_selected_assistant] = {
-																			...AppSettings.assistants[dropdown_selected_assistant],
-																			model: selected_model,
-																		};
-																		AppSettings.save();
-																	},
-																}),
-																div({
-																	class: tw("w-6 h-6 min-w-6 min-h-6"),
-																}),
-															);
-														case "instructions":
-															const fullpath = `${versions_path}/${AppSettings.default_version}/${value as string}`;
-															const filename = fullpath.split("/").pop();
-															if (!filename) return;
-
-															return div(
-																{
-																	class: tw("flex items-center gap-2"),
-																},
-																div(
-																	{
-																		class: tw("component-settings-label min-w-32 w-1/2"),
-																	},
-																	key.replace(/_/g, " "),
-																),
-																Textfield({
-																	class: tw("grow w-1/2"),
-																	value: `${AppSettings.default_version}/${filename}`,
-																	disabled: true,
-																}),
-																Button(
-																	{
-																		size: "icon",
-																		onclick() {
-																			openCodeEditor({
-																				filename: filename,
-																				fullpath: fullpath,
-																				relative_path: fullpath,
-																				language: "markdown",
-																			});
+																	div(
+																		{
+																			class: tw(
+																				"component-settings-label min-w-32 w-1/2",
+																			),
 																		},
-																	},
-																	icon({
-																		name: theme.icons.settings.edit_instructions,
-																	}),
-																),
-															);
-														case "examples":
-															return div(
-																{
-																	class: tw(
-																		"flex items-center gap-2 pointer-events-none opacity-20 cursor-not-allowed",
+																		key.replace(/_/g, " "),
 																	),
-																},
-																div(
-																	{
-																		class: tw("component-settings-label min-w-32 w-1/2"),
-																	},
-																	key.replace(/_/g, " "),
-																),
-																Textfield({
-																	disabled: true,
-																	class: tw("grow w-1/2"),
-																	value: value,
-																	oninput(e: InputEvent) {
-																		const el = e.target as HTMLInputElement;
-																		AppSettings.assistants[dropdown_selected_assistant] = {
-																			...AppSettings.assistants[dropdown_selected_assistant],
-																			examples: el.value,
-																		};
-																	},
-																}),
-																Button(
-																	{
-																		disabled: true,
-																		size: "icon",
-																		async onclick() {
-																			const res = await sys.dialog.showOpen({
-																				properties: ["openDirectory"],
-																			});
-
-																			const folder_path = res.filePaths[0];
-																			const new_path = convertFromWindowsPath(folder_path);
-																			AppSettings.assistants[dropdown_selected_assistant] = {
-																				...AppSettings.assistants[dropdown_selected_assistant],
-																				examples: new_path,
+																	ComboBox({
+																		classes: tw("grow w-1/2"),
+																		value: value as string,
+																		list: () => available_models,
+																		onselect(selected_model) {
+																			AppSettings.assistants[
+																				dropdown_selected_assistant
+																			] = {
+																				...AppSettings.assistants[
+																					dropdown_selected_assistant
+																				],
+																				model: selected_model,
 																			};
 																			AppSettings.save();
 																		},
-																	},
-																	icon({
-																		name: theme.icons.settings.open_folder,
 																	}),
-																),
-															);
-														case "use_embeddings_for_examples":
-															return div(
-																{
-																	class: tw(
-																		"flex items-center gap-2 mt-1 pointer-events-none opacity-20 cursor-not-allowed",
+																	div({
+																		class: tw("w-6 h-6 min-w-6 min-h-6"),
+																	}),
+																);
+															case "instructions":
+																const fullpath = `${versions_path}/${AppSettings.default_version}/${value as string}`;
+																const filename = fullpath.split("/").pop();
+																if (!filename) return;
+
+																return div(
+																	{
+																		class: tw("flex items-center gap-2"),
+																	},
+																	div(
+																		{
+																			class: tw(
+																				"component-settings-label min-w-32 w-1/2",
+																			),
+																		},
+																		key.replace(/_/g, " "),
 																	),
-																},
-																Textfield({
-																	disabled: true,
-																	id: "use_embeddings_for_examples",
-																	type: "checkbox",
-																	checked: value as boolean,
-																	onchange(e: InputEvent) {
-																		const el = e.target as HTMLInputElement;
-																		AppSettings.assistants[dropdown_selected_assistant] = {
-																			...AppSettings.assistants[dropdown_selected_assistant],
-																			use_embeddings_for_examples: el.checked,
-																		};
-																		AppSettings.save();
-																	},
-																}),
-																label(
+																	Textfield({
+																		class: tw("grow w-1/2"),
+																		value: `${AppSettings.default_version}/${filename}`,
+																		disabled: true,
+																	}),
+																	Button(
+																		{
+																			size: "icon",
+																			onclick() {
+																				openCodeEditor({
+																					filename: filename,
+																					fullpath: fullpath,
+																					relative_path: fullpath,
+																					language: "markdown",
+																				});
+																			},
+																		},
+																		icon({
+																			name: theme.icons.settings.edit_instructions,
+																		}),
+																	),
+																);
+															case "examples":
+																return div(
 																	{
-																		for: "use_embeddings_for_examples",
-																		class: tw(""),
+																		class: tw(
+																			"flex items-center gap-2 pointer-events-none opacity-20 cursor-not-allowed",
+																		),
 																	},
-																	key.replace(/_/g, " ").charAt(0).toUpperCase() +
-																		key.replace(/_/g, " ").slice(1),
-																),
-															);
-														default:
-															return div(
-																{
-																	class: tw("flex items-center gap-2"),
-																},
-																div(
+																	div(
+																		{
+																			class: tw(
+																				"component-settings-label min-w-32 w-1/2",
+																			),
+																		},
+																		key.replace(/_/g, " "),
+																	),
+																	Textfield({
+																		disabled: true,
+																		class: tw("grow w-1/2"),
+																		value: value,
+																		oninput(e: InputEvent) {
+																			const el = e.target as HTMLInputElement;
+																			AppSettings.assistants[
+																				dropdown_selected_assistant
+																			] = {
+																				...AppSettings.assistants[
+																					dropdown_selected_assistant
+																				],
+																				examples: el.value,
+																			};
+																		},
+																	}),
+																	Button(
+																		{
+																			disabled: true,
+																			size: "icon",
+																			async onclick() {
+																				const res = await sys.dialog.showOpen({
+																					properties: ["openDirectory"],
+																				});
+
+																				const folder_path = res.filePaths[0];
+																				const new_path =
+																					convertFromWindowsPath(folder_path);
+																				AppSettings.assistants[
+																					dropdown_selected_assistant
+																				] = {
+																					...AppSettings.assistants[
+																						dropdown_selected_assistant
+																					],
+																					examples: new_path,
+																				};
+																				AppSettings.save();
+																			},
+																		},
+																		icon({
+																			name: theme.icons.settings.open_folder,
+																		}),
+																	),
+																);
+															case "use_embeddings_for_examples":
+																return div(
 																	{
-																		class: tw("component-settings-label min-w-32 w-1/2"),
+																		class: tw(
+																			"flex items-center gap-2 mt-1 pointer-events-none opacity-20 cursor-not-allowed",
+																		),
 																	},
-																	key.replace(/_/g, " "),
-																),
-																Textfield({
-																	class: tw("grow w-1/2"),
-																	value: value,
-																	oninput(e: InputEvent) {
-																		const el = e.target as HTMLInputElement;
-																		AppSettings.assistants[dropdown_selected_assistant] = {
-																			...AppSettings.assistants[dropdown_selected_assistant],
-																			[key]: String(el.value),
-																		};
+																	Textfield({
+																		disabled: true,
+																		id: "use_embeddings_for_examples",
+																		type: "checkbox",
+																		checked: value as boolean,
+																		onchange(e: InputEvent) {
+																			const el = e.target as HTMLInputElement;
+																			AppSettings.assistants[
+																				dropdown_selected_assistant
+																			] = {
+																				...AppSettings.assistants[
+																					dropdown_selected_assistant
+																				],
+																				use_embeddings_for_examples: el.checked,
+																			};
+																			AppSettings.save();
+																		},
+																	}),
+																	label(
+																		{
+																			for: "use_embeddings_for_examples",
+																			class: tw(""),
+																		},
+																		key.replace(/_/g, " ").charAt(0).toUpperCase() +
+																			key.replace(/_/g, " ").slice(1),
+																	),
+																);
+															default:
+																return div(
+																	{
+																		class: tw("flex items-center gap-2"),
 																	},
-																}),
-																div({
-																	class: tw("w-6 h-6 min-w-6 min-h-6"),
-																}),
-															);
-													}
-												}),
+																	div(
+																		{
+																			class: tw(
+																				"component-settings-label min-w-32 w-1/2",
+																			),
+																		},
+																		key.replace(/_/g, " "),
+																	),
+																	Textfield({
+																		class: tw("grow w-1/2"),
+																		value: value,
+																		oninput(e: InputEvent) {
+																			const el = e.target as HTMLInputElement;
+																			AppSettings.assistants[
+																				dropdown_selected_assistant
+																			] = {
+																				...AppSettings.assistants[
+																					dropdown_selected_assistant
+																				],
+																				[key]: String(el.value),
+																			};
+																		},
+																	}),
+																	div({
+																		class: tw("w-6 h-6 min-w-6 min-h-6"),
+																	}),
+																);
+														}
+													},
+												),
 												div(
 													{
 														class: tw("mt-2 flex gap-2 justify-end w-full"),
@@ -715,9 +756,12 @@ export async function openSettingsWindow() {
 																					variant: "outline",
 																					class: tw("grow"),
 																					onclick() {
-																						delete AppSettings.assistants[dropdown_selected_assistant];
+																						delete AppSettings.assistants[
+																							dropdown_selected_assistant
+																						];
 																						AppSettings.save();
-																						dropdown_selected_assistant = AppSettings.default_assistant;
+																						dropdown_selected_assistant =
+																							AppSettings.default_assistant;
 																						closeDialog();
 																					},
 																				},

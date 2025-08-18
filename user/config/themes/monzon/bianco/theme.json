@@ -167,11 +167,6 @@
 			"titlebar_buttons": "flex items-center relative bg-windows-titlebar-bg",
 			"content": "relative flex grow w-full bg-windows-content-bg text-windows-content-fg"
 		},
-		"runner": {
-			"layout": "relative min-w-7",
-			"dropdown": "min-w-32",
-			"icon": "!w-8 !h-8 !text-40 !font-100 ml-px absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transform"
-		},
 		"textfield": {
 			"base": "px-0.5",
 			"variant_default": "border h-6 text-textfield-fg bg-textfield-bg disabled:bg-hover disabled:text-dim disabled:select-none disabled:pointer-events-none"

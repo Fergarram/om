@@ -1,7 +1,7 @@
 {
   "default_version": "stormborn-0.17.5",
   "theme": "bianco",
-  "invert_colors": true,
+  "invert_colors": false,
   "wallpaper_path": "/Users/fernando/Pictures/NVE_RABOT_00143.jpg",
   "wallpaper_size": "110%",
   "wallpaper_rendering": "pixelated",

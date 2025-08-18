@@ -1,7 +1,7 @@
 import sys from "@/lib/bridge";
 import { useTags } from "@/lib/ima";
 import { AppSettings } from "@/monzon/state";
-import { tw } from "@/lib/tw";
+import { tw } from "@/lib/tw.macro" with { type: "macro" } ;
 import { convertFromWindowsPath, finish, finishFrame } from "@/lib/utils";
 import { openAssistant } from "@/monzon/applets/assistant";
 import { toggleFileBrowser } from "@/monzon/applets/file-browser";

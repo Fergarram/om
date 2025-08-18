@@ -1,5 +1,6 @@
 import { useTags, type Ref } from "@/lib/ima";
 import {
+	cn,
 	convertToWindowsPath,
 	finish,
 	finishFrame,
@@ -9,9 +10,9 @@ import {
 	shortcut,
 } from "@/lib/utils";
 import { liftAppletMirror, spawnApplet, mountedApplets, useDesktop } from "@/monzon/ui/desktop";
-import { WindowFrame } from "@/monzon/ui/window-frame.ts";
+import { WindowFrame } from "@/monzon/ui/window-frame";
 import { SelectItem, SelectSeparator, useSelect } from "@/om/ui/select";
-import { tw } from "@/lib/tw.js";
+import { tw } from "@/lib/tw.macro" with { type: "macro" };
 import { Editor } from "@/monzon/ui/monaco-editor";
 import sys from "@/lib/bridge";
 import { Button } from "@/om/ui/button";
@@ -22,7 +23,7 @@ import Anthropic from "@/lib/anthropic";
 import { openSettingsWindow } from "./settings";
 import { AppSettings, AppState } from "@/monzon/state";
 import { useMonzonTheme } from "@/monzon/theme";
-import type { CodeEditorProps } from "./code-editor";
+import type { CodeEditorProps } from "@/monzon/applets/code-editor";
 
 const { div, icon, input, span, button } = useTags();
 
@@ -78,7 +79,7 @@ export async function openAssistant(props?: AssistantProps, editor_file?: CodeEd
 
 	if (existing_window) {
 		existing_window.focus();
-		const id = existing_window.getAttribute("stb-tsid");
+		const id = existing_window.getAttribute("om-tsid");
 		if (!id) throw new Error("Window ID not found");
 		liftAppletMirror(id);
 		return;
@@ -163,7 +164,7 @@ export async function openAssistant(props?: AssistantProps, editor_file?: CodeEd
 
 	const shortcuts: Record<string, ShortcutCallback> = {
 		[shortcut("CmdOrCtrl", "w")]: ({ win }) => {
-			const name = win.getAttribute("stb-window");
+			const name = win.getAttribute("om-applet");
 			if (!name) return;
 			if (has_unsaved_changes) {
 				showUnsavedWarning(name);
@@ -880,9 +881,7 @@ export async function openAssistant(props?: AssistantProps, editor_file?: CodeEd
 											},
 											span({ class: tw("max-w-full overflow-hidden text-ellipsis") }, id),
 											icon({
-												class: tw("shrink-0", {
-													"opacity-0": id !== selected_assistant,
-												}),
+												class: cn(tw("shrink-0"), id !== selected_assistant ? cn("opacity-0") : ""),
 												name: theme.icons.select.check,
 											}),
 										),
