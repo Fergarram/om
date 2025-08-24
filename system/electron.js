@@ -12,8 +12,6 @@ import "./modules/browser.js";
 import "./modules/appstream.js";
 import "./modules/shortcuts.js";
 
-import "./modules/monzon.js";
-
 // I need to recompile to same version of nodejs
 // Meanwhile I'd have to set it up as an external node server
 // const robot = require("./lib/robotjs/index.js");
