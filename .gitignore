@@ -176,10 +176,10 @@ out
 
 # Om
 Om.app
-builds/Om.app
-builds/Om*.app
-builds/windows
-builds/linux
+build/Om.app
+build/Om*.app
+build/windows
+build/linux
 om.lnk
 .virtfs_metadata
 .zig-cache
@@ -188,3 +188,6 @@ om.lnk
 
 # Bun
 bin/*
+
+# Apps
+apps/monzon

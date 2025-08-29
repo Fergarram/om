@@ -1,5 +1,0 @@
-w-fit
-pointer-events-none
-center justify-center h-screen bg-gray-100
-w-fit
-pointer-events-none

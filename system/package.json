@@ -1,6 +1,0 @@
-{
-	"name": "om-sys",
-	"productName": "Om",
-	"main": "electron.js",
-	"type": "module"
-}

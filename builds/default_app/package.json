@@ -1,6 +1,0 @@
-{
-	"name": "om-defaultapp",
-	"productName": "Om",
-	"main": "sysentry.js",
-	"type": "module"
-}
