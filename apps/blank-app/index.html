@@ -415,7 +415,19 @@
 				`
 			}, "Move your cursor around!");
 
-			document.body.replaceChildren(content);
+			// Texto verde en cursiva
+			const green_italic_text = div({
+				style: `
+					color: green;
+					font-style: italic;
+					font-size: 18px;
+					margin: 20px;
+					text-align: center;
+				`
+			}, "Este es un texto en color verde y en cursiva");
+
+			// Agregar el texto verde al body
+			document.body.appendChild(green_italic_text);
 
 			console.log(sayHello("World"));
 		</script>
@@ -429,6 +441,9 @@
 
 		<!-- Remote Modules -->
 		<script type="blob-module" name="ima" remote="https://cdn.jsdelivr.net/gh/Fergarram/ima@main/ima-0.6.0.esm.js"></script>
+		<!-- local url reference works -->
+		<!--<script type="blob-module" name="ima" remote="./ima.js"></script>-->
+
 		<!-- <script
 			type="blob-module"
 			name="tsc"
@@ -455,5 +470,8 @@
 		></script>
 		<script type="blob-module" name="long" remote="https://cdn.jsdelivr.net/npm/long@5.2.4/index.js" nodownload></script> -->
 	</head>
-	<body></body>
+	<body>
+		<div></div>
+		<a href="https://google.com"> Este es el texto dentro del link. </a>
+	</body>
 </html>
