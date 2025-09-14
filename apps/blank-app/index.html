@@ -28,6 +28,312 @@
 			}
 		</script>
 
+		<!-- Style reset and vars -->
+		<style>
+			:root {
+				--font-default: "Inter", sans-serif;
+				--font-monospace: "Departure Mono", monospace;
+			}
+
+			/*
+			  1. Prevent padding and border from affecting element width.
+			  2. Remove default margins and padding
+			  3. Reset all borders.
+			*/
+
+			*,
+			::after,
+			::before {
+							box-sizing: border-box; /* 1 */
+							margin: 0; /* 2 */
+							padding: 0; /* 2 */
+							border: 0 solid; /* 3 */
+			}
+
+			/*
+			  1. Use a consistent sensible line-height in all browsers.
+			  2. Prevent adjustments of font size after orientation changes in iOS.
+			  3. Use a more readable tab size.
+			  4. Use system font stack.
+			  5. Disable tap highlights on iOS.
+			*/
+
+			html {
+							line-height: 1.5; /* 1 */
+							-webkit-text-size-adjust: 100%; /* 2 */
+							tab-size: 4; /* 3 */
+							font-family: var(--font-default); /* 4 */
+							-webkit-tap-highlight-color: transparent; /* 5 */
+			}
+
+			/*
+			  1. Add the correct height in Firefox.
+			  2. Correct the inheritance of border color in Firefox.
+			  3. Reset the default border style to a 1px solid border.
+			*/
+
+			hr {
+							height: 0; /* 1 */
+							color: inherit; /* 2 */
+							border-top-width: 1px; /* 3 */
+			}
+
+			/*
+			  Add the correct text decoration in Chrome, Edge, and Safari.
+			*/
+
+			abbr[title] {
+							-webkit-text-decoration: underline dotted;
+							text-decoration: underline dotted;
+			}
+
+			/*
+			  Remove the default font size and weight for headings.
+			*/
+
+			h1,
+			h2,
+			h3,
+			h4,
+			h5,
+			h6 {
+							font-size: inherit;
+							font-weight: inherit;
+			}
+
+			/*
+			  Reset links to optimize for opt-in styling instead of opt-out.
+			*/
+
+			a {
+							color: inherit;
+							text-decoration: inherit;
+			}
+
+			/*
+			  Add the correct font weight in Edge and Safari.
+			*/
+
+			b,
+			strong {
+							font-weight: bolder;
+			}
+
+			/*
+			  1. Use monospace font family.
+			  2. Correct the odd `em` font sizing in all browsers.
+			*/
+
+			code,
+			kbd,
+			samp,
+			pre {
+							font-family: var(--font-monospace); /* 1 */
+							font-size: 1em; /* 2 */
+			}
+
+			/*
+			  Add the correct font size in all browsers.
+			*/
+
+			small {
+							font-size: 80%;
+			}
+
+			/*
+			  Prevent `sub` and `sup` elements from affecting the line height in all browsers.
+			*/
+
+			sub,
+			sup {
+							font-size: 75%;
+							line-height: 0;
+							position: relative;
+							vertical-align: baseline;
+			}
+
+			sub {
+							bottom: -0.25em;
+			}
+
+			sup {
+							top: -0.5em;
+			}
+
+			/*
+			  1. Remove text indentation from table contents in Chrome and Safari.
+			  2. Correct table border color inheritance in all Chrome and Safari.
+			  3. Remove gaps between table borders by default.
+			*/
+
+			table {
+							text-indent: 0; /* 1 */
+							border-color: inherit; /* 2 */
+							border-collapse: collapse; /* 3 */
+			}
+
+			/*
+			  Use the modern Firefox focus style for all focusable elements.
+			*/
+
+			:-moz-focusring {
+							outline: auto;
+			}
+
+			/*
+			  Add the correct vertical alignment in Chrome and Firefox.
+			*/
+
+			progress {
+							vertical-align: baseline;
+			}
+
+			/*
+			  Add the correct display in Chrome and Safari.
+			*/
+
+			summary {
+							display: list-item;
+			}
+
+			/*
+			  Make lists unstyled by default.
+			*/
+
+			ol,
+			ul,
+			menu {
+							list-style: none;
+			}
+
+			/*
+			  1. Make replaced elements `display: block` by default.
+			  2. Add `vertical-align: middle` to align replaced elements more sensibly by default.
+			*/
+
+			img,
+			svg,
+			video,
+			canvas,
+			audio,
+			iframe,
+			embed,
+			object {
+							display: block; /* 1 */
+							vertical-align: middle; /* 2 */
+			}
+
+			/*
+			  Constrain images and videos to the parent width and preserve their intrinsic aspect ratio.
+			*/
+
+			img,
+			video {
+							max-width: 100%;
+							height: auto;
+			}
+
+			/*
+			  1. Inherit font styles in all browsers.
+			  2. Remove border radius in all browsers.
+			  3. Remove background color in all browsers.
+			*/
+
+			button,
+			input,
+			select,
+			optgroup,
+			textarea {
+							font-family: inherit; /* 1 */
+							font-size: inherit; /* 1 */
+							font-weight: inherit; /* 1 */
+							line-height: inherit; /* 1 */
+							color: inherit; /* 1 */
+							border-radius: 0; /* 2 */
+							background-color: transparent; /* 3 */
+			}
+
+			/*
+			  Reset the default placeholder opacity in Firefox.
+			*/
+
+			::placeholder {
+							opacity: 1;
+							color: #9ca3af;
+			}
+
+			/*
+			  Prevent resizing textareas horizontally by default.
+			*/
+
+			textarea {
+							resize: vertical;
+			}
+
+			/*
+			  Remove the inner padding in Chrome and Safari on macOS.
+			*/
+
+			::-webkit-search-decoration {
+							-webkit-appearance: none;
+			}
+
+			/*
+			  Remove excess padding from pseudo-elements in date/time inputs.
+			*/
+
+			::-webkit-datetime-edit,
+			::-webkit-datetime-edit-year-field,
+			::-webkit-datetime-edit-month-field,
+			::-webkit-datetime-edit-day-field,
+			::-webkit-datetime-edit-hour-field,
+			::-webkit-datetime-edit-minute-field,
+			::-webkit-datetime-edit-second-field,
+			::-webkit-datetime-edit-millisecond-field,
+			::-webkit-datetime-edit-meridiem-field {
+							padding: 0;
+			}
+
+			/*
+			  Remove the additional `:invalid` styles in Firefox.
+			*/
+
+			:-moz-ui-invalid {
+							box-shadow: none;
+			}
+
+			/*
+			  Correct the inability to style the border radius in iOS Safari.
+			*/
+
+			button,
+			input[type="button"],
+			input[type="reset"],
+			input[type="submit"] {
+							-webkit-appearance: button;
+			}
+
+			/*
+			  Correct the cursor style of increment and decrement buttons in Safari.
+			*/
+
+			::-webkit-inner-spin-button,
+			::-webkit-outer-spin-button {
+							height: auto;
+			}
+
+			/*
+			  Make elements with the HTML hidden attribute stay hidden by default.
+			*/
+
+			[hidden] {
+							display: none !important;
+			}
+		</style>
+
+		<!-- Style modules -->
+		<style remote="./lib/hljs/styles/stormborn.css"></style>
+
 		<!-- Blob Module Handler -->
 		<script>
 			window.addEventListener("load", async () => {
@@ -289,6 +595,129 @@
 				});
 
 				//
+				// Blob Style Processing
+				//
+
+				const blob_styles = new Map();
+				const blob_style_urls = new Map();
+				const remote_styles = new Map();
+
+				const style_tags = document.querySelectorAll("style[remote]");
+
+				// First pass: collect all style contents and remote URLs
+				style_tags.forEach((style) => {
+					const remote_url = style.getAttribute("remote");
+					const style_id = remote_url; // Use URL as identifier since styles don't have names
+
+					if (!remote_url) {
+						console.warn("style tag missing remote attribute");
+						return;
+					}
+
+					// Check for name collisions
+					if (blob_styles.has(style_id) || remote_styles.has(style_id)) {
+						console.warn(`Style URL collision detected: "${style_id}" already exists. Skipping duplicate.`);
+						return;
+					}
+
+					const content = style.textContent.trim();
+
+					if (!content) {
+						// Empty content with remote URL - fetch remote
+						remote_styles.set(style_id, remote_url);
+						return;
+					} else {
+						// Both remote and content exist - store local, compare later
+						blob_styles.set(style_id, content);
+						remote_styles.set(style_id, remote_url);
+						return;
+					}
+				});
+
+				// Fetch remote styles (with caching) and create local copies before proceeding
+				for (const [style_id, remote_url] of remote_styles) {
+					try {
+						// Check cache first
+						const cached_style = await getCachedModule(remote_url);
+						let remote_content;
+
+						if (cached_style) {
+							console.log(`Using cached style from ${remote_url}`);
+							remote_content = cached_style.content;
+						} else {
+							console.log(`Fetching remote style from ${remote_url}`);
+							const response = await fetch(remote_url);
+							remote_content = await response.text();
+
+							// Cache the fetched content
+							await setCachedModule(remote_url, remote_content);
+							console.log(`Cached remote style from ${remote_url}`);
+						}
+
+						if (blob_styles.has(style_id)) {
+							// Compare with existing local content
+							const local_content = blob_styles.get(style_id);
+							if (remote_content.trim() !== local_content.trim()) {
+								console.warn(`Remote and local content are different for style "${remote_url}". Using local content.`);
+							}
+							// Keep local content
+						} else {
+							// No local content, use fetched remote content
+							blob_styles.set(style_id, remote_content);
+							console.log(`Successfully loaded remote style from ${remote_url}`);
+						}
+					} catch (error) {
+						console.warn(`Failed to fetch remote style from "${remote_url}":`, error);
+						if (!blob_styles.has(style_id)) {
+							console.log(`Will keep original remote reference for style "${remote_url}"`);
+						} else if (blob_styles.has(style_id)) {
+							console.log(`Using local style for "${remote_url}"`);
+						}
+					}
+				}
+
+				// Create blob URLs for all styles and update style tags
+				blob_styles.forEach((content, style_id) => {
+					const style_blob = new Blob([content], { type: "text/css" });
+					const blob_url = URL.createObjectURL(style_blob);
+					blob_style_urls.set(style_id, blob_url);
+
+					// Find the corresponding style tag and update it
+					const style_tag = Array.from(style_tags).find((tag) => tag.getAttribute("remote") === style_id);
+					if (style_tag) {
+						// Clear the content
+						style_tag.textContent = "";
+
+						// Create a new link element to load the CSS
+						const link_element = document.createElement("link");
+						link_element.rel = "stylesheet";
+						link_element.href = blob_url;
+
+						// Insert the link element after the style tag
+						style_tag.parentNode.insertBefore(link_element, style_tag.nextSibling);
+
+						console.log(`Created blob URL link for ${style_id}`);
+					}
+				});
+
+				// Expose blob style metadata map
+				window.__blob_style_map__ = new Map();
+
+				// Populate the style metadata map
+				blob_styles.forEach((content, style_id) => {
+					const blob_url = blob_style_urls.get(style_id);
+					const src_bytes = new Blob([content]).size;
+
+					const metadata = {
+						remote_url: style_id,
+						src_bytes,
+						blob_url,
+					};
+
+					window.__blob_style_map__.set(style_id, metadata);
+				});
+
+				//
 				// Editable HTML Export
 				//
 
@@ -304,11 +733,12 @@
 
 					// Remove the main execution script we added
 					const main_execution_script = doc_clone.querySelector("script[entrypoint]");
-					main_execution_script.remove();
+					if (main_execution_script) {
+						main_execution_script.remove();
+					}
 
 					// Process blob-module scripts
 					const cloned_blob_scripts = doc_clone.querySelectorAll('script[type="blob-module"]');
-
 					cloned_blob_scripts.forEach((script) => {
 						const module_name = script.getAttribute("name");
 						const remote_url = script.getAttribute("remote");
@@ -330,6 +760,28 @@
 							script.textContent = "";
 						}
 					});
+
+					// Process remote styles
+					const original_style_tags = doc_clone.querySelectorAll("style[remote]");
+					original_style_tags.forEach((style) => {
+						const remote_url = style.getAttribute("remote");
+						const no_download = style.hasAttribute("nodownload");
+
+						if (no_download) {
+							// Keep empty with just the remote attribute
+							style.textContent = "";
+						} else {
+							// Get the style content and inline it
+							const style_content = blob_styles.get(remote_url);
+							if (style_content) {
+								style.textContent = style_content;
+							}
+						}
+					});
+
+					// Remove the blob link elements we created
+					const blob_links = doc_clone.querySelectorAll('link[href^="blob:"]');
+					blob_links.forEach((link) => link.remove());
 
 					// Get the full HTML
 					const html_content = `<!DOCTYPE html>\n${doc_clone.documentElement.outerHTML}`;
@@ -353,16 +805,86 @@
 
 		<!-- Main Entry -->
 		<script type="blob-module" name="main">
-			import { sayHello } from "@/some/module";
-			import { useTags } from "ima";
-			const { canvas, div } = useTags();
+			  import acorn from "acorn";
+					import astring from "astring";
+				    import hljs from "hljs";
+					import astravel from "astravel";
+					import formatter from "formatter";
+				    import { useTags } from "ima";
+				    // import "cursor";
 
-			// Create a 32x32 canvas for the cursor
-			const cursor_canvas = canvas({
-				width: 32,
-				height: 32,
-				style: "display: none;" // Hide the canvas since we only need its data
+				    const { div, pre } = useTags();
+
+								const comments = [];
+				    const code_sample = `
+				// Hello
+				function fibonacci(n) {if (n <= 1) return n;
+				    return fibonacci(n - 1) + fibonacci(n - 2); // test
+				}
+
+				// Caca
+				const result = fibonacci(10);console.log("Fibonacci(10):", result);
+				    `;
+
+								const ast = acorn.parse(code_sample, {
+			  ecmaVersion: 'latest',
+			  sourceType: 'module',
+					onComment: comments,
+			 locations: true, // Needed for comment attachment
+			 ranges: true     // Needed for comment attachment
 			});
+
+								astravel.attachComments(ast, comments);
+
+								// const code = astring.generate(ast, {
+								// 	comments: true,
+								// 	indent: '\t',
+								// 	lineEnd: '\n',
+								// });
+								const code = formatter.js(code_sample);
+				    // Create highlighted code element
+				    const highlighted_code = hljs.highlight(code.trim(), { language: 'javascript' });
+
+				    const code_block = div({
+				        style: `
+				            background: black;
+				            padding: 20px;
+				            border-radius: 8px;
+				            margin: 20px;
+				            font-size: 11px;
+				            overflow-x: auto;
+				        `
+				    }, pre({
+				        innerHTML: highlighted_code.value
+				    }));
+
+				    // Update the content to include the code block
+				    const content = div({
+				        style: `
+				            display: flex;
+				            flex-direction: column;
+				            align-items: center;
+				            justify-content: center;
+				            min-height: 100vh;
+				            color: white;
+				            background: #222;
+				            font-family: monospace;
+				            font-size: 24px;
+				        `
+				    }, [
+				        "Move your cursor around!",
+				        code_block
+				    ]);
+
+				    document.body.replaceChildren(content);
+		</script>
+
+		<!-- Cursor Module -->
+		<script type="blob-module" name="cursor">
+			const cursor_canvas = document.createElement('canvas');
+			cursor_canvas.width = 24;
+			cursor_canvas.height = 24;
+			cursor_canvas.style.display = 'none';
 
 			document.body.appendChild(cursor_canvas);
 
@@ -370,77 +892,57 @@
 			let frame = 0;
 
 			function drawCursor() {
-				// Clear canvas
-				ctx.clearRect(0, 0, 32, 32);
+			    // Clear canvas
+			    ctx.clearRect(0, 0, 24, 24);
 
-				// Animate the cursor shape - a pulsing circle
-				const pulse = Math.sin(frame * 0.1) * 0.3 + 0.7; // oscillate between 0.4 and 1.0
-				const radius = 8 * pulse;
+			    // Breathing animation - slow scale transformation
+			    const breathing_scale = Math.sin(frame * 0.03) * 0.15 + 1; // oscillate between 0.85 and 1.15
 
-				// Draw cursor shape
-				ctx.fillStyle = '#ffffff';
-				ctx.strokeStyle = '#000000';
-				ctx.lineWidth = 2;
+			    ctx.save();
+			    ctx.translate(12, 12); // Move to center
+			    ctx.scale(breathing_scale, breathing_scale);
+			    ctx.translate(-12, -12); // Move back
 
-				// Draw a circle at center
-				ctx.beginPath();
-				ctx.arc(16, 16, radius, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.stroke();
+			    // Draw simple arrow cursor shape
+			    ctx.fillStyle = '#ffffff';
+			    ctx.strokeStyle = '#000000';
+			    ctx.lineWidth = 1.5;
 
-				// Convert canvas to base64 data URL
-				const data_url = cursor_canvas.toDataURL('image/png');
+			    // Arrow shape points
+			    ctx.beginPath();
+			    ctx.moveTo(2, 2);   // top point
+			    ctx.lineTo(2, 16);  // down left edge
+			    ctx.lineTo(6, 12);  // inner corner
+			    ctx.lineTo(10, 18); // bottom point
+			    ctx.lineTo(12, 16); // back up
+			    ctx.lineTo(8, 10);  // inner point
+			    ctx.lineTo(16, 10); // right edge
+			    ctx.closePath();
 
-				// Set as cursor
-				document.body.style.willChange = 'cursor';
-				document.body.style.cursor = `url(${data_url}) 16 16, auto`;
+			    ctx.fill();
+			    ctx.stroke();
 
-				frame++;
-				requestAnimationFrame(drawCursor);
+			    ctx.restore();
+
+			    // Convert canvas to data URL and set as cursor
+			    const data_url = cursor_canvas.toDataURL('image/png');
+			    document.body.style.cursor = `url(${data_url}) 2 2, auto`;
+
+			    frame++;
+			    requestAnimationFrame(drawCursor);
 			}
 
 			// Start the animation
 			drawCursor();
-
-			const content = div({
-				style: `
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					height: 100vh;
-					color: white;
-					background: #222;
-					font-family: monospace;
-					font-size: 24px;
-				`
-			}, "Move your cursor around!");
-
-			// Texto verde en cursiva
-			const green_italic_text = div({
-				style: `
-					color: green;
-					font-style: italic;
-					font-size: 18px;
-					margin: 20px;
-					text-align: center;
-				`
-			}, "Este es un texto en color verde y en cursiva");
-
-			// Agregar el texto verde al body
-			document.body.appendChild(green_italic_text);
-
-			console.log(sayHello("World"));
-		</script>
-
-		<!-- Local Modules -->
-		<script type="blob-module" name="@/some/module">
-			export function sayHello(name) {
-				return `Hello, ${name}!`;
-			}
 		</script>
 
 		<!-- Remote Modules -->
 		<script type="blob-module" name="ima" remote="https://cdn.jsdelivr.net/gh/Fergarram/ima@main/ima-0.6.0.esm.js"></script>
+		<script type="blob-module" name="acorn" remote="./lib/acorn.js"></script>
+		<script type="blob-module" name="astring" remote="./lib/astring.js"></script>
+		<script type="blob-module" name="astravel" remote="./lib/astravel.js"></script>
+		<script type="blob-module" name="formatter" remote="./lib/formatter.js"></script>
+		<script type="blob-module" name="hljs" remote="./lib/hljs/hl.min.js"></script>
 		<!-- local url reference works -->
 		<!--<script type="blob-module" name="ima" remote="./ima.js"></script>-->
 
@@ -470,8 +972,5 @@
 		></script>
 		<script type="blob-module" name="long" remote="https://cdn.jsdelivr.net/npm/long@5.2.4/index.js" nodownload></script> -->
 	</head>
-	<body>
-		<div></div>
-		<a href="https://google.com"> Este es el texto dentro del link. </a>
-	</body>
+	<body></body>
 </html>

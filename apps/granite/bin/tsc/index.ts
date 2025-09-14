@@ -1,6 +1,12 @@
-import tsc from "typescript";
+import typescript from "typescript";
 
-// // @ts-ignore
-// globalThis.__MODULES__.tsc = tsc;
-
-export default tsc;
+// @ts-ignore
+if (typeof globalThis.std === "undefined") {
+	// @ts-ignore
+	globalThis.std = {
+		typescript,
+	};
+} else {
+	// @ts-ignore
+	globalThis.std.typescript = typescript;
+}

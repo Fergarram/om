@@ -1,0 +1,54 @@
+.hljs {
+  color: #FFFFFF
+}
+
+.hljs-string,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-section,
+.hljs-addition,
+.hljs-attribute,
+.hljs-link {
+  color: #E0E0E0
+}
+
+.hljs-comment,
+.hljs-quote,
+.hljs-meta,
+.hljs-deletion {
+  color: #AAFEE7
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-section,
+.hljs-name,
+.hljs-type,
+.hljs-strong {
+  color: #A0A0A0
+}
+
+.hljs-emphasis {
+  color: #FFFFFF
+}
+
+.hljs-number,
+.hljs-literal {
+  color: #FFFFFF
+}
+
+.hljs-tag,
+.hljs-title {
+  color: #FFFFFF
+}
+
+.hljs-function {
+  color: #FFFFFF
+}
+
+.hljs-operator,
+.hljs-punctuation {
+  color: #FFFFFF
+}
