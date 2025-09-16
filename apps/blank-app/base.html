@@ -2,6 +2,8 @@
 <html>
 	<head>
 		<meta charset="UTF-8" />
+		<meta copy="3" />
+
 		<!-- Browser Support -->
 		<!--
 			Determining browser support is hard.
@@ -29,7 +31,7 @@
 		</script>
 
 		<!-- Style reset and vars -->
-		<style>
+		<style name="base">
 			:root {
 				--font-default: "Inter", sans-serif;
 				--font-monospace: "Departure Mono", monospace;
@@ -176,9 +178,9 @@
 			  Use the modern Firefox focus style for all focusable elements.
 			*/
 
-			:-moz-focusring {
+			/*:-moz-focusring {
 				outline: auto;
-			}
+			}*/
 
 			/*
 			  Add the correct vertical alignment in Chrome and Firefox.
@@ -251,6 +253,7 @@
 				color: inherit; /* 1 */
 				border-radius: 0; /* 2 */
 				background-color: transparent; /* 3 */
+				text-align: left;
 			}
 
 			/*
@@ -298,9 +301,9 @@
 			  Remove the additional `:invalid` styles in Firefox.
 			*/
 
-			:-moz-ui-invalid {
+			/*:-moz-ui-invalid {
 				box-shadow: none;
-			}
+			}*/
 
 			/*
 			  Correct the inability to style the border radius in iOS Safari.
@@ -331,11 +334,12 @@
 			}
 		</style>
 
-		<!-- Style modules -->
-		<style remote="./lib/hljs/styles/stormborn.css"></style>
-
 		<!-- Blob Module Handler -->
 		<script>
+			const preferences = {
+				autoUpdateModules: true,
+			};
+
 			window.addEventListener("load", async () => {
 				const load_start_time = performance.now();
 				const blob_modules = new Map();
@@ -363,7 +367,7 @@
 					});
 				}
 
-				async function getCachedModule(url) {
+				window.getCachedModule = async function (url) {
 					try {
 						const db = await openCache();
 						const transaction = db.transaction(["modules"], "readonly");
@@ -378,9 +382,9 @@
 						console.warn("Failed to get cached module:", error);
 						return null;
 					}
-				}
+				};
 
-				async function setCachedModule(url, content) {
+				window.setCachedModule = async function (url, content) {
 					try {
 						const db = await openCache();
 						const transaction = db.transaction(["modules"], "readwrite");
@@ -400,7 +404,7 @@
 					} catch (error) {
 						console.warn("Failed to cache module:", error);
 					}
-				}
+				};
 
 				// Cache busting function - exposing globally
 				window.clearBlobModuleCache = async function (url = null) {
@@ -478,21 +482,46 @@
 				// Fetch remote styles (with caching) and create local copies before proceeding
 				for (const [style_id, remote_url] of remote_styles) {
 					try {
-						// Check cache first
-						const cached_style = await getCachedModule(remote_url);
 						let remote_content;
 
-						if (cached_style) {
-							console.log(`Using cached style from ${remote_url}`);
-							remote_content = cached_style.content;
-						} else {
-							console.log(`Fetching remote style from ${remote_url}`);
-							const response = await fetch(remote_url);
-							remote_content = await response.text();
+						if (preferences.autoUpdateModules) {
+							// Auto-update mode: fetch from remote first, fallback to cache
+							try {
+								console.log(`Fetching remote style from ${remote_url} (auto-update mode)`);
+								const response = await fetch(remote_url);
+								remote_content = await response.text();
 
-							// Cache the fetched content
-							await setCachedModule(remote_url, remote_content);
-							console.log(`Cached remote style from ${remote_url}`);
+								// Update the cache with fresh content
+								await setCachedModule(remote_url, remote_content);
+								console.log(`Updated cache for remote style from ${remote_url}`);
+							} catch (fetch_error) {
+								console.warn(`Failed to fetch remote style from "${remote_url}", falling back to cache:`, fetch_error);
+
+								// Fallback to cached version
+								const cached_style = await getCachedModule(remote_url);
+								if (cached_style) {
+									console.log(`Using cached style from ${remote_url} as fallback`);
+									remote_content = cached_style.content;
+								} else {
+									throw new Error("No cached version available");
+								}
+							}
+						} else {
+							// Cache-first mode: check cache first, then fetch remote if needed
+							const cached_style = await getCachedModule(remote_url);
+
+							if (cached_style) {
+								console.log(`Using cached style from ${remote_url}`);
+								remote_content = cached_style.content;
+							} else {
+								console.log(`Fetching remote style from ${remote_url}`);
+								const response = await fetch(remote_url);
+								remote_content = await response.text();
+
+								// Cache the fetched content
+								await setCachedModule(remote_url, remote_content);
+								console.log(`Cached remote style from ${remote_url}`);
+							}
 						}
 
 						if (blob_styles.has(style_id)) {
@@ -564,13 +593,20 @@
 
 				const blob_scripts = document.querySelectorAll('script[type="blob-module"]');
 
-				// First pass: collect all module contents and remote URLs
+				// First pass: collect all module contents and remote URLs, skip disabled modules
 				blob_scripts.forEach((script) => {
 					const module_name = script.getAttribute("name");
 					const remote_url = script.getAttribute("remote");
+					const is_disabled = script.hasAttribute("disabled");
 
 					if (!module_name) {
 						console.warn("blob-module script missing name attribute");
+						return;
+					}
+
+					// Skip disabled modules
+					if (is_disabled) {
+						console.log(`Skipping disabled module: "${module_name}"`);
 						return;
 					}
 
@@ -603,26 +639,50 @@
 				// Fetch remote modules (with caching) and create local copies before proceeding
 				for (const [module_name, remote_url] of remote_modules) {
 					try {
-						// Check cache first
-						const cached_module = await getCachedModule(remote_url);
 						let remote_content;
 
-						if (cached_module) {
-							console.log(`Using cached module "${module_name}" from ${remote_url}`);
-							remote_content = cached_module.content;
-						} else {
-							console.log(`Fetching remote module "${module_name}" from ${remote_url}`);
-							const response = await fetch(remote_url);
-							remote_content = await response.text();
+						if (preferences.autoUpdateModules) {
+							// Auto-update mode: fetch from remote first, fallback to cache
+							try {
+								console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
+								const response = await fetch(remote_url);
+								remote_content = await response.text();
 
-							// Cache the fetched content
-							await setCachedModule(remote_url, remote_content);
-							console.log(`Cached remote module "${module_name}"`);
+								// Update the cache with fresh content
+								await setCachedModule(remote_url, remote_content);
+								console.log(`Updated cache for remote module "${module_name}"`);
+							} catch (fetch_error) {
+								console.warn(`Failed to fetch remote module "${module_name}", falling back to cache:`, fetch_error);
+
+								// Fallback to cached version
+								const cached_module = await getCachedModule(remote_url);
+								if (cached_module) {
+									console.log(`Using cached module "${module_name}" as fallback`);
+									remote_content = cached_module.content;
+								} else {
+									throw new Error("No cached version available");
+								}
+							}
+						} else {
+							// Cache-first mode: check cache first, then fetch remote if needed
+							const cached_module = await getCachedModule(remote_url);
+
+							if (cached_module) {
+								console.log(`Using cached module "${module_name}" from ${remote_url}`);
+								remote_content = cached_module.content;
+							} else {
+								console.log(`Fetching remote module "${module_name}" from ${remote_url}`);
+								const response = await fetch(remote_url);
+								remote_content = await response.text();
+
+								// Cache the fetched content
+								await setCachedModule(remote_url, remote_content);
+								console.log(`Cached remote module "${module_name}"`);
+							}
 						}
 
 						if (blob_modules.has(module_name)) {
 							// Compare with existing local content
-							// @TODO: Minify and compare minified content instead
 							const local_content = blob_modules.get(module_name);
 							if (remote_content.trim() !== local_content.trim()) {
 								console.warn(
@@ -654,9 +714,16 @@
 					blob_urls.set(module_name, blob_url);
 				});
 
-				// Clear script tag contents and add blob URL attributes
+				// Clear script tag contents and add blob URL attributes (only for non-disabled modules)
 				blob_scripts.forEach((script) => {
 					const module_name = script.getAttribute("name");
+					const is_disabled = script.hasAttribute("disabled");
+
+					// Skip disabled modules
+					if (is_disabled) {
+						return;
+					}
+
 					const blob_url = blob_urls.get(module_name);
 
 					if (blob_url) {
@@ -678,18 +745,18 @@
 				import_map.textContent = JSON.stringify({ imports }, null, 2);
 				document.head.appendChild(import_map);
 
-				// Run the main module if it exists
+				// Run the main module if it exists and is not disabled
 				if (blob_modules.has("main")) {
 					setTimeout(() => {
 						const main_script = document.createElement("script");
 						main_script.type = "module";
 						main_script.setAttribute("entrypoint", "");
 						main_script.textContent = `
-							const main_start_time = performance.now();
-							const load_duration = main_start_time - ${load_start_time};
-							console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
-							import("main");
-						`;
+						const main_start_time = performance.now();
+						const load_duration = main_start_time - ${load_start_time};
+						console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
+						import("main");
+					`;
 						document.head.appendChild(main_script);
 					}, 0);
 				}
@@ -697,10 +764,11 @@
 				// Expose blob module metadata map
 				window.__blob_module_map__ = new Map();
 
-				// Populate the metadata map
+				// Populate the metadata map (including disabled modules for reference)
 				blob_scripts.forEach((script) => {
 					const module_name = script.getAttribute("name");
 					const remote_url = script.getAttribute("remote") || null;
+					const is_disabled = script.hasAttribute("disabled");
 					const blob_url = blob_urls.get(module_name) || null;
 					const content = blob_modules.get(module_name) || "";
 
@@ -712,6 +780,7 @@
 						src_bytes,
 						remote_url,
 						blob_url,
+						is_disabled,
 					};
 
 					window.__blob_module_map__.set(module_name, metadata);
@@ -743,10 +812,16 @@
 						const module_name = script.getAttribute("name");
 						const remote_url = script.getAttribute("remote");
 						const no_download = script.hasAttribute("nodownload");
+						const is_disabled = script.hasAttribute("disabled");
 
 						// Remove blob attribute if it exists
 						if (script.hasAttribute("blob")) {
 							script.removeAttribute("blob");
+						}
+
+						// Skip processing content for disabled modules
+						if (is_disabled) {
+							return;
 						}
 
 						// Get the module content
@@ -805,179 +880,71 @@
 
 		<!-- Main Entry -->
 		<script type="blob-module" name="main">
-			import { useModuleEditor } from "module-editor";
-				  import acorn from "acorn";
-						import astring from "astring";
-					    import hljs from "hljs";
-						import astravel from "astravel";
-						import formatter from "formatter";
-					    import { useTags } from "ima";
-					    // import "cursor";
+			import { showModuleEditor } from "module-editor";
+			import { useTags } from "ima";
 
-					    const { div, pre } = useTags();
-
-									const comments = [];
-					    const code_sample = `
-					// Hello
-					function fibonacci(n) {if (n <= 1) return n;
-					    return fibonacci(n - 1) + fibonacci(n - 2); // test
-					}
-
-					// Caca
-					const result = fibonacci(10);console.log("Fibonacci(10):", result);
-					    `;
-
-									const ast = acorn.parse(code_sample, {
-				  ecmaVersion: 'latest',
-				  sourceType: 'module',
-						onComment: comments,
-				 locations: true, // Needed for comment attachment
-				 ranges: true     // Needed for comment attachment
-				});
-
-									astravel.attachComments(ast, comments);
-
-									// const code = astring.generate(ast, {
-									// 	comments: true,
-									// 	indent: '\t',
-									// 	lineEnd: '\n',
-									// });
-									const code = formatter.js(code_sample);
-					    // Create highlighted code element
-					    const highlighted_code = hljs.highlight(code.trim(), { language: 'javascript' });
-
-					    const code_block = div({
-					        style: `
-					            background: black;
-					            padding: 20px;
-					            border-radius: 8px;
-					            margin: 20px;
-					            font-size: 11px;
-					            overflow-x: auto;
-									-webkit-font-smoothing: none;
-					        `
-					    }, pre({
-					        innerHTML: highlighted_code.value
-					    }));
-
-					    // Update the content to include the code block
-					    const content = div({
-					        style: `
-					            display: flex;
-					            flex-direction: column;
-					            align-items: center;
-					            justify-content: center;
-					            min-height: 100vh;
-					            color: white;
-					            background: #222;
-					            font-family: monospace;
-					            font-size: 24px;
-					        `,
-													onclick() {
-														useModuleEditor();
-													}
-					    }, [
-					        "Move your cursor around!",
-					        code_block
-					    ]);
-
-					    document.body.replaceChildren(content);
+			showModuleEditor();
 		</script>
 
-		<!-- Cursor Module -->
-		<script type="blob-module" name="cursor">
-			const cursor_canvas = document.createElement('canvas');
-			cursor_canvas.width = 24;
-			cursor_canvas.height = 24;
-			cursor_canvas.style.display = 'none';
-
-			document.body.appendChild(cursor_canvas);
-
-			const ctx = cursor_canvas.getContext('2d');
-			let frame = 0;
-
-			function drawCursor() {
-			    // Clear canvas
-			    ctx.clearRect(0, 0, 24, 24);
-
-			    // Breathing animation - slow scale transformation
-			    const breathing_scale = Math.sin(frame * 0.03) * 0.15 + 1; // oscillate between 0.85 and 1.15
-
-			    ctx.save();
-			    ctx.translate(12, 12); // Move to center
-			    ctx.scale(breathing_scale, breathing_scale);
-			    ctx.translate(-12, -12); // Move back
-
-			    // Draw simple arrow cursor shape
-			    ctx.fillStyle = '#ffffff';
-			    ctx.strokeStyle = '#000000';
-			    ctx.lineWidth = 1.5;
-
-			    // Arrow shape points
-			    ctx.beginPath();
-			    ctx.moveTo(2, 2);   // top point
-			    ctx.lineTo(2, 16);  // down left edge
-			    ctx.lineTo(6, 12);  // inner corner
-			    ctx.lineTo(10, 18); // bottom point
-			    ctx.lineTo(12, 16); // back up
-			    ctx.lineTo(8, 10);  // inner point
-			    ctx.lineTo(16, 10); // right edge
-			    ctx.closePath();
-
-			    ctx.fill();
-			    ctx.stroke();
-
-			    ctx.restore();
-
-			    // Convert canvas to data URL and set as cursor
-			    const data_url = cursor_canvas.toDataURL('image/png');
-			    document.body.style.cursor = `url(${data_url}) 2 2, auto`;
-
-			    frame++;
-			    requestAnimationFrame(drawCursor);
-			}
-
-			// Start the animation
-			drawCursor();
-		</script>
-
-		<!-- Remote Modules -->
-		<script type="blob-module" name="ima" remote="https://cdn.jsdelivr.net/gh/Fergarram/ima@main/ima-0.6.0.esm.js"></script>
+		<!-- Tools -->
 		<script type="blob-module" name="utils" remote="./lib/utils.js"></script>
-		<script type="blob-module" name="module-editor" remote="./lib/module-editor.js"></script>
+		<script type="blob-module" name="ima" remote="./lib/ima.0.6.1.js"></script>
+
+		<!-- Module Editor -->
 		<script type="blob-module" name="acorn" remote="./lib/acorn.js"></script>
 		<script type="blob-module" name="astring" remote="./lib/astring.js"></script>
 		<script type="blob-module" name="astravel" remote="./lib/astravel.js"></script>
 		<script type="blob-module" name="formatter" remote="./lib/formatter.js"></script>
 		<script type="blob-module" name="hljs" remote="./lib/hljs/hl.min.js"></script>
-		<!-- local url reference works -->
-		<!--<script type="blob-module" name="ima" remote="./ima.js"></script>-->
+		<script type="blob-module" name="codepad" remote="./lib/codepad.js"></script>
+		<script type="blob-module" name="module-editor" remote="./lib/module-editor.js"></script>
+		<script type="application/json+module-editor-map">
+			[
+				{
+					"id": "some-id",
+					"module-ref": "ima",
+					"style": "left: 0; position: absolute;",
+					"data": ""
+				}
+			]
+		</script>
 
-		<!-- <script
+		<!-- Tooling (disabled) -->
+		<script
 			type="blob-module"
 			name="tsc"
 			remote="file:///Users/fernando/repos/om/user/spaces/blank/tsc.js"
+			disabled
 			nodownload
 		></script>
 		<script
 			type="blob-module"
 			name="assemblyscript"
 			remote="https://cdn.jsdelivr.net/npm/assemblyscript@0.28.4/dist/assemblyscript.js"
+			disabled
 			nodownload
 		></script>
 		<script
 			type="blob-module"
 			name="asc"
 			remote="https://cdn.jsdelivr.net/npm/assemblyscript@0.28.4/dist/asc.js"
+			disabled
 			nodownload
 		></script>
 		<script
 			type="blob-module"
 			name="binaryen"
 			remote="https://cdn.jsdelivr.net/npm/binaryen@123.0.0-nightly.20250530/index.js"
+			disabled
 			nodownload
 		></script>
-		<script type="blob-module" name="long" remote="https://cdn.jsdelivr.net/npm/long@5.2.4/index.js" nodownload></script> -->
+		<script
+			type="blob-module"
+			name="long"
+			remote="https://cdn.jsdelivr.net/npm/long@5.2.4/index.js"
+			disabled
+			nodownload
+		></script>
 	</head>
 	<body></body>
 </html>
