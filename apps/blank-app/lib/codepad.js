@@ -196,6 +196,12 @@ function highlightSource(formatted_code) {
 		flushChunk();
 	}
 
+	// After all chunks are created, check if we need to add br to the last chunk
+	if (chunks.length > 0 && formatted_code.endsWith("\n")) {
+		const last_chunk = chunks[chunks.length - 1];
+		last_chunk.appendChild(t.br());
+	}
+
 	return [chunks, error_pos];
 }
 
@@ -348,13 +354,14 @@ const theme = css`
 		display: block;
 		position: relative;
 		height: fit-content;
+		min-height: 100%;
 	}
 
 	codepad-editor .wrapper {
 		position: relative;
 		width: 100%;
 		height: fit-content;
-		border: 1px solid var(--color-highlight);
+		min-height: 100%;
 	}
 
 	codepad-editor .content {
@@ -364,6 +371,8 @@ const theme = css`
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
 		height: fit-content;
+		min-height: 100%;
+		padding: 11px;
 	}
 
 	codepad-editor textarea {
@@ -381,6 +390,7 @@ const theme = css`
 		background: transparent;
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
+		padding: 11px;
 	}
 
 	codepad-editor textarea::selection {

@@ -114,7 +114,6 @@ const theme = css`
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 22px;
-		padding: 11px;
 		-webkit-font-smoothing: none;
 	}
 
@@ -129,6 +128,7 @@ const theme = css`
 		font-family: var(--font-monospace);
 		font-size: 11px;
 		line-height: 1.25;
+		padding: 11px;
 	}
 
 	#sidebar .sidebar-item {
