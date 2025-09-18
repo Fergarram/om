@@ -4,6 +4,12 @@ import { Codepad } from "codepad";
 
 const { div, pre, button } = useTags();
 
+let module_editor_root = null;
+
+export function getModuleEditorRoot() {
+	return module_editor_root;
+}
+
 export async function showModuleEditor() {
 	let host = document.getElementById("module-editor-host");
 
@@ -11,55 +17,43 @@ export async function showModuleEditor() {
 		host = div({
 			id: "module-editor-host",
 		});
-	}
 
-	document.body.appendChild(host);
+		document.body.appendChild(host);
+	}
 
 	await finish();
 
-	const shadow_root = host.attachShadow({ mode: "open" });
+	// Create shadow DOM
+	module_editor_root = host.attachShadow({ mode: "open" });
 
+	// Load styles to shadow DOM
 	const base_styles = document.querySelector('style[name="base"]')?.textContent || "";
+	useShadowStyles(module_editor_root, base_styles, "base");
+	useShadowStyles(module_editor_root, theme, "theme");
 
-	useShadowStyles(shadow_root, base_styles, "base");
-	useShadowStyles(shadow_root, theme, "theme");
-
-	shadow_root.appendChild(await Layout(shadow_root));
+	// Mount the module editor
+	module_editor_root.appendChild(await ModuleEditor());
 }
 
-async function Layout(root) {
+async function ModuleEditor() {
 	const modules = Array.from(window.__blob_module_map__.entries())
 		.map(([name, module], index) => {
 			return {
 				name,
 				...module,
-				// is_visible: index === 0,
 				is_visible: true,
 			};
 		})
 		.filter((module) => !module.is_disabled);
 
-	let last_hovered_module = null;
+	let active_tab = "main";
 	let code_panels = [];
 
 	for (let module of modules) {
-		code_panels.push(
-			await Codepad({
-				root,
-				id: `codepad-module-${module.name}`,
-				module,
-				onmouseenter() {
-					last_hovered_module = module.name;
-				},
-			}),
-		);
+		code_panels.push(await Codepad({ module, style: () => `display: ${active_tab === module.name ? "block" : "none"}` }));
 	}
 
-	const main_panel = {
-		current: null,
-	};
-
-	const layout_element = div(
+	return div(
 		{
 			id: "module-editor",
 		},
@@ -71,12 +65,8 @@ async function Layout(root) {
 				return button(
 					{
 						class: "sidebar-item",
-						"panel-hovered": () => (last_hovered_module === module.name ? "true" : "false"),
-						onmousedown() {
-							const codepad_el = root.getElementById(`codepad-module-${module.name}`);
-							if (codepad_el) {
-								codepad_el.scrollIntoView({ behavior: "instant" });
-							}
+						onclick() {
+							active_tab = module.name;
 						},
 					},
 					module.name,
@@ -86,39 +76,10 @@ async function Layout(root) {
 		div(
 			{
 				id: "main-panel",
-				ref: main_panel,
 			},
 			code_panels,
 		),
 	);
-
-	// Setup intersection observer after the layout is created
-	await finish();
-
-	// const observer = new IntersectionObserver(
-	// 	(entries) => {
-	// 		entries.forEach((entry) => {
-	// 			const codepad_element = entry.target.querySelector(".content");
-	// 			if (entry.isIntersecting) {
-	// 				codepad_element.style.display = "block";
-	// 			} else {
-	// 				codepad_element.style.display = "none";
-	// 			}
-	// 		});
-	// 	},
-	// 	{
-	// 		root: main_panel.current,
-	// 		rootMargin: "100px 0px",
-	// 		threshold: 0,
-	// 	},
-	// );
-
-	// const codepad_elements = main_panel.current.querySelectorAll("codepad-editor");
-	// codepad_elements.forEach((element) => {
-	// 	observer.observe(element);
-	// });
-
-	return layout_element;
 }
 
 const theme = css`

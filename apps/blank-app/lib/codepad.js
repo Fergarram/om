@@ -1,15 +1,17 @@
-import { useTags } from "ima";
-import { css, finish, useShadowStyles, tryCatch, useCustomElement } from "utils";
+import { useTags, useCustomTag } from "ima";
+import { css, finish, useShadowStyles, tryCatch } from "utils";
 
-import acorn from "acorn";
-import astring from "astring";
 import hljs from "hljs";
-import astravel from "astravel";
 import formatter from "formatter";
+import { getModuleEditorRoot } from "module-editor";
+
+const FONT_SIZE = 11;
+const LINE_HEIGHT = 1.25;
+const CHUNK_SIZE = 20;
 
 const t = useTags();
 
-useCustomElement("codepad-editor", function ({ $listen }) {
+const CodepadEditor = useCustomTag("codepad-editor", function ({ $listen }) {
 	return {
 		connected() {
 			this.dispatchEvent(new CustomEvent("mount"));
@@ -34,7 +36,7 @@ function highlightSource(formatted_code) {
 
 		if (char === "\n") {
 			line_count++;
-			if (line_count === 20) {
+			if (line_count === CHUNK_SIZE) {
 				chunks.push(
 					t.div({
 						class: "code-chunk",
@@ -57,10 +59,27 @@ function highlightSource(formatted_code) {
 		);
 	}
 
+	// If the original code ends with a newline, add an empty line to match textarea behavior
+	if (formatted_code.endsWith("\n")) {
+		if (chunks.length === 0) {
+			chunks.push(
+				t.div({
+					class: "code-chunk",
+					innerHTML: "\n",
+				}),
+			);
+		} else {
+			// Add newline to last chunk
+			const last_chunk = chunks[chunks.length - 1];
+			last_chunk.innerHTML += "\n";
+		}
+	}
+
 	return chunks;
 }
 
-export async function Codepad({ root, module, ...props }) {
+export async function Codepad({ module, ...props }) {
+	const root = getModuleEditorRoot();
 	useShadowStyles(root, theme, "codepad-editor");
 
 	const [source, error] = await tryCatch(async () => {
@@ -100,13 +119,11 @@ export async function Codepad({ root, module, ...props }) {
 							if (!chunk_data.has(chunk)) {
 								chunk_data.set(chunk, {
 									content: chunk.innerHTML,
-									height: `${chunk.offsetHeight}px`,
 								});
 							}
 
-							const { height } = chunk_data.get(chunk);
+							chunk.style.minHeight = `${chunk.offsetHeight}px`;
 							chunk.innerHTML = "";
-							chunk.style.minHeight = height;
 						}
 					});
 				},
@@ -121,7 +138,7 @@ export async function Codepad({ root, module, ...props }) {
 		}
 	}
 
-	return t["codepad-editor"](
+	return CodepadEditor(
 		{
 			...props,
 			ref: editor_ref,
@@ -160,14 +177,16 @@ export async function Codepad({ root, module, ...props }) {
 				spellcheck: "false",
 				oninput() {
 					const updated_source = textarea_ref.current.value;
-					formatted_code = formatter.js(updated_source);
-					chunk_elements = highlightSource(formatted_code);
+					chunk_elements = highlightSource(updated_source);
 					content_ref.current.replaceChildren(...chunk_elements);
 
 					observeChunkElements();
 				},
 			}),
 		),
+		t.div({
+			class: "bottom-spacer"
+		})
 	);
 }
 
@@ -179,11 +198,12 @@ const theme = css`
 	codepad-editor {
 		display: block;
 		position: relative;
+		height: fit-content;
 	}
 
 	codepad-editor .wrapper {
-		position: relative;
 		padding: 11px;
+		position: relative;
 		border: 1px solid var(--color-highlight);
 	}
 
@@ -192,27 +212,30 @@ const theme = css`
 		overflow-x: scroll;
 		user-select: none;
 		pointer-events: none;
+		font-size: ${FONT_SIZE}px;
+		line-height: ${LINE_HEIGHT};
 	}
 
 	codepad-editor textarea {
 		position: absolute;
-		padding: 11px;
 		top: 0;
 		left: 0;
 		width: 100%;
 		height: 100%;
+		padding: 11px;
 		white-space: nowrap;
-		overflow-x: auto;
-		overflow-y: auto;
+		overflow: hidden;
 		word-wrap: normal;
 		resize: none;
 		color: transparent;
-		caret-color: var(--color-highlight);
+		caret-color: #CACACA;
 		background: transparent;
+		font-size: ${FONT_SIZE}px;
+		line-height: ${LINE_HEIGHT};
 	}
 
 	codepad-editor textarea::selection {
-		background-color: var(--color-highlight);
+		background-color: #CACACA;
 		color: black;
 	}
 
@@ -224,56 +247,33 @@ const theme = css`
 		margin-bottom: 4px;
 	}
 
+	codepad-editor .bottom-spacer {
+		height: 80vh;
+	}
+
 	/*
 	// Color scheme
 	*/
 
-	.hljs-number,
-	.hljs-string,
-	.hljs-attribute,
-	.hljs-link {
-		color: #e0e0e0;
-	}
-
-	.hljs-template-variable {
+	codepad-editor .code-chunk {
 		color: #ffffff;
 	}
 
-	.hljs-comment,
-	.hljs-quote,
-	.hljs-meta,
-	.hljs-deletion {
+	.hljs-literal,
+	.hljs-number,
+	.hljs-string {
+		color: #d0d0d0;
+	}
+
+	.hljs-string .hljs-subst {
+		color: #ffffff;
+	}
+
+	.hljs-comment {
 		color: var(--color-highlight);
 	}
 
-	.hljs-keyword,
-	.hljs-selector-tag,
-	.hljs-section,
-	.hljs-name,
-	.hljs-type,
-	.hljs-strong {
+	.hljs-keyword {
 		color: #a0a0a0;
-	}
-
-	.hljs-emphasis {
-		color: #ffffff;
-	}
-
-	.hljs-literal {
-		color: #ffffff;
-	}
-
-	.hljs-tag,
-	.hljs-title {
-		color: #ffffff;
-	}
-
-	.hljs-function {
-		color: #ffffff;
-	}
-
-	.hljs-operator,
-	.hljs-punctuation {
-		color: #ffffff;
 	}
 `;

@@ -1,59 +1,3 @@
-export function useCustomElement(tag_name, definition) {
-	if (!customElements.get(tag_name)) {
-		customElements.define(
-			tag_name,
-			class extends HTMLElement {
-				static observedAttributes = definition.attrs ?? [];
-				#connected;
-				#disconnected;
-				#adopted;
-				#attributeChanged;
-
-				constructor() {
-					super();
-
-					const ac = new AbortController();
-					const $listen = (evt, handler, options = true) => {
-						let defaultOptions = { signal: ac.signal };
-						if (typeof options === "boolean") {
-							defaultOptions.capture = options;
-						} else {
-							defaultOptions = Object.assign(options, defaultOptions);
-						}
-						this.addEventListener(evt, handler, defaultOptions);
-					};
-
-					this.ac = ac;
-
-					const { connected, disconnected, adopted, attributeChanged } = definition.apply(this, [{ $listen }]) ?? {};
-
-					this.#connected = connected?.bind(this);
-					this.#disconnected = disconnected?.bind(this);
-					this.#adopted = adopted?.bind(this);
-					this.#attributeChanged = attributeChanged?.bind(this);
-				}
-
-				connectedCallback() {
-					this.#connected?.();
-				}
-
-				disconnectedCallback() {
-					this.#disconnected?.();
-					this.ac.abort();
-				}
-
-				adoptedCallback() {
-					this.#adopted?.();
-				}
-
-				attributeChangedCallback(...args) {
-					this.#attributeChanged?.(...args);
-				}
-			},
-		);
-	}
-}
-
 export function uniqueId() {
 	// Check if crypto API is available
 	if (typeof crypto === "undefined") {
@@ -151,13 +95,17 @@ export function debounce(fn, delay) {
 	return debounced;
 }
 
-export async function tryCatch(func) {
+export function tryCatch(func) {
 	try {
 		const result = func();
 		// Check if the result is a promise
 		if (result instanceof Promise) {
-			return [await result, null];
+			// Return a promise that resolves to the tuple
+			return result
+				.then((resolved_result) => [resolved_result, null])
+				.catch((error) => [null, error instanceof Error ? error : new Error(String(error))]);
 		}
+		// Return the tuple directly for synchronous results
 		return [result, null];
 	} catch (error) {
 		return [null, error instanceof Error ? error : new Error(String(error))];
