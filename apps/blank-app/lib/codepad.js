@@ -24,6 +24,7 @@ const CodepadEditor = useCustomTag("codepad-editor", function ({ $listen }) {
 });
 
 function highlightSource(formatted_code) {
+	const start_time = performance.now();
 	const chunks = [];
 	let current_chunk_content = [];
 	let line_count = 0;
@@ -144,7 +145,14 @@ function highlightSource(formatted_code) {
 	function flushCurrentText() {
 		if (current_text) {
 			if (current_class) {
-				current_chunk_content.push(t.span({ class: current_class }, current_text));
+				current_chunk_content.push(
+					t.span(
+						{
+							class: current_class,
+						},
+						current_text,
+					),
+				);
 			} else {
 				current_chunk_content.push(current_text);
 			}
@@ -202,6 +210,9 @@ function highlightSource(formatted_code) {
 		last_chunk.appendChild(t.br());
 	}
 
+	const end_time = performance.now();
+	// console.log(`Chunk generation took ${end_time - start_time} milliseconds for ${chunks.length} chunks`);
+
 	return [chunks, error_pos];
 }
 
@@ -215,9 +226,15 @@ export async function Codepad({ module, ...props }) {
 		return source;
 	});
 
-	const editor_ref = { current: null };
-	const textarea_ref = { current: null };
-	const content_ref = { current: null };
+	const editor_ref = {
+		current: null,
+	};
+	const textarea_ref = {
+		current: null,
+	};
+	const content_ref = {
+		current: null,
+	};
 
 	const chunk_data = new Map();
 
@@ -225,8 +242,15 @@ export async function Codepad({ module, ...props }) {
 		indent_char: "\t",
 		wrap_line_length: "128",
 	});
+
+	let original_source = formatted_code;
+
 	let [chunk_elements, error_pos] = highlightSource(formatted_code);
 	let intersection_observer = null;
+
+	let has_changes = false;
+
+	let last_save_mode = null;
 
 	function observeChunkElements() {
 		const chunk_els = editor_ref.current.querySelectorAll(".code-chunk");
@@ -292,14 +316,114 @@ export async function Codepad({ module, ...props }) {
 			{
 				class: "wrapper",
 			},
-			t.div({
-				class: "header",
-			},
-				t.div({
-					class: "title",
+			t.div(
+				{
+					class: "header",
 				},
-					module.name
-				)
+				t.div(
+					{
+						class: "bar",
+					},
+					t.div(
+						module.name,
+						() => (has_changes ? "*" : ""),
+						() =>
+							window.__blob_module_loader_settings__.auto_update_modules && module.remote_url !== null
+								? last_save_mode
+									? ` (${last_save_mode})`
+									: " (remote)"
+								: " (local)",
+					),
+					t.button(
+						{
+							style: () => `display: ${has_changes ? "block" : "none"};`,
+							async onclick() {
+								const updated_source = textarea_ref.current.value;
+
+								// Update the blob_modules Map in the blob module loader
+								if (window.__blob_modules__ && window.__blob_modules__.has(module.module_name)) {
+									window.__blob_modules__.set(module.module_name, updated_source);
+								}
+
+								// Check if we can save individual module files
+								if (location.origin === "file://" && globalThis.__sys && module.remote_url) {
+									// Check if the URL is not hosted externally
+									const is_external =
+										module.remote_url.startsWith("https://") || module.remote_url.startsWith("http://");
+
+									if (!is_external) {
+										let module_full_path;
+
+										if (module.remote_url.startsWith("file://")) {
+											// Absolute file:// URL - extract the path
+											module_full_path = module.remote_url.replace("file://", "");
+										} else if (module.remote_url.startsWith("/")) {
+											// Absolute path from root
+											console.warn(
+												"Served from server so we can't save it — an API for this server needs to be provided.",
+											);
+										} else {
+											// Relative path
+											try {
+												module_full_path = await __sys.invoke("file.resolve", module.remote_url);
+											} catch (error) {
+												console.error(`Failed to resolve module path ${module.remote_url}:`, error);
+											}
+										}
+
+										if (module_full_path) {
+											try {
+												await __sys.invoke("file.write", module_full_path, updated_source);
+												last_save_mode = "remote";
+												console.log(`Saved module file: ${module_full_path}`);
+
+												// Reset the has_changes flag
+												has_changes = false;
+												original_source = updated_source;
+												return;
+											} catch (error) {
+												console.error(`Failed to save module file ${module_full_path}:`, error);
+												// Fall back to saving the whole HTML file
+											}
+										}
+									}
+								}
+
+								// If not, update the script tag content
+								const script_tags = document.querySelectorAll('script[type="blob-module"]');
+								const target_script = Array.from(script_tags).find(
+									(script) => script.getAttribute("name") === module.module_name,
+								);
+
+								if (target_script) {
+									target_script.textContent = updated_source;
+								}
+
+								// Handle special case for blob-module-loader
+								if (module.module_name === "blob-module-loader") {
+									const loader_script = document.getElementById("blob-module-loader");
+									if (loader_script) {
+										loader_script.textContent = updated_source;
+									}
+								}
+
+								// Fallback: Save the HTML file
+								try {
+									window.saveHtmlFile();
+									last_save_mode = "local";
+									console.log(`Saved full html from module: ${module.module_name}`);
+								} catch (error) {
+									console.error(`Failed to save html from module: ${module.module_name}:`, error);
+								}
+
+								// Reset the has_changes flag
+								has_changes = false;
+								original_source = updated_source;
+							},
+						},
+						"save",
+					),
+				),
 			),
 			t.div(
 				{
@@ -315,6 +439,8 @@ export async function Codepad({ module, ...props }) {
 					const updated_source = textarea_ref.current.value;
 					[chunk_elements, error_pos] = highlightSource(updated_source);
 					content_ref.current.replaceChildren(...chunk_elements);
+
+					has_changes = updated_source !== original_source;
 
 					observeChunkElements();
 				},
@@ -338,7 +464,11 @@ export async function Codepad({ module, ...props }) {
 						}
 
 						// Trigger the input event to update syntax highlighting
-						textarea.dispatchEvent(new Event("input", { bubbles: true }));
+						textarea.dispatchEvent(
+							new Event("input", {
+								bubbles: true,
+							}),
+						);
 					}
 				},
 			}),
@@ -347,7 +477,7 @@ export async function Codepad({ module, ...props }) {
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
 					height: ${LINE_HEIGHT * FONT_SIZE + 2}px;
-					top: ${error_pos && error_pos.line * LINE_HEIGHT * FONT_SIZE}px;
+					top: ${error_pos && error_pos.line * LINE_HEIGHT * FONT_SIZE - 4}px;
 				`,
 			}),
 		),
@@ -421,13 +551,20 @@ const theme = css`
 		z-index: 1;
 	}
 
-	codepad-editor .header .title {
+	codepad-editor .header .bar {
 		position: absolute;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
 		height: fit-content;
 		width: 100%;
 		top: 0;
 		left: 0;
 		background-color: #333;
+	}
+
+	codepad-editor .header .bar button:hover {
+		background-color: #666;
 	}
 
 	/*
@@ -456,17 +593,13 @@ const theme = css`
 		color: #a0a0a0;
 	}
 
-	.hl-error {
-		/*color: #ff6b6b;*/
-	}
-
 	.hl-error-indicator {
 		position: absolute;
 		width: 100%;
 		background-color: red;
 		mix-blend-mode: exclusion;
 		left: 0;
-		transform: translateY(-100%);
+		transform: translateY(100%);
 		pointer-events: none;
 	}
 `;
