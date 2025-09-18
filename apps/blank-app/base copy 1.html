@@ -337,7 +337,7 @@
 		<!-- Blob Module Loader -->
 		<script id="blob-module-loader">
 			window.__blob_module_loader_settings__ = {
-				auto_update_modules: true,
+				prefers_remote_modules: true,
 			};
 
 			window.addEventListener("load", async () => {
@@ -485,7 +485,7 @@
 					try {
 						let remote_content;
 
-						if (__blob_module_loader_settings__.auto_update_modules) {
+						if (__blob_module_loader_settings__.prefers_remote_modules) {
 							// Auto-update mode: fetch from remote first, fallback to cache
 							try {
 								console.log(`Fetching remote style from ${remote_url} (auto-update mode)`);
@@ -529,7 +529,7 @@
 							// Compare with existing local content
 							const local_content = blob_styles.get(style_id);
 							if (remote_content.trim() !== local_content.trim()) {
-								if (__blob_module_loader_settings__.auto_update_modules) {
+								if (__blob_module_loader_settings__.prefers_remote_modules) {
 									console.log(
 										`Remote and local content differ for style "${remote_url}". Using remote content (auto-update mode).`,
 									);
@@ -652,7 +652,7 @@
 					try {
 						let remote_content;
 
-						if (__blob_module_loader_settings__.auto_update_modules) {
+						if (__blob_module_loader_settings__.prefers_remote_modules) {
 							// Auto-update mode: fetch from remote first, fallback to cache
 							try {
 								console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
@@ -696,7 +696,7 @@
 							// Compare with existing local content
 							const local_content = __blob_modules__.get(module_name);
 							if (remote_content.trim() !== local_content.trim()) {
-								if (__blob_module_loader_settings__.auto_update_modules) {
+								if (__blob_module_loader_settings__.prefers_remote_modules) {
 									console.log(
 										`Remote and local content differ for module "${module_name}". Using remote content (auto-update mode).`,
 									);
@@ -885,8 +885,12 @@
 				window.saveHtmlFile = async function () {
 					// Try to use Om sys function
 					if (location.origin === "file://" && globalThis.__sys) {
-						await __sys.invoke("file.write", location.pathname, getDocumentOuterHtml());
-						return;
+						try {
+							await __sys.invoke("file.write", location.pathname, getDocumentOuterHtml());
+							return;
+						} catch (error) {
+							console.error("Failed to save HTML file using Om sys:", error);
+						}
 					}
 
 					// Check if File System Access API is available
@@ -923,6 +927,7 @@
 					}
 
 					// Fallback to download method
+					alert("File System Access API not available, falling back to download");
 					console.log("File System Access API not available, falling back to download");
 
 					const html_content = getDocumentOuterHtml();

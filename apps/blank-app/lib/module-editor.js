@@ -127,7 +127,7 @@ const theme = css`
 		font-family: var(--font-monospace);
 		font-size: 11px;
 		line-height: 1.25;
-		padding: 11px;
+		padding: 14px;
 		background: #333;
 	}
 

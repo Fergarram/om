@@ -328,7 +328,7 @@ export async function Codepad({ module, ...props }) {
 						module.name,
 						() => (has_changes ? "*" : ""),
 						() =>
-							window.__blob_module_loader_settings__.auto_update_modules && module.remote_url !== null
+							window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
 								? last_save_mode
 									? ` (${last_save_mode})`
 									: " (remote)"
@@ -346,7 +346,12 @@ export async function Codepad({ module, ...props }) {
 								}
 
 								// Check if we can save individual module files
-								if (location.origin === "file://" && globalThis.__sys && module.remote_url) {
+								if (
+									window.__blob_module_loader_settings__.prefers_remote_modules &&
+									location.origin === "file://" &&
+									globalThis.__sys &&
+									module.remote_url
+								) {
 									// Check if the URL is not hosted externally
 									const is_external =
 										module.remote_url.startsWith("https://") || module.remote_url.startsWith("http://");
