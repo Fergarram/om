@@ -27,6 +27,8 @@ function highlightSource(formatted_code) {
 	const chunks = [];
 	let current_chunk_content = [];
 	let line_count = 0;
+	let parsing_failed = false;
+	let error_pos = null;
 
 	// Create a mapping of character positions to highlight classes
 	const highlights = new Map();
@@ -127,8 +129,12 @@ function highlightSource(formatted_code) {
 			}
 		});
 	} catch (error) {
-		// If parsing fails, we'll just return unhighlighted chunks
-		console.warn("Acorn parsing failed:", error);
+		// If parsing fails, mark the entire code as error
+		error_pos = error.loc;
+		parsing_failed = true;
+		for (let i = 0; i < formatted_code.length; i++) {
+			highlights.set(i, "hl-error");
+		}
 	}
 
 	// Build content array
@@ -149,9 +155,9 @@ function highlightSource(formatted_code) {
 	function flushChunk() {
 		flushCurrentText();
 		chunks.push(
-			t.div(
+			t.pre(
 				{
-					class: "code-chunk",
+					class: parsing_failed ? "code-chunk hl-error-chunk" : "code-chunk",
 				},
 				...current_chunk_content,
 			),
@@ -183,32 +189,14 @@ function highlightSource(formatted_code) {
 
 	// Add remaining chunk if any
 	if (current_chunk_content.length > 0 || current_text) {
+		// Handle trailing newline before flushing
+		if (formatted_code.endsWith("\n") && !current_text.endsWith("\n")) {
+			current_text += "\n";
+		}
 		flushChunk();
 	}
 
-	// Handle trailing newline
-	if (formatted_code.endsWith("\n")) {
-		if (chunks.length === 0) {
-			chunks.push(
-				t.div(
-					{
-						class: "code-chunk",
-					},
-					"\n",
-				),
-			);
-		} else {
-			const last_chunk = chunks[chunks.length - 1];
-			// Add newline as the last child
-			if (typeof last_chunk.children[last_chunk.children.length - 1] === "string") {
-				last_chunk.children[last_chunk.children.length - 1] += "\n";
-			} else {
-				last_chunk.children.push("\n");
-			}
-		}
-	}
-
-	return chunks;
+	return [chunks, error_pos];
 }
 
 export async function Codepad({ module, ...props }) {
@@ -227,8 +215,11 @@ export async function Codepad({ module, ...props }) {
 
 	const chunk_data = new Map();
 
-	let formatted_code = formatter.js(source);
-	let chunk_elements = highlightSource(formatted_code);
+	let formatted_code = formatter.js(source, {
+		indent_char: "\t",
+		wrap_line_length: "128",
+	});
+	let [chunk_elements, error_pos] = highlightSource(formatted_code);
 	let intersection_observer = null;
 
 	function observeChunkElements() {
@@ -246,6 +237,7 @@ export async function Codepad({ module, ...props }) {
 								const { children } = chunk_data.get(chunk);
 								chunk.replaceChildren(...children);
 								chunk.style.removeProperty("min-height");
+								chunk.style.removeProperty("min-width");
 							}
 						} else {
 							// Code chunk is not visible - store content and set fixed height
@@ -257,6 +249,7 @@ export async function Codepad({ module, ...props }) {
 							}
 
 							chunk.style.minHeight = `${chunk.offsetHeight}px`;
+							chunk.style.minWidth = `${chunk.offsetWidth}px`;
 							chunk.replaceChildren(); // Clear all children
 						}
 					});
@@ -291,15 +284,9 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				class: "module-name",
-			},
-			module.name,
-		),
-		t.div(
-			{
 				class: "wrapper",
 			},
-			t.pre(
+			t.div(
 				{
 					ref: content_ref,
 					class: "content",
@@ -311,7 +298,7 @@ export async function Codepad({ module, ...props }) {
 				spellcheck: "false",
 				oninput() {
 					const updated_source = textarea_ref.current.value;
-					chunk_elements = highlightSource(updated_source);
+					[chunk_elements, error_pos] = highlightSource(updated_source);
 					content_ref.current.replaceChildren(...chunk_elements);
 
 					observeChunkElements();
@@ -340,10 +327,15 @@ export async function Codepad({ module, ...props }) {
 					}
 				},
 			}),
+			t.div({
+				class: "hl-error-indicator",
+				style: () => `
+					display: ${error_pos ? "block" : "none"};
+					height: ${LINE_HEIGHT * FONT_SIZE + 2}px;
+					top: ${error_pos && error_pos.line * LINE_HEIGHT * FONT_SIZE}px;
+				`,
+			}),
 		),
-		t.div({
-			class: "bottom-spacer",
-		}),
 	);
 }
 
@@ -359,18 +351,19 @@ const theme = css`
 	}
 
 	codepad-editor .wrapper {
-		padding: 11px;
 		position: relative;
+		width: 100%;
+		height: fit-content;
 		border: 1px solid var(--color-highlight);
 	}
 
 	codepad-editor .content {
 		position: relative;
-		overflow-x: scroll;
 		user-select: none;
 		pointer-events: none;
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
+		height: fit-content;
 	}
 
 	codepad-editor textarea {
@@ -379,7 +372,6 @@ const theme = css`
 		left: 0;
 		width: 100%;
 		height: 100%;
-		padding: 11px;
 		white-space: nowrap;
 		overflow: hidden;
 		word-wrap: normal;
@@ -398,14 +390,6 @@ const theme = css`
 
 	codepad-editor textarea:focus {
 		outline: none;
-	}
-
-	codepad-editor .module-name {
-		margin-bottom: 4px;
-	}
-
-	codepad-editor .bottom-spacer {
-		height: 80vh;
 	}
 
 	/*
@@ -432,5 +416,19 @@ const theme = css`
 
 	.hl-keyword {
 		color: #a0a0a0;
+	}
+
+	.hl-error {
+		/*color: #ff6b6b;*/
+	}
+
+	.hl-error-indicator {
+		position: absolute;
+		width: 100%;
+		background-color: red;
+		mix-blend-mode: exclusion;
+		left: 0;
+		transform: translateY(-100%);
+		pointer-events: none;
 	}
 `;

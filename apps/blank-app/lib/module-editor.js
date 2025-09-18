@@ -36,15 +36,30 @@ export async function showModuleEditor() {
 }
 
 async function ModuleEditor() {
-	const modules = Array.from(window.__blob_module_map__.entries())
-		.map(([name, module], index) => {
-			return {
-				name,
-				...module,
-				is_visible: true,
-			};
-		})
-		.filter((module) => !module.is_disabled);
+	const blob_module_loader_script = document.getElementById("blob-module-loader");
+	const loader_blob = new Blob([blob_module_loader_script.textContent], { type: "text/javascript" });
+	const modules = [
+		{
+			name: "blob-module-loader",
+			module_name: "blob-module-loader",
+			blob_url: blob_module_loader_script ? URL.createObjectURL(loader_blob) : "",
+			remote_url: null,
+			src_bytes: blob_module_loader_script ? loader_blob.size : 0,
+			is_disabled: false,
+			is_visible: true,
+		},
+		...Array.from(window.__blob_module_map__.entries())
+			.map(([name, module], index) => {
+				return {
+					name,
+					...module,
+					is_visible: true,
+				};
+			})
+			.filter((module) => !module.is_disabled),
+	];
+
+	console.log(modules);
 
 	let active_tab = "main";
 	let code_panels = [];
@@ -65,6 +80,7 @@ async function ModuleEditor() {
 				return button(
 					{
 						class: "sidebar-item",
+						"data-active": () => active_tab === module.name,
 						onclick() {
 							active_tab = module.name;
 						},
@@ -125,6 +141,11 @@ const theme = css`
 	}
 
 	#sidebar .sidebar-item[panel-hovered="true"] {
+		background: var(--color-highlight);
+		color: black;
+	}
+
+	#sidebar .sidebar-item[data-active="true"] {
 		background: var(--color-highlight);
 		color: black;
 	}
