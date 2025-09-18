@@ -1,7 +1,7 @@
 import { useTags, useCustomTag } from "ima";
 import { css, finish, useShadowStyles, tryCatch } from "utils";
 
-import hljs from "hljs";
+import acorn from "acorn";
 import formatter from "formatter";
 import { getModuleEditorRoot } from "module-editor";
 
@@ -24,54 +24,187 @@ const CodepadEditor = useCustomTag("codepad-editor", function ({ $listen }) {
 });
 
 function highlightSource(formatted_code) {
-	const highlighted_code = hljs.highlight(formatted_code, { language: "javascript" });
 	const chunks = [];
-
-	let current_chunk = "";
+	let current_chunk_content = [];
 	let line_count = 0;
 
-	for (let i = 0; i < highlighted_code.value.length; i++) {
-		const char = highlighted_code.value[i];
-		current_chunk += char;
+	// Create a mapping of character positions to highlight classes
+	const highlights = new Map();
 
+	try {
+		// Parse the code and collect token information
+		const tokens = [];
+		const comments = [];
+
+		acorn.parse(formatted_code, {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			onToken: tokens,
+			onComment: comments,
+		});
+
+		// Map comments
+		comments.forEach((comment) => {
+			for (let i = comment.start; i < comment.end; i++) {
+				highlights.set(i, "hljs-comment");
+			}
+		});
+
+		// Define keywords manually to be safe
+		const keywords = new Set([
+			"const",
+			"let",
+			"var",
+			"function",
+			"async",
+			"await",
+			"return",
+			"if",
+			"else",
+			"for",
+			"while",
+			"do",
+			"switch",
+			"case",
+			"default",
+			"try",
+			"catch",
+			"finally",
+			"throw",
+			"new",
+			"delete",
+			"typeof",
+			"instanceof",
+			"in",
+			"of",
+			"class",
+			"extends",
+			"super",
+			"static",
+			"import",
+			"export",
+			"from",
+			"as",
+			"default",
+			"this",
+			"break",
+			"continue",
+			"debugger",
+			"with",
+			"yield",
+		]);
+
+		// Map tokens
+		tokens.forEach((token) => {
+			const start = token.start;
+			const end = token.end;
+
+			if (token.type.keyword || keywords.has(token.value)) {
+				// Keywords
+				for (let i = start; i < end; i++) {
+					highlights.set(i, "hljs-keyword");
+				}
+			} else if (token.type.label === "string") {
+				// String literals
+				for (let i = start; i < end; i++) {
+					highlights.set(i, "hljs-string");
+				}
+			} else if (token.type.label === "num") {
+				// Number literals
+				for (let i = start; i < end; i++) {
+					highlights.set(i, "hljs-number");
+				}
+			} else if (
+				token.value === "true" ||
+				token.value === "false" ||
+				token.value === "null" ||
+				token.value === "undefined"
+			) {
+				// Boolean and null literals
+				for (let i = start; i < end; i++) {
+					highlights.set(i, "hljs-literal");
+				}
+			}
+		});
+	} catch (error) {
+		// If parsing fails, we'll just return unhighlighted chunks
+		console.warn("Acorn parsing failed:", error);
+	}
+
+	// Build content array
+	let current_text = "";
+	let current_class = null;
+
+	function flushCurrentText() {
+		if (current_text) {
+			if (current_class) {
+				current_chunk_content.push(t.span({ class: current_class }, current_text));
+			} else {
+				current_chunk_content.push(current_text);
+			}
+			current_text = "";
+		}
+	}
+
+	function flushChunk() {
+		flushCurrentText();
+		chunks.push(
+			t.div(
+				{
+					class: "code-chunk",
+				},
+				...current_chunk_content,
+			),
+		);
+		current_chunk_content = [];
+		line_count = 0;
+	}
+
+	for (let i = 0; i < formatted_code.length; i++) {
+		const char = formatted_code[i];
+		const highlight_class = highlights.get(i);
+
+		// If class changes, flush current text
+		if (highlight_class !== current_class) {
+			flushCurrentText();
+			current_class = highlight_class;
+		}
+
+		current_text += char;
+
+		// Handle chunking
 		if (char === "\n") {
 			line_count++;
 			if (line_count === CHUNK_SIZE) {
-				chunks.push(
-					t.div({
-						class: "code-chunk",
-						innerHTML: current_chunk,
-					}),
-				);
-				current_chunk = "";
-				line_count = 0;
+				flushChunk();
 			}
 		}
 	}
 
 	// Add remaining chunk if any
-	if (current_chunk) {
-		chunks.push(
-			t.div({
-				class: "code-chunk",
-				innerHTML: current_chunk,
-			}),
-		);
+	if (current_chunk_content.length > 0 || current_text) {
+		flushChunk();
 	}
 
-	// If the original code ends with a newline, add an empty line to match textarea behavior
+	// Handle trailing newline
 	if (formatted_code.endsWith("\n")) {
 		if (chunks.length === 0) {
 			chunks.push(
-				t.div({
-					class: "code-chunk",
-					innerHTML: "\n",
-				}),
+				t.div(
+					{
+						class: "code-chunk",
+					},
+					"\n",
+				),
 			);
 		} else {
-			// Add newline to last chunk
 			const last_chunk = chunks[chunks.length - 1];
-			last_chunk.innerHTML += "\n";
+			// Add newline as the last child
+			if (typeof last_chunk.children[last_chunk.children.length - 1] === "string") {
+				last_chunk.children[last_chunk.children.length - 1] += "\n";
+			} else {
+				last_chunk.children.push("\n");
+			}
 		}
 	}
 
@@ -110,20 +243,21 @@ export async function Codepad({ module, ...props }) {
 						if (entry.isIntersecting) {
 							// Code chunk is visible - restore content
 							if (chunk_data.has(chunk)) {
-								const { content } = chunk_data.get(chunk);
-								chunk.innerHTML = content;
+								const { children } = chunk_data.get(chunk);
+								chunk.replaceChildren(...children);
 								chunk.style.removeProperty("min-height");
 							}
 						} else {
 							// Code chunk is not visible - store content and set fixed height
 							if (!chunk_data.has(chunk)) {
+								// Store the actual DOM children
 								chunk_data.set(chunk, {
-									content: chunk.innerHTML,
+									children: Array.from(chunk.childNodes).map((node) => node.cloneNode(true)),
 								});
 							}
 
 							chunk.style.minHeight = `${chunk.offsetHeight}px`;
-							chunk.innerHTML = "";
+							chunk.replaceChildren(); // Clear all children
 						}
 					});
 				},
@@ -182,11 +316,34 @@ export async function Codepad({ module, ...props }) {
 
 					observeChunkElements();
 				},
+				onkeydown(e) {
+					if (e.key === "Tab") {
+						e.preventDefault();
+						e.stopPropagation();
+
+						const textarea = textarea_ref.current;
+
+						// Use execCommand to insert tab while preserving undo history
+						if (document.execCommand) {
+							document.execCommand("insertText", false, "\t");
+						} else {
+							// Fallback for browsers that don't support execCommand
+							const start = textarea.selectionStart;
+							const end = textarea.selectionEnd;
+							const value = textarea.value;
+							textarea.value = value.substring(0, start) + "\t" + value.substring(end);
+							textarea.selectionStart = textarea.selectionEnd = start + 1;
+						}
+
+						// Trigger the input event to update syntax highlighting
+						textarea.dispatchEvent(new Event("input", { bubbles: true }));
+					}
+				},
 			}),
 		),
 		t.div({
-			class: "bottom-spacer"
-		})
+			class: "bottom-spacer",
+		}),
 	);
 }
 
@@ -228,14 +385,14 @@ const theme = css`
 		word-wrap: normal;
 		resize: none;
 		color: transparent;
-		caret-color: #CACACA;
+		caret-color: #cacaca;
 		background: transparent;
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
 	}
 
 	codepad-editor textarea::selection {
-		background-color: #CACACA;
+		background-color: #cacaca;
 		color: black;
 	}
 
