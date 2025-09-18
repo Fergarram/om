@@ -113,7 +113,6 @@ const theme = css`
 		color: white;
 		display: grid;
 		grid-template-columns: auto 1fr;
-		gap: 22px;
 		-webkit-font-smoothing: none;
 	}
 
@@ -129,6 +128,7 @@ const theme = css`
 		font-size: 11px;
 		line-height: 1.25;
 		padding: 11px;
+		background: #333;
 	}
 
 	#sidebar .sidebar-item {

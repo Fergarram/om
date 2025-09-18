@@ -292,6 +292,15 @@ export async function Codepad({ module, ...props }) {
 			{
 				class: "wrapper",
 			},
+			t.div({
+				class: "header",
+			},
+				t.div({
+					class: "title",
+				},
+					module.name
+				)
+			),
 			t.div(
 				{
 					ref: content_ref,
@@ -355,6 +364,7 @@ const theme = css`
 		position: relative;
 		height: fit-content;
 		min-height: 100%;
+		background-color: black;
 	}
 
 	codepad-editor .wrapper {
@@ -372,7 +382,7 @@ const theme = css`
 		line-height: ${LINE_HEIGHT};
 		height: fit-content;
 		min-height: 100%;
-		padding: 11px;
+		padding: ${LINE_HEIGHT * FONT_SIZE * 2}px 11px;
 	}
 
 	codepad-editor textarea {
@@ -390,7 +400,7 @@ const theme = css`
 		background: transparent;
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
-		padding: 11px;
+		padding: ${LINE_HEIGHT * FONT_SIZE * 2}px 11px;
 	}
 
 	codepad-editor textarea::selection {
@@ -400,6 +410,24 @@ const theme = css`
 
 	codepad-editor textarea:focus {
 		outline: none;
+	}
+
+	codepad-editor .header {
+		position: sticky;
+		height: 0px;
+		width: 100%;
+		top: 0;
+		left: 0;
+		z-index: 1;
+	}
+
+	codepad-editor .header .title {
+		position: absolute;
+		height: fit-content;
+		width: 100%;
+		top: 0;
+		left: 0;
+		background-color: #333;
 	}
 
 	/*
