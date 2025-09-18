@@ -93,8 +93,7 @@ export function useCustomTag(tag_name, definition) {
 			},
 		);
 
-		const t = useTags();
-		return t[tag_name];
+		return useTags()[tag_name];
 	}
 }
 

@@ -37,7 +37,7 @@ function highlightSource(formatted_code) {
 		const comments = [];
 
 		acorn.parse(formatted_code, {
-			ecmaVersion: "latest",
+			ecmaVersion: "2022",
 			sourceType: "module",
 			onToken: tokens,
 			onComment: comments,
@@ -46,7 +46,7 @@ function highlightSource(formatted_code) {
 		// Map comments
 		comments.forEach((comment) => {
 			for (let i = comment.start; i < comment.end; i++) {
-				highlights.set(i, "hljs-comment");
+				highlights.set(i, "hl-comment");
 			}
 		});
 
@@ -102,17 +102,17 @@ function highlightSource(formatted_code) {
 			if (token.type.keyword || keywords.has(token.value)) {
 				// Keywords
 				for (let i = start; i < end; i++) {
-					highlights.set(i, "hljs-keyword");
+					highlights.set(i, "hl-keyword");
 				}
 			} else if (token.type.label === "string") {
 				// String literals
 				for (let i = start; i < end; i++) {
-					highlights.set(i, "hljs-string");
+					highlights.set(i, "hl-string");
 				}
 			} else if (token.type.label === "num") {
 				// Number literals
 				for (let i = start; i < end; i++) {
-					highlights.set(i, "hljs-number");
+					highlights.set(i, "hl-number");
 				}
 			} else if (
 				token.value === "true" ||
@@ -122,7 +122,7 @@ function highlightSource(formatted_code) {
 			) {
 				// Boolean and null literals
 				for (let i = start; i < end; i++) {
-					highlights.set(i, "hljs-literal");
+					highlights.set(i, "hl-literal");
 				}
 			}
 		});
@@ -416,21 +416,21 @@ const theme = css`
 		color: #ffffff;
 	}
 
-	.hljs-literal,
-	.hljs-number,
-	.hljs-string {
+	.hl-literal,
+	.hl-number,
+	.hl-string {
 		color: #d0d0d0;
 	}
 
-	.hljs-string .hljs-subst {
+	.hl-string .hl-subst {
 		color: #ffffff;
 	}
 
-	.hljs-comment {
+	.hl-comment {
 		color: var(--color-highlight);
 	}
 
-	.hljs-keyword {
+	.hl-keyword {
 		color: #a0a0a0;
 	}
 `;

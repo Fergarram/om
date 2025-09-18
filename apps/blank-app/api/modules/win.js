@@ -60,11 +60,11 @@ function createWindow(app_name) {
 	const { width, height } = primary_display.workAreaSize;
 
 	const new_window = new BrowserWindow({
-		width,
-		height,
+		width: width / 2,
+		height: height / 2,
 		show: false,
 		backgroundColor: "#000000",
-		frame: false,
+		// frame: false,
 		autoHideMenuBar: true,
 		webPreferences: {
 			zoomFactor: 1.0,
