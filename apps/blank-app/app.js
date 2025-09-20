@@ -11,7 +11,7 @@ console.log({
 });
 
 app.whenReady().then(() => {
-	const win = createWindow("blank");
+	const win = createWindow("blank", true);
 	win.loadFile("base.html");
 	// createOverlay("default", win);
 });

@@ -55,7 +55,7 @@ ipcMain.handle("win.open_space", async (event, space) => {
 	window.webContents.executeJavaScript(`window.location.href = "file://${target_path}"`);
 });
 
-function createWindow(app_name) {
+function createWindow(app_name, enable_defaults = false) {
 	const primary_display = screen.getPrimaryDisplay();
 	const { width, height } = primary_display.workAreaSize;
 
@@ -97,6 +97,8 @@ function createWindow(app_name) {
 	};
 
 	new_window.on("close", (event) => {
+		if (enable_defaults) return;
+
 		if (!new_window.will_close_manually) {
 			event.preventDefault();
 		}
@@ -123,6 +125,8 @@ function createWindow(app_name) {
 	});
 
 	new_window.webContents.on("will-navigate", (event, url) => {
+		if (enable_defaults) return;
+
 		if (!url.startsWith("file://")) {
 			event.preventDefault();
 			console.log(`Navigation to ${url} blocked: only local file:// URLs are allowed`);
@@ -174,6 +178,8 @@ function createWindow(app_name) {
 	});
 
 	new_window.webContents.on("will-redirect", (event, url) => {
+		if (enable_defaults) return;
+
 		if (!url.startsWith("file://")) {
 			event.preventDefault();
 			console.log(`Redirect to ${url} blocked: only local file:// URLs are allowed`);

@@ -1,8 +1,8 @@
-import { useTags, useCustomTag } from "ima";
-import { css, finish, useShadowStyles, tryCatch } from "utils";
+import { useTags, useCustomTag } from "@std/ima";
+import { css, finish, useShadowStyles, tryCatch } from "@std/utils";
 
-import acorn from "acorn";
-import formatter from "formatter";
+import acorn from "@std/js-parser";
+import formatter from "@std/formatter";
 import { getModuleEditorRoot } from "module-editor";
 
 const FONT_SIZE = 11;
@@ -30,6 +30,7 @@ function highlightSource(formatted_code) {
 	let line_count = 0;
 	let parsing_failed = false;
 	let error_pos = null;
+	let ast;
 
 	// Create a mapping of character positions to highlight classes
 	const highlights = new Map();
@@ -39,7 +40,7 @@ function highlightSource(formatted_code) {
 		const tokens = [];
 		const comments = [];
 
-		acorn.parse(formatted_code, {
+		ast = acorn.parse(formatted_code, {
 			ecmaVersion: "2022",
 			sourceType: "module",
 			onToken: tokens,
@@ -139,29 +140,29 @@ function highlightSource(formatted_code) {
 	}
 
 	// Build content array
-	let current_text = "";
+	let processed_characters = "";
 	let current_class = null;
 
-	function flushCurrentText() {
-		if (current_text) {
+	function processCharacters() {
+		if (processed_characters) {
 			if (current_class) {
 				current_chunk_content.push(
 					t.span(
 						{
 							class: current_class,
 						},
-						current_text,
+						processed_characters,
 					),
 				);
 			} else {
-				current_chunk_content.push(current_text);
+				current_chunk_content.push(processed_characters);
 			}
-			current_text = "";
+			processed_characters = "";
 		}
 	}
 
-	function flushChunk() {
-		flushCurrentText();
+	function processChunk() {
+		processCharacters();
 		chunks.push(
 			t.pre(
 				{
@@ -180,28 +181,28 @@ function highlightSource(formatted_code) {
 
 		// If class changes, flush current text
 		if (highlight_class !== current_class) {
-			flushCurrentText();
+			processCharacters();
 			current_class = highlight_class;
 		}
 
-		current_text += char;
+		processed_characters += char;
 
 		// Handle chunking
 		if (char === "\n") {
 			line_count++;
 			if (line_count === CHUNK_SIZE) {
-				flushChunk();
+				processChunk();
 			}
 		}
 	}
 
 	// Add remaining chunk if any
-	if (current_chunk_content.length > 0 || current_text) {
+	if (current_chunk_content.length > 0 || processed_characters) {
 		// Handle trailing newline before flushing
-		if (formatted_code.endsWith("\n") && !current_text.endsWith("\n")) {
-			current_text += "\n";
+		if (formatted_code.endsWith("\n") && !processed_characters.endsWith("\n")) {
+			processed_characters += "\n";
 		}
-		flushChunk();
+		processChunk();
 	}
 
 	// After all chunks are created, check if we need to add br to the last chunk
@@ -211,9 +212,9 @@ function highlightSource(formatted_code) {
 	}
 
 	const end_time = performance.now();
-	// console.log(`Chunk generation took ${end_time - start_time} milliseconds for ${chunks.length} chunks`);
+	console.log(`Chunk generation took ${end_time - start_time} milliseconds for ${chunks.length} chunks`);
 
-	return [chunks, error_pos];
+	return [chunks, error_pos, ast];
 }
 
 export async function Codepad({ module, ...props }) {
@@ -245,7 +246,8 @@ export async function Codepad({ module, ...props }) {
 
 	let original_source = formatted_code;
 
-	let [chunk_elements, error_pos] = highlightSource(formatted_code);
+	let [chunk_elements, error_pos, ast] = highlightSource(formatted_code);
+	console.log(module.name, ast);
 	let intersection_observer = null;
 
 	let has_changes = false;
@@ -295,6 +297,128 @@ export async function Codepad({ module, ...props }) {
 		}
 	}
 
+	async function saveModule() {
+		const updated_source = textarea_ref.current.value;
+
+		// Update the blob_modules Map in the blob module loader
+		if (window.__blob_modules__ && window.__blob_modules__.has(module.module_name)) {
+			window.__blob_modules__.set(module.module_name, updated_source);
+		}
+
+		// Check if we can save individual module files
+		if (
+			window.__blob_module_loader_settings__.prefers_remote_modules &&
+			location.origin === "file://" &&
+			globalThis.__sys &&
+			module.remote_url
+		) {
+			// Check if the URL is not hosted externally
+			const is_external = module.remote_url.startsWith("https://") || module.remote_url.startsWith("http://");
+
+			if (!is_external) {
+				let module_full_path;
+
+				if (module.remote_url.startsWith("file://")) {
+					// Absolute file:// URL - extract the path
+					module_full_path = module.remote_url.replace("file://", "");
+				} else if (module.remote_url.startsWith("/")) {
+					// Absolute path from root
+					console.warn("Served from server so we can't save it — an API for this server needs to be provided.");
+				} else {
+					// Relative path
+					try {
+						module_full_path = await __sys.invoke("file.resolve", module.remote_url);
+					} catch (error) {
+						console.error(`Failed to resolve module path ${module.remote_url}:`, error);
+					}
+				}
+
+				if (module_full_path) {
+					try {
+						await __sys.invoke("file.write", module_full_path, updated_source);
+						last_save_mode = "remote";
+						console.log(`Saved module file: ${module_full_path}`);
+
+						// Reset the has_changes flag
+						has_changes = false;
+						original_source = updated_source;
+						return;
+					} catch (error) {
+						console.error(`Failed to save module file ${module_full_path}:`, error);
+						// Fall back to saving the whole HTML file
+					}
+				}
+			}
+		}
+
+		// If not, update the script tag content
+		const script_tags = document.querySelectorAll('script[type="blob-module"]');
+		const target_script = Array.from(script_tags).find((script) => script.getAttribute("name") === module.module_name);
+
+		if (target_script) {
+			target_script.textContent = updated_source;
+		}
+
+		// Handle special case for blob-module-loader
+		if (module.module_name === "blob-module-loader") {
+			const loader_script = document.getElementById("blob-module-loader");
+			if (loader_script) {
+				loader_script.textContent = updated_source;
+			}
+		}
+
+		// Fallback: Save the HTML file
+		try {
+			window.saveHtmlFile();
+			last_save_mode = "local";
+			console.log(`Saved full html from module: ${module.module_name}`);
+		} catch (error) {
+			console.error(`Failed to save html from module: ${module.module_name}:`, error);
+		}
+
+		// Reset the has_changes flag
+		has_changes = false;
+		original_source = updated_source;
+	}
+
+	function handleTextareaInput() {
+		const updated_source = textarea_ref.current.value;
+		[chunk_elements, error_pos] = highlightSource(updated_source);
+		content_ref.current.replaceChildren(...chunk_elements);
+
+		has_changes = updated_source !== original_source;
+
+		observeChunkElements();
+	}
+
+	function handleKeyDown(e) {
+		if (e.key === "Tab") {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const textarea = textarea_ref.current;
+
+			// Use execCommand to insert tab while preserving undo history
+			if (document.execCommand) {
+				document.execCommand("insertText", false, "\t");
+			} else {
+				// Fallback for browsers that don't support execCommand
+				const start = textarea.selectionStart;
+				const end = textarea.selectionEnd;
+				const value = textarea.value;
+				textarea.value = value.substring(0, start) + "\t" + value.substring(end);
+				textarea.selectionStart = textarea.selectionEnd = start + 1;
+			}
+
+			// Trigger the input event to update syntax highlighting
+			textarea.dispatchEvent(
+				new Event("input", {
+					bubbles: true,
+				}),
+			);
+		}
+	}
+
 	return CodepadEditor(
 		{
 			...props,
@@ -314,122 +438,35 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				class: "wrapper",
+				class: "header",
 			},
 			t.div(
 				{
-					class: "header",
+					class: "bar",
 				},
 				t.div(
+					module.name,
+					() => (has_changes ? "*" : ""),
+					() =>
+						window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
+							? last_save_mode
+								? ` (${last_save_mode})`
+								: " (remote)"
+							: " (local)",
+				),
+				t.button(
 					{
-						class: "bar",
+						style: () => `display: ${has_changes ? "block" : "none"};`,
+						onclick: saveModule,
 					},
-					t.div(
-						module.name,
-						() => (has_changes ? "*" : ""),
-						() =>
-							window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
-								? last_save_mode
-									? ` (${last_save_mode})`
-									: " (remote)"
-								: " (local)",
-					),
-					t.button(
-						{
-							style: () => `display: ${has_changes ? "block" : "none"};`,
-							async onclick() {
-								const updated_source = textarea_ref.current.value;
-
-								// Update the blob_modules Map in the blob module loader
-								if (window.__blob_modules__ && window.__blob_modules__.has(module.module_name)) {
-									window.__blob_modules__.set(module.module_name, updated_source);
-								}
-
-								// Check if we can save individual module files
-								if (
-									window.__blob_module_loader_settings__.prefers_remote_modules &&
-									location.origin === "file://" &&
-									globalThis.__sys &&
-									module.remote_url
-								) {
-									// Check if the URL is not hosted externally
-									const is_external =
-										module.remote_url.startsWith("https://") || module.remote_url.startsWith("http://");
-
-									if (!is_external) {
-										let module_full_path;
-
-										if (module.remote_url.startsWith("file://")) {
-											// Absolute file:// URL - extract the path
-											module_full_path = module.remote_url.replace("file://", "");
-										} else if (module.remote_url.startsWith("/")) {
-											// Absolute path from root
-											console.warn(
-												"Served from server so we can't save it — an API for this server needs to be provided.",
-											);
-										} else {
-											// Relative path
-											try {
-												module_full_path = await __sys.invoke("file.resolve", module.remote_url);
-											} catch (error) {
-												console.error(`Failed to resolve module path ${module.remote_url}:`, error);
-											}
-										}
-
-										if (module_full_path) {
-											try {
-												await __sys.invoke("file.write", module_full_path, updated_source);
-												last_save_mode = "remote";
-												console.log(`Saved module file: ${module_full_path}`);
-
-												// Reset the has_changes flag
-												has_changes = false;
-												original_source = updated_source;
-												return;
-											} catch (error) {
-												console.error(`Failed to save module file ${module_full_path}:`, error);
-												// Fall back to saving the whole HTML file
-											}
-										}
-									}
-								}
-
-								// If not, update the script tag content
-								const script_tags = document.querySelectorAll('script[type="blob-module"]');
-								const target_script = Array.from(script_tags).find(
-									(script) => script.getAttribute("name") === module.module_name,
-								);
-
-								if (target_script) {
-									target_script.textContent = updated_source;
-								}
-
-								// Handle special case for blob-module-loader
-								if (module.module_name === "blob-module-loader") {
-									const loader_script = document.getElementById("blob-module-loader");
-									if (loader_script) {
-										loader_script.textContent = updated_source;
-									}
-								}
-
-								// Fallback: Save the HTML file
-								try {
-									window.saveHtmlFile();
-									last_save_mode = "local";
-									console.log(`Saved full html from module: ${module.module_name}`);
-								} catch (error) {
-									console.error(`Failed to save html from module: ${module.module_name}:`, error);
-								}
-
-								// Reset the has_changes flag
-								has_changes = false;
-								original_source = updated_source;
-							},
-						},
-						"save",
-					),
+					"save",
 				),
 			),
+		),
+		t.div(
+			{
+				class: "wrapper",
+			},
 			t.div(
 				{
 					ref: content_ref,
@@ -440,49 +477,15 @@ export async function Codepad({ module, ...props }) {
 			t.textarea({
 				ref: textarea_ref,
 				spellcheck: "false",
-				oninput() {
-					const updated_source = textarea_ref.current.value;
-					[chunk_elements, error_pos] = highlightSource(updated_source);
-					content_ref.current.replaceChildren(...chunk_elements);
-
-					has_changes = updated_source !== original_source;
-
-					observeChunkElements();
-				},
-				onkeydown(e) {
-					if (e.key === "Tab") {
-						e.preventDefault();
-						e.stopPropagation();
-
-						const textarea = textarea_ref.current;
-
-						// Use execCommand to insert tab while preserving undo history
-						if (document.execCommand) {
-							document.execCommand("insertText", false, "\t");
-						} else {
-							// Fallback for browsers that don't support execCommand
-							const start = textarea.selectionStart;
-							const end = textarea.selectionEnd;
-							const value = textarea.value;
-							textarea.value = value.substring(0, start) + "\t" + value.substring(end);
-							textarea.selectionStart = textarea.selectionEnd = start + 1;
-						}
-
-						// Trigger the input event to update syntax highlighting
-						textarea.dispatchEvent(
-							new Event("input", {
-								bubbles: true,
-							}),
-						);
-					}
-				},
+				oninput: handleTextareaInput,
+				onkeydown: handleKeyDown,
 			}),
 			t.div({
 				class: "hl-error-indicator",
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
-					height: ${LINE_HEIGHT * FONT_SIZE + 2}px;
-					top: ${error_pos && error_pos.line * LINE_HEIGHT * FONT_SIZE - 4}px;
+					height: ${LINE_HEIGHT * FONT_SIZE}px;
+					top: ${error_pos && error_pos.line * LINE_HEIGHT * FONT_SIZE - 1}px;
 				`,
 			}),
 		),
@@ -497,9 +500,38 @@ const theme = css`
 	codepad-editor {
 		display: block;
 		position: relative;
-		height: fit-content;
-		min-height: 100%;
+		width: 100%;
+		height: 100%;
 		background-color: black;
+		padding: 11px;
+		overflow: scroll;
+	}
+
+	codepad-editor::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+
+	codepad-editor::-webkit-scrollbar-track {
+		background: #000;
+	}
+
+	codepad-editor::-webkit-scrollbar-thumb {
+		background: #444444;
+	}
+
+	codepad-editor::-webkit-scrollbar-thumb:hover {
+		background: #505050;
+	}
+
+	codepad-editor::-webkit-scrollbar-corner {
+		background: #000;
+	}
+
+	/* Firefox scrollbar styling */
+	codepad-editor {
+		scrollbar-width: thin;
+		scrollbar-color: #444444 #1a1a1a;
 	}
 
 	codepad-editor .wrapper {
@@ -507,6 +539,8 @@ const theme = css`
 		width: 100%;
 		height: fit-content;
 		min-height: 100%;
+		width: fit-content;
+		min-width: 100%;
 	}
 
 	codepad-editor .content {
@@ -517,7 +551,10 @@ const theme = css`
 		line-height: ${LINE_HEIGHT};
 		height: fit-content;
 		min-height: 100%;
-		padding: ${LINE_HEIGHT * FONT_SIZE * 2}px 11px;
+		width: fit-content;
+		min-width: 100%;
+		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
 	}
 
 	codepad-editor textarea {
@@ -535,7 +572,8 @@ const theme = css`
 		background: transparent;
 		font-size: ${FONT_SIZE}px;
 		line-height: ${LINE_HEIGHT};
-		padding: ${LINE_HEIGHT * FONT_SIZE * 2}px 11px;
+		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
 	}
 
 	codepad-editor textarea::selection {
@@ -551,6 +589,7 @@ const theme = css`
 		position: sticky;
 		height: 0px;
 		width: 100%;
+		/*top: 11px;*/
 		top: 0;
 		left: 0;
 		z-index: 1;
@@ -565,11 +604,12 @@ const theme = css`
 		width: 100%;
 		top: 0;
 		left: 0;
-		background-color: #333;
+		background-color: var(--color-highlight);
+		color: black;
 	}
 
 	codepad-editor .header .bar button:hover {
-		background-color: #666;
+		background-color: white;
 	}
 
 	/*
@@ -604,7 +644,7 @@ const theme = css`
 		background-color: red;
 		mix-blend-mode: exclusion;
 		left: 0;
-		transform: translateY(100%);
+		transform: translateY(50%);
 		pointer-events: none;
 	}
 `;

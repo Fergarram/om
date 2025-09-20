@@ -1,3 +1,11 @@
+//
+// Utils
+//
+
+// Commonly used utilities for general purpose JS programming.
+// by Fernando Garcia (fergarram)
+//
+
 export function uniqueId() {
 	// Check if crypto API is available
 	if (typeof crypto === "undefined") {
@@ -230,12 +238,14 @@ export function useShadowStyles(shadow_root, styles, id = "default") {
 }
 
 export function repeat(length, val) {
-	return Array.from({ length }, () => val);
+	return Array.from({
+		length
+	}, () => val);
 }
 
 export function throttle(func, wait) {
 	let waiting = false;
-	return function (...args) {
+	return function(...args) {
 		if (!waiting) {
 			func(...args);
 			waiting = true;
