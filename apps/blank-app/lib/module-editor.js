@@ -1,8 +1,27 @@
-import { useTags } from "@std/ima";
-import { css, finish, useShadowStyles } from "@std/utils";
-import { Codepad } from "codepad";
+//
+// Blob Module Editor
+// by fergarram
+// 
 
-const { div, pre, button } = useTags();
+// Provides an interface to edit available blob modules.
+
+import {
+	useTags
+} from "@std/ima";
+import {
+	css,
+	finish,
+	useShadowStyles
+} from "@std/utils";
+import {
+	Codepad
+} from "codepad";
+
+const {
+	div,
+	pre,
+	button
+} = useTags();
 
 let module_editor_root = null;
 let show_module_editor = false;
@@ -76,8 +95,7 @@ async function ModuleEditor() {
 	const loader_blob = new Blob([blob_module_loader_script.textContent], {
 		type: "text/javascript",
 	});
-	const modules = [
-		{
+	const modules = [{
 			name: "module-loader",
 			module_name: "module-loader",
 			blob_url: blob_module_loader_script ? URL.createObjectURL(loader_blob) : "",
@@ -110,24 +128,20 @@ async function ModuleEditor() {
 		);
 	}
 
-	return div(
-		{
+	return div({
 			id: "module-editor",
 			style: () => `display: ${show_module_editor ? "flex" : "none"}`,
 		},
-		div(
-			{
+		div({
 				id: "sidebar",
 			},
-			div(
-				{
+			div({
 					id: "corner",
 				},
 				"modules",
 			),
 			...sortModules(modules).map((module) => {
-				return button(
-					{
+				return button({
 						class: "sidebar-item",
 						disabled: module.is_disabled ? true : null,
 						"data-active": () => active_tab === module.name,
@@ -139,8 +153,7 @@ async function ModuleEditor() {
 				);
 			}),
 		),
-		div(
-			{
+		div({
 				id: "main-panel",
 			},
 			code_panels,
@@ -162,7 +175,7 @@ const theme = css`
 		background: #333;
 		color: white;
 		display: flex;
-		-webkit-font-smoothing: none;
+		-webkit-font-smoothing: ${window.devicePixelRatio > 1 ? "antialiased" : "none"};
 		z-index: 99999;
 		padding: 10px;
 	}

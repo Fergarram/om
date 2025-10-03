@@ -39,64 +39,6 @@ export function useTags(options) {
 	}
 }
 
-export function useCustomTag(tag_name, definition) {
-	if (!customElements.get(tag_name)) {
-		customElements.define(
-			tag_name,
-			class extends HTMLElement {
-				static observedAttributes = definition.attrs ?? [];
-				#connected;
-				#disconnected;
-				#adopted;
-				#attributeChanged;
-
-				constructor() {
-					super();
-
-					const ac = new AbortController();
-					const $listen = (evt, handler, options = true) => {
-						let defaultOptions = { signal: ac.signal };
-						if (typeof options === "boolean") {
-							defaultOptions.capture = options;
-						} else {
-							defaultOptions = Object.assign(options, defaultOptions);
-						}
-						this.addEventListener(evt, handler, defaultOptions);
-					};
-
-					this.ac = ac;
-
-					const { connected, disconnected, adopted, attributeChanged } = definition.apply(this, [{ $listen }]) ?? {};
-
-					this.#connected = connected?.bind(this);
-					this.#disconnected = disconnected?.bind(this);
-					this.#adopted = adopted?.bind(this);
-					this.#attributeChanged = attributeChanged?.bind(this);
-				}
-
-				connectedCallback() {
-					this.#connected?.();
-				}
-
-				disconnectedCallback() {
-					this.#disconnected?.();
-					this.ac.abort();
-				}
-
-				adoptedCallback() {
-					this.#adopted?.();
-				}
-
-				attributeChangedCallback(...args) {
-					this.#attributeChanged?.(...args);
-				}
-			},
-		);
-
-		return useTags()[tag_name];
-	}
-}
-
 //
 // DOM Element Generation
 //

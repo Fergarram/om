@@ -968,22 +968,68 @@ window.addEventListener("load", async () => {
 	showModuleEditor
 } from "module-editor";
 import {
-	useTags
-} from "@std/ima";
+	useStyledTags
+} from "@std/ima-utils";
 
-const t = useTags();
+const t = useStyledTags();
 
-const main_el = document.querySelector("main");
+const root_el = document.querySelector("main");
 
 function Main() {
+
 	// Main website content goes here...
-	return t.main();
+
+	return t.main({
+			styles: {
+				key: "main-wrapper",
+				css: `
+					& {
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						width: 100%;
+						height: 100vh;
+					}
+				`,
+			}
+		},
+		t.div({
+				styles: {
+					key: "key-is-always-required",
+					css: `
+						& {
+							background: white;
+							width: 50%;
+							height: 50%;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							container-type: inline-size;
+							container-name: card;
+						}
+
+						& span {
+							color: black;
+							transition: all cubic-bezier(0.175, 0.885, 0.32, 1.275) 500ms;
+						}
+
+						@media (min-width: 800px) {
+							& span {
+								font-size: 2.5rem;
+								transform: rotate(360deg);
+							}
+						}
+					`
+				}
+			},
+			t.span(Math.random().toFixed(3)))
+	);
 }
 
 // Hydrate existing <main>
-if (main_el) {
+if (root_el) {
 	// Process whatever before replacing to hydrate
-	main_el.replaceWith(
+	root_el.replaceWith(
 		Main()
 	);
 }
@@ -994,7 +1040,7 @@ else {
 }
 
 window.addEventListener("keydown", (e) => {
-	if (e.key === "F11") {
+	if (e.metaKey && e.key === "Escape") {
 		e.preventDefault();
 		showModuleEditor();
 	}
@@ -1010,6 +1056,8 @@ window.showModuleEditor = showModuleEditor;</script>
 // Commonly used utilities for general purpose JS programming.
 // by Fernando Garcia (fergarram)
 //
+
+const __added_styles = new Set();
 
 export function uniqueId() {
 	// Check if crypto API is available
@@ -1137,7 +1185,15 @@ export function isScrollable(element) {
 }
 
 export function useGlobalStyles(styles) {
+	// Skip if already added
+	if (__added_styles.has(styles)) {
+		return;
+	}
+
 	const sheet = createStylesheet("global_styles");
+
+	// Mark as added
+	__added_styles.add(styles);
 
 	// Remove comments and normalize whitespace
 	const cleaned_css = styles
@@ -1198,7 +1254,18 @@ export function createShadowStylesheet(shadow_root, id) {
 }
 
 export function useShadowStyles(shadow_root, styles, id = "default") {
+	// Create a unique key for this shadow root + styles combination
+	const shadow_key = `shadow_${id}_${styles}`;
+
+	// Skip if already added
+	if (__added_styles.has(shadow_key)) {
+		return createShadowStylesheet(shadow_root, id);
+	}
+
 	const sheet = createShadowStylesheet(shadow_root, id);
+
+	// Mark as added
+	__added_styles.add(shadow_key);
 
 	// Clear existing rules
 	while (sheet.cssRules.length > 0) {
@@ -1243,14 +1310,17 @@ export function useShadowStyles(shadow_root, styles, id = "default") {
 }
 
 export function repeat(length, val) {
-	return Array.from({
-		length
-	}, () => val);
+	return Array.from(
+		{
+			length,
+		},
+		() => val,
+	);
 }
 
 export function throttle(func, wait) {
 	let waiting = false;
-	return function(...args) {
+	return function (...args) {
 		if (!waiting) {
 			func(...args);
 			waiting = true;
@@ -1420,64 +1490,6 @@ export function useTags(options) {
 				get: (target, tag) => tagGenerator(target, String(tag), resolved_options),
 			},
 		);
-	}
-}
-
-export function useCustomTag(tag_name, definition) {
-	if (!customElements.get(tag_name)) {
-		customElements.define(
-			tag_name,
-			class extends HTMLElement {
-				static observedAttributes = definition.attrs ?? [];
-				#connected;
-				#disconnected;
-				#adopted;
-				#attributeChanged;
-
-				constructor() {
-					super();
-
-					const ac = new AbortController();
-					const $listen = (evt, handler, options = true) => {
-						let defaultOptions = { signal: ac.signal };
-						if (typeof options === "boolean") {
-							defaultOptions.capture = options;
-						} else {
-							defaultOptions = Object.assign(options, defaultOptions);
-						}
-						this.addEventListener(evt, handler, defaultOptions);
-					};
-
-					this.ac = ac;
-
-					const { connected, disconnected, adopted, attributeChanged } = definition.apply(this, [{ $listen }]) ?? {};
-
-					this.#connected = connected?.bind(this);
-					this.#disconnected = disconnected?.bind(this);
-					this.#adopted = adopted?.bind(this);
-					this.#attributeChanged = attributeChanged?.bind(this);
-				}
-
-				connectedCallback() {
-					this.#connected?.();
-				}
-
-				disconnectedCallback() {
-					this.#disconnected?.();
-					this.ac.abort();
-				}
-
-				adoptedCallback() {
-					this.#adopted?.();
-				}
-
-				attributeChangedCallback(...args) {
-					this.#attributeChanged?.(...args);
-				}
-			},
-		);
-
-		return useTags()[tag_name];
 	}
 }
 
@@ -1932,6 +1944,136 @@ function staticTagGenerator(_, tag) {
 
 		return html + `</${tag}>`;
 	};
+}</script>
+
+<script type="blob-module" name="@std/ima-utils" remote="./lib/ima-utils.js">//
+// IMA Utils
+//
+
+// Extra utils for working with IMA
+// by Fernando Garcia (fergarram)
+//
+
+import { useTags } from "@std/ima";
+import { useGlobalStyles, uniqueId, useShadowStyles } from "@std/utils";
+
+export function useStyledTags(opts) {
+	return useTags({
+		...opts,
+		attr(name, value) {
+			if (name === "styles") {
+				// Only handle object format
+				if (typeof value === "object" && value !== null) {
+					if (!value.key) {
+						console.warn("Styles key can't be empty", value);
+						return {
+							name: "styles-key",
+							value: "",
+						};
+					}
+
+					const id = value.key;
+					const css = value.css || "";
+
+					const processed_css = css.replaceAll("&", `[styles-key="${id}"]`);
+					if (opts && opts.shadow_root) {
+						useShadowStyles(
+							typeof opts.shadow_root === "function" ? opts.shadow_root() : opts.shadow_root,
+							processed_css,
+							id
+						);
+					} else {
+						useGlobalStyles(processed_css);
+					}
+
+					return {
+						name: "styles-key",
+						value: id,
+					};
+				}
+
+				// Fallback for non-object types
+				console.warn("Styles attribute must be an object with 'key' and 'css' properties. Nothing will be done.", value);
+				return {
+					name: "styles-key",
+					value: "",
+				};
+			}
+
+			// Return default for other attributes
+			return opts && opts.attr ? opts.attr(name, value) : { name, value };
+		},
+	});
+}
+
+export function useCustomStyledTag(tag_name, definition, opts) {
+	return useCustomTag(tag_name, definition, {
+		...opts,
+		use_styles: true,
+	});
+}
+
+export function useCustomTag(tag_name, definition, opts) {
+	if (!customElements.get(tag_name)) {
+		customElements.define(
+			tag_name,
+			class extends HTMLElement {
+				static observedAttributes = definition.attrs ?? [];
+				#connected;
+				#disconnected;
+				#adopted;
+				#attributeChanged;
+
+				constructor() {
+					super();
+
+					const ac = new AbortController();
+					const $listen = (evt, handler, options = true) => {
+						let defaultOptions = { signal: ac.signal };
+						if (typeof options === "boolean") {
+							defaultOptions.capture = options;
+						} else {
+							defaultOptions = Object.assign(options, defaultOptions);
+						}
+						this.addEventListener(evt, handler, defaultOptions);
+					};
+
+					this.ac = ac;
+
+					const { connected, disconnected, adopted, attributeChanged } = definition.apply(this, [{ $listen }]) ?? {};
+
+					this.#connected = connected?.bind(this);
+					this.#disconnected = disconnected?.bind(this);
+					this.#adopted = adopted?.bind(this);
+					this.#attributeChanged = attributeChanged?.bind(this);
+				}
+
+				connectedCallback() {
+					this.#connected?.();
+				}
+
+				disconnectedCallback() {
+					this.#disconnected?.();
+					this.ac.abort();
+				}
+
+				adoptedCallback() {
+					this.#adopted?.();
+				}
+
+				attributeChangedCallback(...args) {
+					this.#attributeChanged?.(...args);
+				}
+			},
+		);
+
+		if (opts && opts.use_styles) {
+			delete opts.use_styles;
+			return useStyledTags(opts)[tag_name];
+		} else {
+			return useTags(opts)[tag_name];
+		}
+	}
 }</script>
 
 		<!-- Module Editor -->
@@ -5611,8 +5753,8 @@ export {
 // Created by Einar Lielmanis, einar@beautifier.io
 //
 // Maintained and expanded by Liam Newman bitwiseman@beautifier.io
-//	
-// Thanks also to Jason Diamond, Patrick Hof, Nochum Sossonko, Andreas Schneider, 
+//
+// Thanks also to Jason Diamond, Patrick Hof, Nochum Sossonko, Andreas Schneider,
 // Dave Vasilevsky, Vital Batmanov, Ron Baldwin, Gabriel Harrison, Chris J. Shull,
 // Mathias Bynens, Vittorio Gambaletta and others.
 
@@ -8441,7 +8583,8 @@ export {
 	SS as
 	default
 };</script>
-		<script type="blob-module" name="codepad" remote="./lib/codepad.js">import { useTags, useCustomTag } from "@std/ima";
+		<script type="blob-module" name="codepad" remote="./lib/codepad.js">import { useStyledTags } from "@std/ima-utils";
+import { useCustomStyledTag } from "@std/ima-utils";
 import { css, finish, useShadowStyles, tryCatch } from "@std/utils";
 
 import acorn from "@std/js-parser";
@@ -8452,19 +8595,25 @@ const FONT_SIZE = 11;
 const LINE_HEIGHT = 1.25;
 const CHUNK_SIZE = 20;
 
-const t = useTags();
+const t = useStyledTags({ shadow_root: getModuleEditorRoot });
 
-const CodepadEditor = useCustomTag("codepad-editor", function ({ $listen }) {
-	return {
-		connected() {
-			this.dispatchEvent(new CustomEvent("mount"));
-		},
+const CodepadEditor = useCustomStyledTag(
+	"codepad-editor",
+	function ({ $listen }) {
+		return {
+			connected() {
+				this.dispatchEvent(new CustomEvent("mount"));
+			},
 
-		disconnected() {
-			this.dispatchEvent(new CustomEvent("unmount"));
-		},
-	};
-});
+			disconnected() {
+				this.dispatchEvent(new CustomEvent("unmount"));
+			},
+		};
+	},
+	{
+		shadow_root: getModuleEditorRoot,
+	},
+);
 
 function highlightSource(formatted_code) {
 	const start_time = performance.now();
@@ -8662,7 +8811,7 @@ function highlightSource(formatted_code) {
 
 export async function Codepad({ module, ...props }) {
 	const root = getModuleEditorRoot();
-	useShadowStyles(root, theme, "codepad-editor");
+	useShadowStyles(root, default_theme, "codepad-editor-theme");
 
 	const [source, error] = await tryCatch(async () => {
 		const response = await fetch(module.blob_url);
@@ -8866,6 +9015,19 @@ export async function Codepad({ module, ...props }) {
 		{
 			...props,
 			ref: editor_ref,
+			styles: {
+				key: "codepad-editor",
+				css: `
+					& {
+						display: block;
+						position: relative;
+						width: 100%;
+						height: 100%;
+						padding: 11px;
+						overflow: scroll;
+					}
+				`,
+			},
 			onmount() {
 				if (textarea_ref.current) {
 					textarea_ref.current.value = formatted_code;
@@ -8881,11 +9043,38 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				class: "header",
+				styles: {
+					key: "codepad-header",
+					css: css`
+						& {
+							position: sticky;
+							height: 0px;
+							width: 100%;
+							/*top: 11px;*/
+							top: 0;
+							left: 0;
+							z-index: 1;
+						}
+					`,
+				},
 			},
 			t.div(
 				{
-					class: "bar",
+					styles: {
+						key: "codepad-header-bar",
+						css: css`
+							& {
+								position: absolute;
+								display: flex;
+								justify-content: space-between;
+								align-items: center;
+								height: fit-content;
+								width: 100%;
+								top: 0;
+								left: 0;
+							}
+						`,
+					},
 				},
 				t.div(
 					module.name,
@@ -8894,7 +9083,7 @@ export async function Codepad({ module, ...props }) {
 						window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
 							? last_save_mode
 								? ` (${last_save_mode})`
-								: " (remote)"
+								: ` (remote: ${module.remote_url})`
 							: " (local)",
 				),
 				t.button(
@@ -8908,12 +9097,41 @@ export async function Codepad({ module, ...props }) {
 		),
 		t.div(
 			{
-				class: "wrapper",
+				styles: {
+					key: "codepad-wrapper",
+					css: `
+						& {
+							position: relative;
+							width: 100%;
+							height: fit-content;
+							min-height: 100%;
+							width: fit-content;
+							min-width: 100%;
+						}
+					`,
+				},
 			},
 			t.div(
 				{
 					ref: content_ref,
-					class: "content",
+					styles: {
+						key: "codepad-content",
+						css: `
+							& {
+								position: relative;
+								user-select: none;
+								pointer-events: none;
+								width: fit-content;
+								height: fit-content;
+								min-width: 100%;
+								min-height: 100%;
+								font-size: ${FONT_SIZE}px;
+								line-height: ${LINE_HEIGHT};
+								padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+								padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+							}
+						`,
+					},
 				},
 				...chunk_elements,
 			),
@@ -8922,9 +9140,47 @@ export async function Codepad({ module, ...props }) {
 				spellcheck: "false",
 				oninput: handleTextareaInput,
 				onkeydown: handleKeyDown,
+				styles: {
+					key: "codepad-textarea",
+					css: `
+						& {
+							position: absolute;
+							top: 0;
+							left: 0;
+							width: 100%;
+							height: 100%;
+							white-space: nowrap;
+							overflow: hidden;
+							word-wrap: normal;
+							resize: none;
+							color: transparent;
+							background: transparent;
+							font-size: ${FONT_SIZE}px;
+							line-height: ${LINE_HEIGHT};
+							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+						}
+
+						&:focus {
+							outline: none;
+						}
+					`,
+				},
 			}),
 			t.div({
 				class: "hl-error-indicator",
+				styles: {
+					key: "codepad-error-indicator",
+					css: `
+						& {
+							position: absolute;
+							width: 100%;
+							left: 0;
+							transform: translateY(50%);
+							pointer-events: none;
+						}
+					`,
+				},
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
 					height: ${LINE_HEIGHT * FONT_SIZE}px;
@@ -8935,19 +9191,11 @@ export async function Codepad({ module, ...props }) {
 	);
 }
 
-const theme = css`
-	:host {
-		--color-highlight: #aafee7;
-	}
-
+const default_theme = css`
 	codepad-editor {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 100%;
 		background-color: black;
-		padding: 11px;
-		overflow: scroll;
+		scrollbar-width: thin;
+		scrollbar-color: #444444 #1a1a1a;
 	}
 
 	codepad-editor::-webkit-scrollbar {
@@ -8971,52 +9219,9 @@ const theme = css`
 		background: #000;
 	}
 
-	/* Firefox scrollbar styling */
-	codepad-editor {
-		scrollbar-width: thin;
-		scrollbar-color: #444444 #1a1a1a;
-	}
-
-	codepad-editor .wrapper {
-		position: relative;
-		width: 100%;
-		height: fit-content;
-		min-height: 100%;
-		width: fit-content;
-		min-width: 100%;
-	}
-
-	codepad-editor .content {
-		position: relative;
-		user-select: none;
-		pointer-events: none;
-		font-size: ${FONT_SIZE}px;
-		line-height: ${LINE_HEIGHT};
-		height: fit-content;
-		min-height: 100%;
-		width: fit-content;
-		min-width: 100%;
-		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-	}
-
 	codepad-editor textarea {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		white-space: nowrap;
-		overflow: hidden;
-		word-wrap: normal;
-		resize: none;
-		color: transparent;
 		caret-color: #cacaca;
-		background: transparent;
-		font-size: ${FONT_SIZE}px;
-		line-height: ${LINE_HEIGHT};
-		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+		tab-size: 3;
 	}
 
 	codepad-editor textarea::selection {
@@ -9024,34 +9229,12 @@ const theme = css`
 		color: black;
 	}
 
-	codepad-editor textarea:focus {
-		outline: none;
-	}
-
-	codepad-editor .header {
-		position: sticky;
-		height: 0px;
-		width: 100%;
-		/*top: 11px;*/
-		top: 0;
-		left: 0;
-		z-index: 1;
-	}
-
-	codepad-editor .header .bar {
-		position: absolute;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		height: fit-content;
-		width: 100%;
-		top: 0;
-		left: 0;
+	codepad-editor [styles-key="codepad-header-bar"] {
 		background-color: var(--color-highlight);
 		color: black;
 	}
 
-	codepad-editor .header .bar button:hover {
+	codepad-editor [styles-key="codepad-header-bar"] button:hover {
 		background-color: white;
 	}
 
@@ -9061,6 +9244,7 @@ const theme = css`
 
 	codepad-editor .code-chunk {
 		color: #ffffff;
+		tab-size: 3;
 	}
 
 	.hl-literal,
@@ -9082,28 +9266,44 @@ const theme = css`
 	}
 
 	.hl-error-indicator {
-		position: absolute;
-		width: 100%;
 		background-color: red;
 		mix-blend-mode: exclusion;
-		left: 0;
-		transform: translateY(50%);
-		pointer-events: none;
 	}
-`;</script>
-		<script type="blob-module" name="module-editor" remote="./lib/module-editor.js">import { useTags } from "@std/ima";
-import { css, finish, useShadowStyles } from "@std/utils";
-import { Codepad } from "codepad";
+`;
+</script>
+		<script type="blob-module" name="module-editor" remote="./lib/module-editor.js">import {
+	useTags
+} from "@std/ima";
+import {
+	css,
+	finish,
+	useShadowStyles
+} from "@std/utils";
+import {
+	Codepad
+} from "codepad";
 
-const { div, pre, button } = useTags();
+const {
+	div,
+	pre,
+	button
+} = useTags();
 
 let module_editor_root = null;
+let show_module_editor = false;
 
 export function getModuleEditorRoot() {
 	return module_editor_root;
 }
 
 export async function showModuleEditor() {
+	if (module_editor_root !== null) {
+		show_module_editor = !show_module_editor;
+		return;
+	}
+
+	show_module_editor = true;
+
 	let host = document.getElementById("module-editor-host");
 
 	if (!host) {
@@ -9161,8 +9361,7 @@ async function ModuleEditor() {
 	const loader_blob = new Blob([blob_module_loader_script.textContent], {
 		type: "text/javascript",
 	});
-	const modules = [
-		{
+	const modules = [{
 			name: "module-loader",
 			module_name: "module-loader",
 			blob_url: blob_module_loader_script ? URL.createObjectURL(loader_blob) : "",
@@ -9195,23 +9394,20 @@ async function ModuleEditor() {
 		);
 	}
 
-	return div(
-		{
+	return div({
 			id: "module-editor",
+			style: () => `display: ${show_module_editor ? "flex" : "none"}`,
 		},
-		div(
-			{
+		div({
 				id: "sidebar",
 			},
-			div(
-				{
+			div({
 					id: "corner",
 				},
 				"modules",
 			),
 			...sortModules(modules).map((module) => {
-				return button(
-					{
+				return button({
 						class: "sidebar-item",
 						disabled: module.is_disabled ? true : null,
 						"data-active": () => active_tab === module.name,
@@ -9223,8 +9419,7 @@ async function ModuleEditor() {
 				);
 			}),
 		),
-		div(
-			{
+		div({
 				id: "main-panel",
 			},
 			code_panels,
@@ -9246,7 +9441,7 @@ const theme = css`
 		background: #333;
 		color: white;
 		display: flex;
-		-webkit-font-smoothing: none;
+		-webkit-font-smoothing: ${window.devicePixelRatio > 1 ? "antialiased" : "none"};
 		z-index: 99999;
 		padding: 10px;
 	}
@@ -9336,4 +9531,6 @@ const theme = css`
 	<body style=""><div id="module-editor-host"></div>
 
 
-<main></main></body></html>
+<main styles-key="main-wrapper"><div styles-key="key-is-always-required"><span>0.363</span></div></main>
+
+</body></html>

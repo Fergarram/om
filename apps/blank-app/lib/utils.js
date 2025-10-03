@@ -6,6 +6,8 @@
 // by Fernando Garcia (fergarram)
 //
 
+const __added_styles = new Set();
+
 export function uniqueId() {
 	// Check if crypto API is available
 	if (typeof crypto === "undefined") {
@@ -132,7 +134,15 @@ export function isScrollable(element) {
 }
 
 export function useGlobalStyles(styles) {
+	// Skip if already added
+	if (__added_styles.has(styles)) {
+		return;
+	}
+
 	const sheet = createStylesheet("global_styles");
+
+	// Mark as added
+	__added_styles.add(styles);
 
 	// Remove comments and normalize whitespace
 	const cleaned_css = styles
@@ -193,7 +203,18 @@ export function createShadowStylesheet(shadow_root, id) {
 }
 
 export function useShadowStyles(shadow_root, styles, id = "default") {
+	// Create a unique key for this shadow root + styles combination
+	const shadow_key = `shadow_${id}_${styles}`;
+
+	// Skip if already added
+	if (__added_styles.has(shadow_key)) {
+		return createShadowStylesheet(shadow_root, id);
+	}
+
 	const sheet = createShadowStylesheet(shadow_root, id);
+
+	// Mark as added
+	__added_styles.add(shadow_key);
 
 	// Clear existing rules
 	while (sheet.cssRules.length > 0) {
@@ -238,14 +259,17 @@ export function useShadowStyles(shadow_root, styles, id = "default") {
 }
 
 export function repeat(length, val) {
-	return Array.from({
-		length
-	}, () => val);
+	return Array.from(
+		{
+			length,
+		},
+		() => val,
+	);
 }
 
 export function throttle(func, wait) {
 	let waiting = false;
-	return function(...args) {
+	return function (...args) {
 		if (!waiting) {
 			func(...args);
 			waiting = true;

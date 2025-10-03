@@ -1,4 +1,5 @@
-import { useTags, useCustomTag } from "@std/ima";
+import { useStyledTags } from "@std/ima-utils";
+import { useCustomStyledTag } from "@std/ima-utils";
 import { css, finish, useShadowStyles, tryCatch } from "@std/utils";
 
 import acorn from "@std/js-parser";
@@ -9,19 +10,25 @@ const FONT_SIZE = 11;
 const LINE_HEIGHT = 1.25;
 const CHUNK_SIZE = 20;
 
-const t = useTags();
+const t = useStyledTags({ shadow_root: getModuleEditorRoot });
 
-const CodepadEditor = useCustomTag("codepad-editor", function ({ $listen }) {
-	return {
-		connected() {
-			this.dispatchEvent(new CustomEvent("mount"));
-		},
+const CodepadEditor = useCustomStyledTag(
+	"codepad-editor",
+	function ({ $listen }) {
+		return {
+			connected() {
+				this.dispatchEvent(new CustomEvent("mount"));
+			},
 
-		disconnected() {
-			this.dispatchEvent(new CustomEvent("unmount"));
-		},
-	};
-});
+			disconnected() {
+				this.dispatchEvent(new CustomEvent("unmount"));
+			},
+		};
+	},
+	{
+		shadow_root: getModuleEditorRoot,
+	},
+);
 
 function highlightSource(formatted_code) {
 	const start_time = performance.now();
@@ -219,7 +226,7 @@ function highlightSource(formatted_code) {
 
 export async function Codepad({ module, ...props }) {
 	const root = getModuleEditorRoot();
-	useShadowStyles(root, theme, "codepad-editor");
+	useShadowStyles(root, default_theme, "codepad-editor-theme");
 
 	const [source, error] = await tryCatch(async () => {
 		const response = await fetch(module.blob_url);
@@ -423,6 +430,19 @@ export async function Codepad({ module, ...props }) {
 		{
 			...props,
 			ref: editor_ref,
+			styles: {
+				key: "codepad-editor",
+				css: `
+					& {
+						display: block;
+						position: relative;
+						width: 100%;
+						height: 100%;
+						padding: 11px;
+						overflow: scroll;
+					}
+				`,
+			},
 			onmount() {
 				if (textarea_ref.current) {
 					textarea_ref.current.value = formatted_code;
@@ -438,20 +458,46 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				class: "header",
+				styles: {
+					key: "codepad-header",
+					css: css`
+						& {
+							position: sticky;
+							height: 0px;
+							width: 100%;
+							/*top: 11px;*/
+							top: 0;
+							left: 0;
+							z-index: 1;
+						}
+					`,
+				},
 			},
 			t.div(
 				{
-					class: "bar",
+					styles: {
+						key: "codepad-header-bar",
+						css: css`
+							& {
+								position: absolute;
+								display: flex;
+								justify-content: space-between;
+								align-items: center;
+								height: fit-content;
+								width: 100%;
+								top: 0;
+								left: 0;
+							}
+						`,
+					},
 				},
 				t.div(
-					module.name,
-					() => (has_changes ? "*" : ""),
 					() =>
+						has_changes ? `${module.name}*` : module.name, +
 						window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
 							? last_save_mode
 								? ` (${last_save_mode})`
-								: " (remote)"
+								: ` (remote: ${module.remote_url})`
 							: " (local)",
 				),
 				t.button(
@@ -459,18 +505,47 @@ export async function Codepad({ module, ...props }) {
 						style: () => `display: ${has_changes ? "block" : "none"};`,
 						onclick: saveModule,
 					},
-					"save",
+					"SAVE",
 				),
 			),
 		),
 		t.div(
 			{
-				class: "wrapper",
+				styles: {
+					key: "codepad-wrapper",
+					css: `
+						& {
+							position: relative;
+							width: 100%;
+							height: fit-content;
+							min-height: 100%;
+							width: fit-content;
+							min-width: 100%;
+						}
+					`,
+				},
 			},
 			t.div(
 				{
 					ref: content_ref,
-					class: "content",
+					styles: {
+						key: "codepad-content",
+						css: `
+							& {
+								position: relative;
+								user-select: none;
+								pointer-events: none;
+								width: fit-content;
+								height: fit-content;
+								min-width: 100%;
+								min-height: 100%;
+								font-size: ${FONT_SIZE}px;
+								line-height: ${LINE_HEIGHT};
+								padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+								padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+							}
+						`,
+					},
 				},
 				...chunk_elements,
 			),
@@ -479,9 +554,47 @@ export async function Codepad({ module, ...props }) {
 				spellcheck: "false",
 				oninput: handleTextareaInput,
 				onkeydown: handleKeyDown,
+				styles: {
+					key: "codepad-textarea",
+					css: `
+						& {
+							position: absolute;
+							top: 0;
+							left: 0;
+							width: 100%;
+							height: 100%;
+							white-space: nowrap;
+							overflow: hidden;
+							word-wrap: normal;
+							resize: none;
+							color: transparent;
+							background: transparent;
+							font-size: ${FONT_SIZE}px;
+							line-height: ${LINE_HEIGHT};
+							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+						}
+
+						&:focus {
+							outline: none;
+						}
+					`,
+				},
 			}),
 			t.div({
 				class: "hl-error-indicator",
+				styles: {
+					key: "codepad-error-indicator",
+					css: `
+						& {
+							position: absolute;
+							width: 100%;
+							left: 0;
+							transform: translateY(50%);
+							pointer-events: none;
+						}
+					`,
+				},
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
 					height: ${LINE_HEIGHT * FONT_SIZE}px;
@@ -492,19 +605,11 @@ export async function Codepad({ module, ...props }) {
 	);
 }
 
-const theme = css`
-	:host {
-		--color-highlight: #aafee7;
-	}
-
+const default_theme = css`
 	codepad-editor {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 100%;
 		background-color: black;
-		padding: 11px;
-		overflow: scroll;
+		scrollbar-width: thin;
+		scrollbar-color: #444444 #1a1a1a;
 	}
 
 	codepad-editor::-webkit-scrollbar {
@@ -528,52 +633,9 @@ const theme = css`
 		background: #000;
 	}
 
-	/* Firefox scrollbar styling */
-	codepad-editor {
-		scrollbar-width: thin;
-		scrollbar-color: #444444 #1a1a1a;
-	}
-
-	codepad-editor .wrapper {
-		position: relative;
-		width: 100%;
-		height: fit-content;
-		min-height: 100%;
-		width: fit-content;
-		min-width: 100%;
-	}
-
-	codepad-editor .content {
-		position: relative;
-		user-select: none;
-		pointer-events: none;
-		font-size: ${FONT_SIZE}px;
-		line-height: ${LINE_HEIGHT};
-		height: fit-content;
-		min-height: 100%;
-		width: fit-content;
-		min-width: 100%;
-		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-	}
-
 	codepad-editor textarea {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		white-space: nowrap;
-		overflow: hidden;
-		word-wrap: normal;
-		resize: none;
-		color: transparent;
 		caret-color: #cacaca;
-		background: transparent;
-		font-size: ${FONT_SIZE}px;
-		line-height: ${LINE_HEIGHT};
-		padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-		padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+		tab-size: 3;
 	}
 
 	codepad-editor textarea::selection {
@@ -581,34 +643,12 @@ const theme = css`
 		color: black;
 	}
 
-	codepad-editor textarea:focus {
-		outline: none;
-	}
-
-	codepad-editor .header {
-		position: sticky;
-		height: 0px;
-		width: 100%;
-		/*top: 11px;*/
-		top: 0;
-		left: 0;
-		z-index: 1;
-	}
-
-	codepad-editor .header .bar {
-		position: absolute;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		height: fit-content;
-		width: 100%;
-		top: 0;
-		left: 0;
+	codepad-editor [styles-key="codepad-header-bar"] {
 		background-color: var(--color-highlight);
 		color: black;
 	}
 
-	codepad-editor .header .bar button:hover {
+	codepad-editor [styles-key="codepad-header-bar"] button:hover {
 		background-color: white;
 	}
 
@@ -618,6 +658,7 @@ const theme = css`
 
 	codepad-editor .code-chunk {
 		color: #ffffff;
+		tab-size: 3;
 	}
 
 	.hl-literal,
@@ -639,12 +680,7 @@ const theme = css`
 	}
 
 	.hl-error-indicator {
-		position: absolute;
-		width: 100%;
 		background-color: red;
 		mix-blend-mode: exclusion;
-		left: 0;
-		transform: translateY(50%);
-		pointer-events: none;
 	}
 `;
