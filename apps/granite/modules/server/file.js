@@ -1,7 +1,7 @@
 const { ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs/promises");
-const { convert_from_windows_path } = require("../lib/utils.js");
+const { convert_from_windows_path } = require("../shared/utils.js");
 
 //
 // Bridge Exports
@@ -23,6 +23,7 @@ ipcMain.handle("file.exists", async (event, filepath) => {
 ipcMain.handle("file.resolve", async (event, filepath) => {
 	return path.resolve(filepath);
 });
+
 ipcMain.handle("file.is_dir", async (event, filepath, create_if_not_exists = false) => {
 	try {
 		const stats = await fs.stat(filepath);
