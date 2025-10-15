@@ -971,7 +971,7 @@ import {
 	useStyledTags
 } from "@std/ima-utils";
 
-const t = useStyledTags();
+const { main, div, span } = useStyledTags();
 
 const root_el = document.querySelector("main");
 
@@ -979,50 +979,44 @@ function Main() {
 
 	// Main website content goes here...
 
-	return t.main({
-			styles: {
-				key: "main-wrapper",
-				css: `
+	return main({
+			styles: `
+				& {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					width: 100%;
+					height: 100vh;
+				}
+			`,
+		},
+		div({
+				styles: `
 					& {
+						background: white;
+						width: 50%;
+						height: 50%;
 						display: flex;
 						align-items: center;
 						justify-content: center;
-						width: 100%;
-						height: 100vh;
+						container-type: inline-size;
+						container-name: card;
 					}
-				`,
-			}
-		},
-		t.div({
-				styles: {
-					key: "key-is-always-required",
-					css: `
-						& {
-							background: white;
-							width: 50%;
-							height: 50%;
-							display: flex;
-							align-items: center;
-							justify-content: center;
-							container-type: inline-size;
-							container-name: card;
-						}
 
-						& span {
-							color: black;
-							transition: all cubic-bezier(0.175, 0.885, 0.32, 1.275) 500ms;
-						}
+					& > span {
+						color: black;
+						transition: all cubic-bezier(0.175, 0.885, 0.32, 1.275) 500ms;
+					}
 
-						@media (min-width: 800px) {
-							& span {
-								font-size: 2.5rem;
-								transform: rotate(360deg);
-							}
+					@media (min-width: 800px) {
+						& > span {
+							font-size: 2.5rem;
+							transform: rotate(360deg);
 						}
-					`
-				}
+					}
+				`
 			},
-			t.span(Math.random().toFixed(3)))
+			span(Math.random().toFixed(3)))
 	);
 }
 
@@ -1049,8 +1043,7 @@ window.addEventListener("keydown", (e) => {
 window.showModuleEditor = showModuleEditor;</script>
 
 		<!-- Tools -->
-		<script type="blob-module" name="@std/utils" remote="../modules/client/utils.js">//
-// Utils
+		<script type="blob-module" name="@std/utils" remote="../modules/client/utils.js">// Utils
 //
 
 // Commonly used utilities for general purpose JS programming.
@@ -1058,6 +1051,24 @@ window.showModuleEditor = showModuleEditor;</script>
 //
 
 const __added_styles = new Set();
+const __adopted_sheets = new Map();
+
+export function base64ToString(base64_str) {
+	const binary_string = atob(base64_str);
+	const bytes = new Uint8Array(binary_string.length);
+
+	for (let i = 0; i < binary_string.length; i++) {
+		bytes[i] = binary_string.charCodeAt(i);
+	}
+
+	return new TextDecoder().decode(bytes);
+}
+
+export function stringToBase64(str) {
+	const bytes = new TextEncoder().encode(str);
+	const binary_string = String.fromCharCode(...bytes);
+	return btoa(binary_string);
+}
 
 export function uniqueId() {
 	// Check if crypto API is available
@@ -1190,7 +1201,7 @@ export function useGlobalStyles(styles) {
 		return;
 	}
 
-	const sheet = createStylesheet("global_styles");
+	const sheet = createStyleSheet("global_styles");
 
 	// Mark as added
 	__added_styles.add(styles);
@@ -1233,23 +1244,36 @@ export function useGlobalStyles(styles) {
 	}
 }
 
-export function createStylesheet(id) {
-	let sheet = document.adoptedStyleSheets.find((sheet) => sheet.id === id);
-	if (!sheet) {
+export function getAdoptedStyleSheet(id, type = "document") {
+	const document_key = `${type}_${id}`;
+	return __adopted_sheets.get(document_key);
+}
+
+export function createStyleSheet(id) {
+	const document_key = `document_${id}`;
+
+	let sheet = __adopted_sheets.get(document_key);
+
+	if (!sheet || !document.adoptedStyleSheets.includes(sheet)) {
 		sheet = new CSSStyleSheet();
-		sheet.id = id;
-		document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+		__adopted_sheets.set(document_key, sheet);
+		document.adoptedStyleSheets.push(sheet);
 	}
+
 	return sheet;
 }
 
-export function createShadowStylesheet(shadow_root, id) {
-	let sheet = shadow_root.adoptedStyleSheets.find((sheet) => sheet.id === id);
-	if (!sheet) {
+export function createShadowStyleSheet(shadow_root, id) {
+	const shadow_key = `shadow_${id}`;
+
+	let sheet = __adopted_sheets.get(shadow_key);
+
+	if (!sheet || !shadow_root.adoptedStyleSheets.includes(sheet)) {
 		sheet = new CSSStyleSheet();
-		sheet.id = id;
-		shadow_root.adoptedStyleSheets = [...shadow_root.adoptedStyleSheets, sheet];
+		__adopted_sheets.set(shadow_key, sheet);
+		shadow_root.adoptedStyleSheets.push(sheet);
 	}
+
 	return sheet;
 }
 
@@ -1259,10 +1283,10 @@ export function useShadowStyles(shadow_root, styles, id = "default") {
 
 	// Skip if already added
 	if (__added_styles.has(shadow_key)) {
-		return createShadowStylesheet(shadow_root, id);
+		return createShadowStyleSheet(shadow_root, id);
 	}
 
-	const sheet = createShadowStylesheet(shadow_root, id);
+	const sheet = createShadowStyleSheet(shadow_root, id);
 
 	// Mark as added
 	__added_styles.add(shadow_key);
@@ -1951,52 +1975,39 @@ function staticTagGenerator(_, tag) {
 //
 
 // Extra utils for working with IMA
-// by Fernando Garcia (fergarram)
+// by fergarram
 //
 
 import { useTags } from "@std/ima";
-import { useGlobalStyles, uniqueId, useShadowStyles } from "@std/utils";
+import { stringToBase64, createStyleSheet, getAdoptedStyleSheet, createShadowStyleSheet } from "@std/utils";
 
 export function useStyledTags(opts) {
 	return useTags({
 		...opts,
 		attr(name, value) {
 			if (name === "styles") {
-				// Only handle object format
-				if (typeof value === "object" && value !== null) {
-					if (!value.key) {
-						console.warn("Styles key can't be empty", value);
-						return {
-							name: "styles-key",
-							value: "",
-						};
+				// Use CSS as key
+				const key = stringToBase64(value);
+				const processed_css = value.replaceAll("&", `[styles-key="${key}"]`);
+
+				if (opts && opts.shadow_root) {
+					const shadow_root = typeof opts.shadow_root === "function" ? opts.shadow_root() : opts.shadow_root;
+					const sheet_exists = getAdoptedStyleSheet(key, "shadow");
+					if (!sheet_exists) {
+						const sheet = createShadowStyleSheet(shadow_root, key);
+						sheet.replaceSync(processed_css);
 					}
-
-					const id = value.key;
-					const css = value.css || "";
-
-					const processed_css = css.replaceAll("&", `[styles-key="${id}"]`);
-					if (opts && opts.shadow_root) {
-						useShadowStyles(
-							typeof opts.shadow_root === "function" ? opts.shadow_root() : opts.shadow_root,
-							processed_css,
-							id
-						);
-					} else {
-						useGlobalStyles(processed_css);
+				} else {
+					const sheet_exists = getAdoptedStyleSheet(key);
+					if (!sheet_exists) {
+						const sheet = createStyleSheet(key);
+						sheet.replaceSync(processed_css);
 					}
-
-					return {
-						name: "styles-key",
-						value: id,
-					};
 				}
 
-				// Fallback for non-object types
-				console.warn("Styles attribute must be an object with 'key' and 'css' properties. Nothing will be done.", value);
 				return {
 					name: "styles-key",
-					value: "",
+					value: key,
 				};
 			}
 
@@ -2074,7 +2085,8 @@ export function useCustomTag(tag_name, definition, opts) {
 			return useTags(opts)[tag_name];
 		}
 	}
-}</script>
+}
+</script>
 
 		<!-- Module Editor -->
 		<script type="blob-module" name="@std/js-parser" remote="../modules/client/acorn.js">// Acorn is a tiny, fast JavaScript parser written in JavaScript.
@@ -5753,8 +5765,8 @@ export {
 // Created by Einar Lielmanis, einar@beautifier.io
 //
 // Maintained and expanded by Liam Newman bitwiseman@beautifier.io
-//
-// Thanks also to Jason Diamond, Patrick Hof, Nochum Sossonko, Andreas Schneider,
+//	
+// Thanks also to Jason Diamond, Patrick Hof, Nochum Sossonko, Andreas Schneider, 
 // Dave Vasilevsky, Vital Batmanov, Ron Baldwin, Gabriel Harrison, Chris J. Shull,
 // Mathias Bynens, Vittorio Gambaletta and others.
 
@@ -9015,19 +9027,16 @@ export async function Codepad({ module, ...props }) {
 		{
 			...props,
 			ref: editor_ref,
-			styles: {
-				key: "codepad-editor",
-				css: `
-					& {
-						display: block;
-						position: relative;
-						width: 100%;
-						height: 100%;
-						padding: 11px;
-						overflow: scroll;
-					}
-				`,
-			},
+			styles: css`
+				& {
+					display: block;
+					position: relative;
+					width: 100%;
+					height: 100%;
+					padding: 11px;
+					overflow: scroll;
+				}
+			`,
 			onmount() {
 				if (textarea_ref.current) {
 					textarea_ref.current.value = formatted_code;
@@ -9043,95 +9052,82 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				styles: {
-					key: "codepad-header",
-					css: css`
-						& {
-							position: sticky;
-							height: 0px;
-							width: 100%;
-							/*top: 11px;*/
-							top: 0;
-							left: 0;
-							z-index: 1;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: sticky;
+						height: 0px;
+						width: 100%;
+						/*top: 11px;*/
+						top: 0;
+						left: 0;
+						z-index: 1;
+					}
+				`,
 			},
 			t.div(
 				{
-					styles: {
-						key: "codepad-header-bar",
-						css: css`
-							& {
-								position: absolute;
-								display: flex;
-								justify-content: space-between;
-								align-items: center;
-								height: fit-content;
-								width: 100%;
-								top: 0;
-								left: 0;
-							}
-						`,
-					},
+					class: "codepad-header-bar",
+					styles: css`
+						& {
+							position: absolute;
+							display: flex;
+							justify-content: space-between;
+							align-items: center;
+							height: fit-content;
+							width: 100%;
+							top: 0;
+							left: 0;
+						}
+					`,
 				},
 				t.div(
-					module.name,
-					() => (has_changes ? "*" : ""),
-					() =>
-						window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
-							? last_save_mode
-								? ` (${last_save_mode})`
-								: ` (remote: ${module.remote_url})`
-							: " (local)",
+					() => (has_changes ? `${module.name}*` : module.name),
+					+window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
+						? last_save_mode
+							? ` (${last_save_mode})`
+							: ` (remote: ${module.remote_url})`
+						: " (local)",
 				),
 				t.button(
 					{
 						style: () => `display: ${has_changes ? "block" : "none"};`,
 						onclick: saveModule,
 					},
-					"save",
+					"SAVE",
 				),
 			),
 		),
 		t.div(
 			{
-				styles: {
-					key: "codepad-wrapper",
-					css: `
-						& {
-							position: relative;
-							width: 100%;
-							height: fit-content;
-							min-height: 100%;
-							width: fit-content;
-							min-width: 100%;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: fit-content;
+						min-height: 100%;
+						width: fit-content;
+						min-width: 100%;
+					}
+				`,
 			},
 			t.div(
 				{
 					ref: content_ref,
-					styles: {
-						key: "codepad-content",
-						css: `
-							& {
-								position: relative;
-								user-select: none;
-								pointer-events: none;
-								width: fit-content;
-								height: fit-content;
-								min-width: 100%;
-								min-height: 100%;
-								font-size: ${FONT_SIZE}px;
-								line-height: ${LINE_HEIGHT};
-								padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-								padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-							}
-						`,
-					},
+					styles: css`
+						& {
+							position: relative;
+							user-select: none;
+							pointer-events: none;
+							width: fit-content;
+							height: fit-content;
+							min-width: 100%;
+							min-height: 100%;
+							font-size: ${FONT_SIZE}px;
+							line-height: ${LINE_HEIGHT};
+							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+						}
+					`
 				},
 				...chunk_elements,
 			),
@@ -9140,47 +9136,41 @@ export async function Codepad({ module, ...props }) {
 				spellcheck: "false",
 				oninput: handleTextareaInput,
 				onkeydown: handleKeyDown,
-				styles: {
-					key: "codepad-textarea",
-					css: `
-						& {
-							position: absolute;
-							top: 0;
-							left: 0;
-							width: 100%;
-							height: 100%;
-							white-space: nowrap;
-							overflow: hidden;
-							word-wrap: normal;
-							resize: none;
-							color: transparent;
-							background: transparent;
-							font-size: ${FONT_SIZE}px;
-							line-height: ${LINE_HEIGHT};
-							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-						}
+				styles: css`
+					& {
+						position: absolute;
+						top: 0;
+						left: 0;
+						width: 100%;
+						height: 100%;
+						white-space: nowrap;
+						overflow: hidden;
+						word-wrap: normal;
+						resize: none;
+						color: transparent;
+						background: transparent;
+						font-size: ${FONT_SIZE}px;
+						line-height: ${LINE_HEIGHT};
+						padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+						padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+					}
 
-						&:focus {
-							outline: none;
-						}
-					`,
-				},
+					&:focus {
+						outline: none;
+					}
+				`,
 			}),
 			t.div({
 				class: "hl-error-indicator",
-				styles: {
-					key: "codepad-error-indicator",
-					css: `
-						& {
-							position: absolute;
-							width: 100%;
-							left: 0;
-							transform: translateY(50%);
-							pointer-events: none;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: absolute;
+						width: 100%;
+						left: 0;
+						transform: translateY(50%);
+						pointer-events: none;
+					}
+				`,
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
 					height: ${LINE_HEIGHT * FONT_SIZE}px;
@@ -9229,12 +9219,12 @@ const default_theme = css`
 		color: black;
 	}
 
-	codepad-editor [styles-key="codepad-header-bar"] {
+	codepad-editor .codepad-header-bar {
 		background-color: var(--color-highlight);
 		color: black;
 	}
 
-	codepad-editor [styles-key="codepad-header-bar"] button:hover {
+	codepad-editor .codepad-header-bar button:hover {
 		background-color: white;
 	}
 
@@ -9269,9 +9259,15 @@ const default_theme = css`
 		background-color: red;
 		mix-blend-mode: exclusion;
 	}
-`;
-</script>
-		<script type="blob-module" name="module-editor" remote="../modules/client/module-editor.js">import {
+`;</script>
+		<script type="blob-module" name="module-editor" remote="../modules/client/module-editor.js">//
+// Blob Module Editor
+// by fergarram
+// 
+
+// Provides an interface to edit available blob modules.
+
+import {
 	useTags
 } from "@std/ima";
 import {
@@ -9531,6 +9527,7 @@ const theme = css`
 	<body style=""><div id="module-editor-host"></div>
 
 
-<main styles-key="main-wrapper"><div styles-key="key-is-always-required"><span>0.363</span></div></main>
+<main styles-key="CgkJCQkmIHsKCQkJCQlkaXNwbGF5OiBmbGV4OwoJCQkJCWFsaWduLWl0ZW1zOiBjZW50ZXI7CgkJCQkJanVzdGlmeS1jb250ZW50OiBjZW50ZXI7CgkJCQkJd2lkdGg6IDEwMCU7CgkJCQkJaGVpZ2h0OiAxMDB2aDsKCQkJCX0KCQkJ"><div styles-key="CgkJCQkJJiB7CgkJCQkJCWJhY2tncm91bmQ6IHdoaXRlOwoJCQkJCQl3aWR0aDogNTAlOwoJCQkJCQloZWlnaHQ6IDUwJTsKCQkJCQkJZGlzcGxheTogZmxleDsKCQkJCQkJYWxpZ24taXRlbXM6IGNlbnRlcjsKCQkJCQkJanVzdGlmeS1jb250ZW50OiBjZW50ZXI7CgkJCQkJCWNvbnRhaW5lci10eXBlOiBpbmxpbmUtc2l6ZTsKCQkJCQkJY29udGFpbmVyLW5hbWU6IGNhcmQ7CgkJCQkJfQoKCQkJCQkmID4gc3BhbiB7CgkJCQkJCWNvbG9yOiBibGFjazsKCQkJCQkJdHJhbnNpdGlvbjogYWxsIGN1YmljLWJlemllcigwLjE3NSwgMC44ODUsIDAuMzIsIDEuMjc1KSA1MDBtczsKCQkJCQl9CgoJCQkJCUBtZWRpYSAobWluLXdpZHRoOiA4MDBweCkgewoJCQkJCQkmID4gc3BhbiB7CgkJCQkJCQlmb250LXNpemU6IDIuNXJlbTsKCQkJCQkJCXRyYW5zZm9ybTogcm90YXRlKDM2MGRlZyk7CgkJCQkJCX0KCQkJCQl9CgkJCQk="><span>0.215</span></div></main>
+
 
 </body></html>

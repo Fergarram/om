@@ -430,19 +430,16 @@ export async function Codepad({ module, ...props }) {
 		{
 			...props,
 			ref: editor_ref,
-			styles: {
-				key: "codepad-editor",
-				css: `
-					& {
-						display: block;
-						position: relative;
-						width: 100%;
-						height: 100%;
-						padding: 11px;
-						overflow: scroll;
-					}
-				`,
-			},
+			styles: css`
+				& {
+					display: block;
+					position: relative;
+					width: 100%;
+					height: 100%;
+					padding: 11px;
+					overflow: scroll;
+				}
+			`,
 			onmount() {
 				if (textarea_ref.current) {
 					textarea_ref.current.value = formatted_code;
@@ -458,47 +455,41 @@ export async function Codepad({ module, ...props }) {
 		},
 		t.div(
 			{
-				styles: {
-					key: "codepad-header",
-					css: css`
-						& {
-							position: sticky;
-							height: 0px;
-							width: 100%;
-							/*top: 11px;*/
-							top: 0;
-							left: 0;
-							z-index: 1;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: sticky;
+						height: 0px;
+						width: 100%;
+						/*top: 11px;*/
+						top: 0;
+						left: 0;
+						z-index: 1;
+					}
+				`,
 			},
 			t.div(
 				{
-					styles: {
-						key: "codepad-header-bar",
-						css: css`
-							& {
-								position: absolute;
-								display: flex;
-								justify-content: space-between;
-								align-items: center;
-								height: fit-content;
-								width: 100%;
-								top: 0;
-								left: 0;
-							}
-						`,
-					},
+					class: "codepad-header-bar",
+					styles: css`
+						& {
+							position: absolute;
+							display: flex;
+							justify-content: space-between;
+							align-items: center;
+							height: fit-content;
+							width: 100%;
+							top: 0;
+							left: 0;
+						}
+					`,
 				},
 				t.div(
-					() =>
-						has_changes ? `${module.name}*` : module.name, +
-						window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
-							? last_save_mode
-								? ` (${last_save_mode})`
-								: ` (remote: ${module.remote_url})`
-							: " (local)",
+					() => (has_changes ? `${module.name}*` : module.name),
+					+window.__blob_module_loader_settings__.prefers_remote_modules && module.remote_url !== null
+						? last_save_mode
+							? ` (${last_save_mode})`
+							: ` (remote: ${module.remote_url})`
+						: " (local)",
 				),
 				t.button(
 					{
@@ -511,41 +502,35 @@ export async function Codepad({ module, ...props }) {
 		),
 		t.div(
 			{
-				styles: {
-					key: "codepad-wrapper",
-					css: `
-						& {
-							position: relative;
-							width: 100%;
-							height: fit-content;
-							min-height: 100%;
-							width: fit-content;
-							min-width: 100%;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: fit-content;
+						min-height: 100%;
+						width: fit-content;
+						min-width: 100%;
+					}
+				`,
 			},
 			t.div(
 				{
 					ref: content_ref,
-					styles: {
-						key: "codepad-content",
-						css: `
-							& {
-								position: relative;
-								user-select: none;
-								pointer-events: none;
-								width: fit-content;
-								height: fit-content;
-								min-width: 100%;
-								min-height: 100%;
-								font-size: ${FONT_SIZE}px;
-								line-height: ${LINE_HEIGHT};
-								padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-								padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-							}
-						`,
-					},
+					styles: css`
+						& {
+							position: relative;
+							user-select: none;
+							pointer-events: none;
+							width: fit-content;
+							height: fit-content;
+							min-width: 100%;
+							min-height: 100%;
+							font-size: ${FONT_SIZE}px;
+							line-height: ${LINE_HEIGHT};
+							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+						}
+					`
 				},
 				...chunk_elements,
 			),
@@ -554,47 +539,41 @@ export async function Codepad({ module, ...props }) {
 				spellcheck: "false",
 				oninput: handleTextareaInput,
 				onkeydown: handleKeyDown,
-				styles: {
-					key: "codepad-textarea",
-					css: `
-						& {
-							position: absolute;
-							top: 0;
-							left: 0;
-							width: 100%;
-							height: 100%;
-							white-space: nowrap;
-							overflow: hidden;
-							word-wrap: normal;
-							resize: none;
-							color: transparent;
-							background: transparent;
-							font-size: ${FONT_SIZE}px;
-							line-height: ${LINE_HEIGHT};
-							padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
-							padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
-						}
+				styles: css`
+					& {
+						position: absolute;
+						top: 0;
+						left: 0;
+						width: 100%;
+						height: 100%;
+						white-space: nowrap;
+						overflow: hidden;
+						word-wrap: normal;
+						resize: none;
+						color: transparent;
+						background: transparent;
+						font-size: ${FONT_SIZE}px;
+						line-height: ${LINE_HEIGHT};
+						padding-top: ${LINE_HEIGHT * FONT_SIZE * 1.5}px;
+						padding-bottom: calc(100vh - ${LINE_HEIGHT * FONT_SIZE * 6}px);
+					}
 
-						&:focus {
-							outline: none;
-						}
-					`,
-				},
+					&:focus {
+						outline: none;
+					}
+				`,
 			}),
 			t.div({
 				class: "hl-error-indicator",
-				styles: {
-					key: "codepad-error-indicator",
-					css: `
-						& {
-							position: absolute;
-							width: 100%;
-							left: 0;
-							transform: translateY(50%);
-							pointer-events: none;
-						}
-					`,
-				},
+				styles: css`
+					& {
+						position: absolute;
+						width: 100%;
+						left: 0;
+						transform: translateY(50%);
+						pointer-events: none;
+					}
+				`,
 				style: () => `
 					display: ${error_pos ? "block" : "none"};
 					height: ${LINE_HEIGHT * FONT_SIZE}px;
@@ -643,12 +622,12 @@ const default_theme = css`
 		color: black;
 	}
 
-	codepad-editor [styles-key="codepad-header-bar"] {
+	codepad-editor .codepad-header-bar {
 		background-color: var(--color-highlight);
 		color: black;
 	}
 
-	codepad-editor [styles-key="codepad-header-bar"] button:hover {
+	codepad-editor .codepad-header-bar button:hover {
 		background-color: white;
 	}
 

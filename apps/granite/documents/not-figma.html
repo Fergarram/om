@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+
+		<!-- Browser Support -->
+		<!--
+			Determining browser support is hard.
+			LLMs are useful for this task.
+			I wonder how much would it cost to implement a browser support API that uses an LLM.
+			Or even using a local one.
+		-->
+		<script type="application/json+browser-support">
+			{
+				"html+css": {
+					"chrome": "29 (2013)",
+					"firefox": "28 (2014)",
+					"safari": "9 (2015)",
+					"min": "2013",
+					"max": "2015"
+				},
+				"javascript": {
+					"chrome": "89 (2021)",
+					"firefox": "108 (2022)",
+					"safari": "16.4 (2023)",
+					"min": "2021",
+					"max": "2023"
+				}
+			}
+		</script>
+
+		<!-- Style reset and vars -->
+		<style name="base" remote="../modules/client/@std/reset.css"></style>
+
+		<!-- Blob Module Loader -->
+		<script id="module-loader" src="../modules/client/@std/module-loader.js"></script>
+
+		<!-- Main Entry -->
+		<script type="blob-module" name="main" remote="../modules/client/common/not-figma.js" nodownload></script>
+
+		<!-- Modules -->
+		<script type="blob-module" name="@std/utils" remote="../modules/client/@std/utils.js" nodownload></script>
+		<script type="blob-module" name="@std/ima" remote="../modules/client/@std/ima.js" nodownload></script>
+		<script type="blob-module" name="@std/ima-utils" remote="../modules/client/@std/ima-utils.js" nodownload></script>
+	</head>
+	<body>
+		<main></main>
+	</body>
+</html>

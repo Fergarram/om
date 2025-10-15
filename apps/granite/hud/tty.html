@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html><head>
+<html>
+	<head>
 		<meta charset="UTF-8">
 		<meta copy="3">
 
@@ -966,28 +967,7 @@
 		</script>
 
 		<!-- Main Entry -->
-		<script type="blob-module" name="main">
-			import { useTags } from "@std/ima";
-			const t = useTags();
-
-			const layout = t.div({
-				style: `
-					background-color: rgba(0,0,0,0.8);
-					color: white;
-					position: fixed;
-					top: 0;
-					left: 0;
-					width: 100%;
-					height: 100%;
-					display: flex;
-					align-items: flex-end;
-					justify-content: flex-strart;
-				`
-			}, "Lonely clown")
-
-			const main_el = document.body.querySelector("main");
-			main_el.replaceChildren(layout);
-		</script>
+		<script type="blob-module" name="main" remote="./tty.js"></script>
 
 		<!-- Tools -->
 		<script type="blob-module" name="@std/utils" remote="../modules/client/utils.js"></script>

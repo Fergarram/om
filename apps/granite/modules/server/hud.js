@@ -57,7 +57,7 @@ function createHud(app_label, electron_window, opts = {}) {
 	});
 
 	// Update overlay size when window size changes
-	if (opts && opts.disable_auto_resize) {
+	if (opts && !opts.disable_auto_resize) {
 		if (hasWindowContentViewAPI) {
 			electron_window.on("resize", () => {
 				const [width, height] = electron_window.getSize();
@@ -70,17 +70,10 @@ function createHud(app_label, electron_window, opts = {}) {
 			});
 		} else {
 			overlay_view.setAutoResize({
-				width: false,
-				height: false,
-				horizontal: false,
-				vertical: false,
+				horizontal: true,
+				vertical: true,
 			});
 		}
-	} else if (!hasWindowContentViewAPI) {
-		overlay_view.setAutoResize({
-			width: true,
-			height: true,
-		});
 	}
 
 	// Notify renderer about overlay bounds change

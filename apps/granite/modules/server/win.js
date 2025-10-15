@@ -54,7 +54,18 @@ ipcMain.handle("win.open_space", async (event, space) => {
 	window.webContents.executeJavaScript(`window.location.href = "file://${target_path}"`);
 });
 
-function createWindow(app_name, enable_defaults = false) {
+function createWindow(app_name, opts = { }) {
+	let enable_defaults = false;
+	let show_frame = false;
+
+	if (opts.enable_defaults === true) {
+		enable_defaults = true;
+	}
+
+	if (opts.show_frame === true) {
+		show_frame = true;
+	}
+
 	const primary_display = screen.getPrimaryDisplay();
 	const { width, height } = primary_display.workAreaSize;
 
@@ -63,7 +74,7 @@ function createWindow(app_name, enable_defaults = false) {
 		height: height / 2,
 		show: false,
 		backgroundColor: "#000000",
-		frame: false,
+		frame: show_frame,
 		autoHideMenuBar: true,
 		webPreferences: {
 			zoomFactor: 1.0,

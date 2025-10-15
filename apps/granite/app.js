@@ -12,19 +12,25 @@ console.log({
 	v8: process.versions.v8,
 });
 
+const args = process.argv.slice(2);
+const arg_filename = args[0];
+const arg_show_frame = args.includes("--show-frame");
+
 app.whenReady().then(() => {
 	const app_label = "granite-v1";
 
-	const win = createWindow(app_label, true);
-	// @TODO: This path should be an editable setting
-	win.loadFile("./documents/base.html");
+	const win = createWindow(app_label, {
+		enable_defaults: true,
+		show_frame: arg_show_frame
+	});
+	win.loadFile(arg_filename ? arg_filename : "./documents/index.html");
 
 	const hud = createHud(app_label, win, {
 		shortcut: "Alt+Escape",
 	});
+
 	// @TODO: This path should be an editable setting
 	hud.webContents.loadFile("./hud/tty.html");
-	// hud.webContents.openDevTools({ mode: "detach" });
 
 	const menu_template = [
 		{
@@ -40,7 +46,7 @@ app.whenReady().then(() => {
 							hud.webContents.openDevTools({ mode: "detach" });
 						}
 					},
-				}
+				},
 			],
 		},
 	];

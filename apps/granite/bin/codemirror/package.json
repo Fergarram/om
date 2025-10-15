@@ -1,0 +1,16 @@
+{
+  "name": "codemirror",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.4",
+    "codemirror": "^6.0.2"
+  }
+}
