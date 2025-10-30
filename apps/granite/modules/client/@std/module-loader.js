@@ -232,21 +232,18 @@ window.addEventListener("load", async () => {
 		// Find the corresponding style tag and update it
 		const style_tag = Array.from(style_tags).find((tag) => tag.getAttribute("remote") === style_id);
 		if (style_tag) {
-			// Clear the content
+			const sheet = new CSSStyleSheet();
+			sheet.replaceSync(content);
+			document.adoptedStyleSheets.push(sheet);
+
+			// @TODO: Add identifier just in case.
+
 			style_tag.textContent = "";
+			style_tag.setAttribute("blob", blob_url);
 
-			// Create a new link element to load the CSS
-			const link_element = document.createElement("link");
-			link_element.rel = "stylesheet";
-			link_element.href = blob_url;
-
-			// Insert the link element after the style tag
-			style_tag.parentNode.insertBefore(link_element, style_tag.nextSibling);
-
-			console.log(`Created blob URL link for ${style_id}`);
+			console.log(`Adopted stylesheet for ${style_id}`);
 		}
 	});
-
 	// Expose blob style metadata map
 	window.__blob_style_map__ = new Map();
 
@@ -404,7 +401,6 @@ window.addEventListener("load", async () => {
 		const module_name = script.getAttribute("name");
 		const is_disabled = script.hasAttribute("disabled");
 
-		// Skip disabled modules
 		if (is_disabled) {
 			return;
 		}
@@ -412,9 +408,7 @@ window.addEventListener("load", async () => {
 		const blob_url = blob_urls.get(module_name);
 
 		if (blob_url) {
-			// Clear the textContent to free up memory
 			script.textContent = "";
-			// Add blob URL as attribute for reference
 			script.setAttribute("blob", blob_url);
 		}
 	});
@@ -462,8 +456,6 @@ window.addEventListener("load", async () => {
 		const is_disabled = script.hasAttribute("disabled");
 		const blob_url = blob_urls.get(module_name) || null;
 		const content = __blob_modules__.get(module_name) || "";
-
-		// Calculate source size in bytes
 		const src_bytes = new Blob([content]).size;
 
 		const metadata = {
@@ -581,9 +573,8 @@ window.addEventListener("load", async () => {
 					],
 				});
 
+				// Get html and create writable
 				const html_content = getDocumentOuterHtml();
-
-				// Write to file
 				const writable = await file_handle.createWritable();
 				await writable.write(html_content);
 				await writable.close();

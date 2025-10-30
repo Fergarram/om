@@ -1,8 +1,6 @@
-import { useStaticTags } from "@std/ima";
-import { useStyledTags, useCustomStyledTag } from "@std/ima-utils";
+import { useStyledTags, useCustomStyledTag, main, div, icon, span, pre, iframe, button } from "@std/ima-utils";
 import { css } from "@std/utils";
 
-const { main, div, span, pre, iframe } = useStyledTags();
 const root_el = document.querySelector("main");
 
 const CanvasContainer = useCustomStyledTag("canvas-container", function ({ $listen }) {
@@ -17,11 +15,32 @@ const CanvasContainer = useCustomStyledTag("canvas-container", function ({ $list
 	};
 });
 
+function buildIframeTree(iframe_window) {
+	const doc = iframe_window.document;
+
+	const $iframe = useStyledTags({
+		iframe_document: doc,
+	});
+
+	// let external_count = 0;
+	// doc.body.appendChild($.div(() => external_count++));
+	doc.body.appendChild(
+		$iframe.div(
+			{
+				styles: css`
+					& {
+						position: fixed;
+						bottom: 1rem;
+						right: 1rem;
+					}
+				`,
+			},
+			"wtf this is pos fixed",
+		),
+	);
+}
+
 function Main() {
-	const $S = useStaticTags();
-
-	let iframe_src = $S.html($S.head(), $S.body($S.div()));
-
 	const iframe_ref = {
 		current: null,
 	};
@@ -51,7 +70,8 @@ function Main() {
 						height: 100vh;
 						display: flex;
 						flex-direction: column;
-						background: #202020;
+						background: #252525ca;
+						backdrop-filter: blur(20px);
 						padding: 8px 12px;
 						z-index: 100000;
 						font-family: "Jetbrains Mono";
@@ -71,8 +91,7 @@ function Main() {
 						}
 					`,
 				},
-				`
-main`,
+				`main`,
 				span("#container"),
 				`
 	div
@@ -100,8 +119,7 @@ main`,
 						top: 25000 - window.innerHeight / 2,
 					});
 
-					const doc = iframe_ref.current.contentWindow.document;
-					doc.body.appendChild(div("hello test"));
+					buildIframeTree(iframe_ref.current.contentWindow);
 				},
 			},
 			div(
@@ -143,7 +161,8 @@ main`,
 						height: 100vh;
 						display: flex;
 						flex-direction: column;
-						background: #202020;
+						background: #252525ca;
+						backdrop-filter: blur(20px);
 						padding: 8px 12px;
 						z-index: 100000;
 						font-family: "Jetbrains Mono";
@@ -172,6 +191,83 @@ children: [
 	...
 ]
 `),
+		),
+		div(
+			{
+				id: "toolbar",
+				styles: css`
+					& {
+						position: fixed;
+						left: 50%;
+						bottom: 16px;
+						width: fit-content;
+						transform: translateX(-50%);
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						gap: 2px;
+						padding: 4px;
+						background: #252525ca;
+						backdrop-filter: blur(20px);
+						z-index: 100000;
+						font-family: "Jetbrains Mono";
+						font-size: 13px;
+						border-radius: 10px;
+					}
+				`,
+			},
+			button(
+				{
+					styles: css`
+						& {
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							width: 36px;
+							height: 36px;
+							border-radius: 8px;
+						}
+
+						&[selected] {
+							background: white;
+							color: black;
+						}
+					`,
+				},
+				icon({
+					name: "arrow_selector_tool",
+					style: css`
+						font-size: 20px;
+						transform: translateX(2px);
+					`,
+				}),
+			),
+			button(
+				{
+					selected: true,
+					styles: css`
+						& {
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							width: 36px;
+							height: 36px;
+							border-radius: 8px;
+						}
+
+						&[selected] {
+							background: white;
+							color: black;
+						}
+					`,
+				},
+				icon({
+					name: "gesture_select",
+					style: css`
+						font-size: 20px;
+					`,
+				}),
+			),
 		),
 	);
 }

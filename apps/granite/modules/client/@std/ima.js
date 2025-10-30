@@ -1,5 +1,5 @@
 //
-// IMA (今) 0.7.0
+// IMA (今) 0.8.0
 // by fergarram
 //
 
@@ -91,7 +91,10 @@ export function tagGenerator(_, tag, options) {
 	return (...args) => {
 		const { props, children, ref, innerHTML } = parseTagArgs(args);
 
-		const element = options?.namespace ? document.createElementNS(options.namespace, tag) : document.createElement(tag);
+		// Get the document to use - either from options or global
+		const doc = options?.iframe_document || document;
+
+		const element = options?.namespace ? doc.createElementNS(options.namespace, tag) : doc.createElement(tag);
 
 		if (ref) {
 			ref.current = element;
@@ -141,10 +144,10 @@ export function tagGenerator(_, tag, options) {
 				if (child instanceof Node) {
 					element.appendChild(child);
 				} else if (typeof child === "function") {
-					const reactive_node = setupReactiveNode(child);
+					const reactive_node = setupReactiveNode(child, doc);
 					element.appendChild(reactive_node);
 				} else {
-					element.appendChild(document.createTextNode(String(child)));
+					element.appendChild(doc.createTextNode(String(child)));
 				}
 			}
 		}
@@ -267,7 +270,9 @@ function updateReactiveComponents() {
 			if (new_value instanceof Node) {
 				new_node = new_value;
 			} else {
-				new_node = document.createTextNode(String(new_value || ""));
+				// Get the document from the marker's owner document
+				const doc = marker.ownerDocument || document;
+				new_node = doc.createTextNode(String(new_value || ""));
 			}
 
 			current_node.replaceWith(new_node);
@@ -351,11 +356,11 @@ export function getFrameTime() {
 	return frame_time;
 }
 
-function setupReactiveNode(callback) {
+function setupReactiveNode(callback, doc) {
 	const node_index = reactive_node_count++;
 
 	// Create a marker comment node
-	const marker = document.createComment(`reactive-${node_index}`);
+	const marker = doc.createComment(`reactive-${node_index}`);
 
 	// Get initial value
 	const initial_value = callback();
@@ -366,11 +371,11 @@ function setupReactiveNode(callback) {
 	if (initial_value instanceof Node) {
 		initial_node = initial_value;
 	} else {
-		initial_node = document.createTextNode(String(initial_value || ""));
+		initial_node = doc.createTextNode(String(initial_value || ""));
 	}
 
 	// Create a fragment to hold both the marker and the content
-	const fragment = document.createDocumentFragment();
+	const fragment = doc.createDocumentFragment();
 	fragment.appendChild(initial_node);
 	fragment.appendChild(marker);
 

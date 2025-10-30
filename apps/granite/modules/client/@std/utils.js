@@ -204,15 +204,17 @@ export function getAdoptedStyleSheet(id, type = "document") {
 	return __adopted_sheets.get(document_key);
 }
 
-export function createStyleSheet(id) {
+export function createStyleSheet(id, doc = document) {
 	const document_key = `document_${id}`;
 
 	let sheet = __adopted_sheets.get(document_key);
 
-	if (!sheet || !document.adoptedStyleSheets.includes(sheet)) {
-		sheet = new CSSStyleSheet();
+	const parent_window = doc.defaultView;
+
+	if (!sheet || !doc.adoptedStyleSheets.includes(sheet)) {
+		sheet = new parent_window.CSSStyleSheet();
 		__adopted_sheets.set(document_key, sheet);
-		document.adoptedStyleSheets.push(sheet);
+		doc.adoptedStyleSheets.push(sheet);
 	}
 
 	return sheet;

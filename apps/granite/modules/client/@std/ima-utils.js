@@ -26,9 +26,10 @@ export function useStyledTags(opts) {
 						sheet.replaceSync(processed_css);
 					}
 				} else {
+					const doc = (opts && opts.iframe_document) || document;
 					const sheet_exists = getAdoptedStyleSheet(key);
 					if (!sheet_exists) {
-						const sheet = createStyleSheet(key);
+						const sheet = createStyleSheet(key, doc);
 						sheet.replaceSync(processed_css);
 					}
 				}
@@ -114,3 +115,36 @@ export function useCustomTag(tag_name, definition, opts) {
 		}
 	}
 }
+
+const tags = useStyledTags();
+
+export const main = tags.main;
+export const div = tags.div;
+export const span = tags.span;
+export const pre = tags.pre;
+export const icon = tags.icon;
+export const canvas = tags.canvas;
+export const input = tags.input;
+export const textarea = tags.textarea;
+export const select = tags.select;
+export const option = tags.option;
+export const iframe = tags.iframe;
+export const button = tags.button;
+export const webview = tags.webview;
+export const label = tags.label;
+export const form = tags.form;
+export const fieldset = tags.fieldset;
+export const legend = tags.legend;
+export const a = tags.a;
+export const img = tags.img;
+export const video = tags.video;
+export const audio = tags.audio;
+export const header = tags.header;
+export const footer = tags.footer;
+export const ul = tags.ul;
+export const ol = tags.ol;
+export const li = tags.li;
+export const code = tags.code;
+export const dialog = tags.dialog;
+export const details = tags.details;
+export const summary = tags.summary;
