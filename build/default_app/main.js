@@ -136,10 +136,10 @@ if (option.unpack_asar) {
 Usage: om [options] [path]
 
 A path to an Om app may be specified. It must be one of the following:
-  - index.js file.
-  - Folder containing a package.json file.
-  - Folder containing an index.js file.
-  - .html/.htm file.
+  - Entry JavaScript file
+  - Folder containing a package.json file
+  - Folder containing an index.js file
+  - Any html/htm file.
   - http://, https://, or file:// URL.
 
 Options:
@@ -152,7 +152,6 @@ Options:
 		console.log(welcome_message);
 		process.exit(0);
 	}
-	loadApplicationByFile("index.html");
 }
 
 async function unpackAsar(archive_path) {

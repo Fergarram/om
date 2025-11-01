@@ -1,4 +1,0 @@
-fixed w-full flex flex-col
-flex items-center justify-center text-white w-full grow
-bg-black/50 absolute top-0 left-0 w-full h-full
-relative z-1 bg-black p-4 rounded-md flex flex-col

@@ -1,0 +1,127 @@
+{
+	"default_version": "22.3.27",
+	"base_url": "https://github.com/electron/electron/releases/download",
+	"output_dir": "bin/electron-packages",
+	"packages": {
+		"electron": {
+			"darwin-arm64": "electron-v{version}-darwin-arm64.zip",
+			"darwin-x64": "electron-v{version}-darwin-x64.zip",
+			"linux-arm64": "electron-v{version}-linux-arm64.zip",
+			"linux-armv7l": "electron-v{version}-linux-armv7l.zip",
+			"linux-x64": "electron-v{version}-linux-x64.zip",
+			"mas-arm64": "electron-v{version}-mas-arm64.zip",
+			"mas-x64": "electron-v{version}-mas-x64.zip",
+			"win32-arm64": "electron-v{version}-win32-arm64.zip",
+			"win32-ia32": "electron-v{version}-win32-ia32.zip",
+			"win32-x64": "electron-v{version}-win32-x64.zip"
+		},
+		"electron-symbols": {
+			"darwin-arm64": "electron-v{version}-darwin-arm64-symbols.zip",
+			"darwin-x64": "electron-v{version}-darwin-x64-symbols.zip",
+			"linux-arm64": "electron-v{version}-linux-arm64-symbols.zip",
+			"linux-armv7l": "electron-v{version}-linux-armv7l-symbols.zip",
+			"linux-x64": "electron-v{version}-linux-x64-symbols.zip",
+			"mas-arm64": "electron-v{version}-mas-arm64-symbols.zip",
+			"mas-x64": "electron-v{version}-mas-x64-symbols.zip",
+			"win32-arm64": "electron-v{version}-win32-arm64-symbols.zip",
+			"win32-ia32": "electron-v{version}-win32-ia32-symbols.zip",
+			"win32-x64": "electron-v{version}-win32-x64-symbols.zip"
+		},
+		"electron-dsym": {
+			"darwin-arm64": "electron-v{version}-darwin-arm64-dsym.zip",
+			"darwin-x64": "electron-v{version}-darwin-x64-dsym.zip",
+			"mas-arm64": "electron-v{version}-mas-arm64-dsym.zip",
+			"mas-x64": "electron-v{version}-mas-x64-dsym.zip"
+		},
+		"electron-dsym-snapshot": {
+			"darwin-arm64": "electron-v{version}-darwin-arm64-dsym-snapshot.zip",
+			"darwin-x64": "electron-v{version}-darwin-x64-dsym-snapshot.zip",
+			"mas-arm64": "electron-v{version}-mas-arm64-dsym-snapshot.zip",
+			"mas-x64": "electron-v{version}-mas-x64-dsym-snapshot.zip"
+		},
+		"electron-debug": {
+			"linux-arm64": "electron-v{version}-linux-arm64-debug.zip",
+			"linux-armv7l": "electron-v{version}-linux-armv7l-debug.zip",
+			"linux-x64": "electron-v{version}-linux-x64-debug.zip"
+		},
+		"electron-pdb": {
+			"win32-arm64": "electron-v{version}-win32-arm64-pdb.zip",
+			"win32-ia32": "electron-v{version}-win32-ia32-pdb.zip",
+			"win32-x64": "electron-v{version}-win32-x64-pdb.zip"
+		},
+		"electron-toolchain-profile": {
+			"win32-arm64": "electron-v{version}-win32-arm64-toolchain-profile.zip",
+			"win32-ia32": "electron-v{version}-win32-ia32-toolchain-profile.zip",
+			"win32-x64": "electron-v{version}-win32-x64-toolchain-profile.zip"
+		},
+		"chromedriver": {
+			"darwin-arm64": "chromedriver-v{version}-darwin-arm64.zip",
+			"darwin-x64": "chromedriver-v{version}-darwin-x64.zip",
+			"linux-arm64": "chromedriver-v{version}-linux-arm64.zip",
+			"linux-armv7l": "chromedriver-v{version}-linux-armv7l.zip",
+			"linux-x64": "chromedriver-v{version}-linux-x64.zip",
+			"mas-arm64": "chromedriver-v{version}-mas-arm64.zip",
+			"mas-x64": "chromedriver-v{version}-mas-x64.zip",
+			"win32-arm64": "chromedriver-v{version}-win32-arm64.zip",
+			"win32-ia32": "chromedriver-v{version}-win32-ia32.zip",
+			"win32-x64": "chromedriver-v{version}-win32-x64.zip"
+		},
+		"ffmpeg": {
+			"darwin-arm64": "ffmpeg-v{version}-darwin-arm64.zip",
+			"darwin-x64": "ffmpeg-v{version}-darwin-x64.zip",
+			"linux-arm64": "ffmpeg-v{version}-linux-arm64.zip",
+			"linux-armv7l": "ffmpeg-v{version}-linux-armv7l.zip",
+			"linux-x64": "ffmpeg-v{version}-linux-x64.zip",
+			"mas-arm64": "ffmpeg-v{version}-mas-arm64.zip",
+			"mas-x64": "ffmpeg-v{version}-mas-x64.zip",
+			"win32-arm64": "ffmpeg-v{version}-win32-arm64.zip",
+			"win32-ia32": "ffmpeg-v{version}-win32-ia32.zip",
+			"win32-x64": "ffmpeg-v{version}-win32-x64.zip"
+		},
+		"mksnapshot": {
+			"darwin-arm64": "mksnapshot-v{version}-darwin-arm64.zip",
+			"darwin-x64": "mksnapshot-v{version}-darwin-x64.zip",
+			"linux-arm64-x64": "mksnapshot-v{version}-linux-arm64-x64.zip",
+			"linux-armv7l-x64": "mksnapshot-v{version}-linux-armv7l-x64.zip",
+			"linux-x64": "mksnapshot-v{version}-linux-x64.zip",
+			"mas-arm64": "mksnapshot-v{version}-mas-arm64.zip",
+			"mas-x64": "mksnapshot-v{version}-mas-x64.zip",
+			"win32-arm64-x64": "mksnapshot-v{version}-win32-arm64-x64.zip",
+			"win32-ia32": "mksnapshot-v{version}-win32-ia32.zip",
+			"win32-x64": "mksnapshot-v{version}-win32-x64.zip"
+		},
+		"libcxx-objects": {
+			"linux-arm64": "libcxx-objects-v{version}-linux-arm64.zip",
+			"linux-armv7l": "libcxx-objects-v{version}-linux-armv7l.zip",
+			"linux-x64": "libcxx-objects-v{version}-linux-x64.zip"
+		},
+		"libcxx-headers": {
+			"all": "libcxx_headers.zip"
+		},
+		"libcxxabi-headers": {
+			"all": "libcxxabi_headers.zip"
+		},
+		"electron-api": {
+			"all": "electron-api.json"
+		},
+		"electron-dts": {
+			"all": "electron.d.ts"
+		},
+		"hunspell-dictionaries": {
+			"all": "hunspell_dictionaries.zip"
+		},
+		"shasums": {
+			"all": "SHASUMS256.txt"
+		}
+	},
+	"platform_aliases": {
+		"mac-arm64": "darwin-arm64",
+		"mac-x64": "darwin-x64",
+		"mac-intel": "darwin-x64",
+		"macos-arm64": "darwin-arm64",
+		"macos-x64": "darwin-x64",
+		"windows-arm64": "win32-arm64",
+		"windows-x64": "win32-x64",
+		"windows-ia32": "win32-ia32"
+	}
+}
