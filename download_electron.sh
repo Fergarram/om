@@ -1,5 +1,115 @@
 #!/usr/bin/env bash
 
+# NAME
+#     download_electron.sh - Download Electron and related packages
+#
+# SYNOPSIS
+#     download_electron.sh PACKAGE VERSION PLATFORM
+#     download_electron.sh -h | --help
+#
+# DESCRIPTION
+#     Downloads Electron binaries and related packages (chromedriver, ffmpeg)
+#     from the official Electron release repository. Supports downloading
+#     specific platforms or all platforms at once.
+#
+#     The script reads configuration from electron.json, which defines:
+#     - Base URL for downloads
+#     - Default version
+#     - Output directory structure
+#     - Package filename templates
+#     - Platform aliases
+#
+#     Downloaded files are organized in a directory structure:
+#         output_dir/package/version/filename
+#
+#     For example:
+#         bin/electron-packages/electron/23.0.0/electron-v23.0.0-darwin-arm64.zip
+#
+# ARGUMENTS
+#     PACKAGE
+#         Package name to download. Must be defined in electron.json.
+#         Common packages: electron, chromedriver, ffmpeg
+#
+#     VERSION
+#         Version number to download (e.g., 23.0.0, 22.3.27)
+#         Use "default" to download the version specified in electron.json
+#
+#     PLATFORM
+#         Platform identifier or "all" to download all available platforms.
+#         Platform names are package-specific and defined in electron.json.
+#
+#         Common Electron platforms:
+#           darwin-arm64    macOS Apple Silicon
+#           darwin-x64      macOS Intel
+#           linux-arm64     Linux ARM64
+#           linux-x64       Linux x64
+#           win32-arm64     Windows ARM64
+#           win32-x64       Windows x64
+#
+#         Platform aliases (defined in electron.json):
+#           mac-arm64       -> darwin-arm64
+#           mac-x64         -> darwin-x64
+#
+# OPTIONS
+#     -h, --help
+#         Display help message and exit.
+#
+# EXAMPLES
+#     Download Electron default version for all platforms:
+#         $ ./download_electron.sh electron default all
+#
+#     Download specific Electron version for macOS Apple Silicon:
+#         $ ./download_electron.sh electron 23.0.0 darwin-arm64
+#
+#     Use platform alias:
+#         $ ./download_electron.sh electron 23.0.0 mac-arm64
+#
+#     Download chromedriver for all platforms:
+#         $ ./download_electron.sh chromedriver default all
+#
+#     Download ffmpeg for Linux x64:
+#         $ ./download_electron.sh ffmpeg 22.3.27 linux-x64
+#
+# CONFIGURATION
+#     The script requires electron.json in the same directory with structure:
+#
+#     {
+#       "default_version": "23.0.0",
+#       "base_url": "https://github.com/electron/electron/releases/download",
+#       "output_dir": "bin/electron-packages",
+#       "platform_aliases": {
+#         "mac-arm64": "darwin-arm64",
+#         "mac-x64": "darwin-x64"
+#       },
+#       "packages": {
+#         "electron": {
+#           "darwin-arm64": "electron-v{version}-darwin-arm64.zip",
+#           "darwin-x64": "electron-v{version}-darwin-x64.zip"
+#         }
+#       }
+#     }
+#
+#     The {version} placeholder in filenames is replaced with the actual version.
+#
+# FILES
+#     om/electron.json
+#         Configuration file defining packages, versions, and platforms
+#
+#     bin/electron-packages/
+#         Default output directory (configurable in electron.json)
+#
+# REQUIREMENTS
+#     - bash
+#     - jq (for JSON parsing)
+#     - curl or wget (for downloading files)
+#
+# EXIT STATUS
+#     0   All downloads succeeded
+#     1   One or more downloads failed, or error in arguments/configuration
+#
+# SEE ALSO
+#     build_mac.sh(1), jq(1)
+
 set -euo pipefail
 
 # Script directory

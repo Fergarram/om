@@ -2,8 +2,11 @@
 
 Electron but with a different name and other defaults.
 
-## Customizing defaults
+## Build
 
-To begin with, we're not compiling Electron. We're simply pulling the Electron binaries and changing the icons, name and other metadata.
+```bash
+# Defaults to Electron v22.3.27
+./build_mac.sh
+```
 
-We're also changing the default_app package which contains the entry point for the CLI.
+### Customizing defaults
