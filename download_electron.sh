@@ -100,21 +100,17 @@
 #
 # REQUIREMENTS
 #     - bash
-#     - jq (for JSON parsing)
 #     - curl or wget (for downloading files)
 #
 # EXIT STATUS
 #     0   All downloads succeeded
 #     1   One or more downloads failed, or error in arguments/configuration
-#
-# SEE ALSO
-#     build_mac.sh(1), jq(1)
 
 set -euo pipefail
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/electron.json"
+CONFIG_FILE="${SCRIPT_DIR}/electron.conf"
 
 # Show usage if no args or help requested
 if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
@@ -151,22 +147,14 @@ PACKAGE="$1"
 VERSION_ARG="$2"
 PLATFORM="$3"
 
-# Check if jq is installed
-if ! command -v jq &> /dev/null; then
-    echo "Error: jq is required but not installed. Please install jq to continue."
-    exit 1
-fi
-
 # Check if config file exists
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "Error: Configuration file not found at $CONFIG_FILE"
     exit 1
 fi
 
-# Read config values
-DEFAULT_VERSION=$(jq -r '.default_version' "$CONFIG_FILE")
-BASE_URL=$(jq -r '.base_url' "$CONFIG_FILE")
-OUTPUT_DIR=$(jq -r '.output_dir' "$CONFIG_FILE")
+# Source configuration
+source "$CONFIG_FILE"
 
 # Use default version if "default" is specified
 if [[ "$VERSION_ARG" == "default" ]]; then
@@ -175,15 +163,112 @@ else
     VERSION="$VERSION_ARG"
 fi
 
-# Resolve platform alias if provided
-RESOLVED_PLATFORM=$(jq -r --arg p "$PLATFORM" '.platform_aliases[$p] // $p' "$CONFIG_FILE")
+# Function to resolve platform alias
+resolvePlatformAlias() {
+    local input_platform="$1"
+    local alias_line
 
-# Check if package exists in config
-if ! jq -e --arg pkg "$PACKAGE" '.packages[$pkg]' "$CONFIG_FILE" > /dev/null 2>&1; then
+    while IFS= read -r alias_line; do
+        [[ -z "$alias_line" ]] && continue
+        [[ "$alias_line" =~ ^[[:space:]]*# ]] && continue
+
+        local alias="${alias_line%%:*}"
+        local actual="${alias_line##*:}"
+
+        if [[ "$alias" == "$input_platform" ]]; then
+            echo "$actual"
+            return
+        fi
+    done <<< "$PLATFORM_ALIASES"
+
+    echo "$input_platform"
+}
+
+# Function to get available platforms for a package
+getAvailablePlatforms() {
+    local pkg="$1"
+    local platforms=()
+    local def_line
+
+    while IFS= read -r def_line; do
+        [[ -z "$def_line" ]] && continue
+        [[ "$def_line" =~ ^[[:space:]]*# ]] && continue
+
+        IFS=: read -r package platform filename <<< "$def_line"
+
+        if [[ "$package" == "$pkg" ]]; then
+            platforms+=("$platform")
+        fi
+    done <<< "$PACKAGE_DEFINITIONS"
+
+    printf '%s\n' "${platforms[@]}" | sort -u
+}
+
+# Function to get filename template for package and platform
+getFilenameTemplate() {
+    local pkg="$1"
+    local plat="$2"
+    local def_line
+
+    while IFS= read -r def_line; do
+        [[ -z "$def_line" ]] && continue
+        [[ "$def_line" =~ ^[[:space:]]*# ]] && continue
+
+        IFS=: read -r package platform filename <<< "$def_line"
+
+        if [[ "$package" == "$pkg" ]] && [[ "$platform" == "$plat" ]]; then
+            echo "$filename"
+            return 0
+        fi
+    done <<< "$PACKAGE_DEFINITIONS"
+
+    return 1
+}
+
+# Function to check if package exists
+packageExists() {
+    local pkg="$1"
+    local def_line
+
+    while IFS= read -r def_line; do
+        [[ -z "$def_line" ]] && continue
+        [[ "$def_line" =~ ^[[:space:]]*# ]] && continue
+
+        IFS=: read -r package platform filename <<< "$def_line"
+
+        if [[ "$package" == "$pkg" ]]; then
+            return 0
+        fi
+    done <<< "$PACKAGE_DEFINITIONS"
+
+    return 1
+}
+
+# Function to get all package names
+getAllPackages() {
+    local packages=()
+    local def_line
+
+    while IFS= read -r def_line; do
+        [[ -z "$def_line" ]] && continue
+        [[ "$def_line" =~ ^[[:space:]]*# ]] && continue
+
+        IFS=: read -r package platform filename <<< "$def_line"
+        packages+=("$package")
+    done <<< "$PACKAGE_DEFINITIONS"
+
+    printf '%s\n' "${packages[@]}" | sort -u
+}
+
+# Resolve platform alias
+RESOLVED_PLATFORM=$(resolvePlatformAlias "$PLATFORM")
+
+# Check if package exists
+if ! packageExists "$PACKAGE"; then
     echo "Error: Package '$PACKAGE' not found in configuration"
     echo ""
     echo "Available packages:"
-    jq -r '.packages | keys[]' "$CONFIG_FILE" | sed 's/^/  - /'
+    getAllPackages | sed 's/^/  - /'
     exit 1
 fi
 
@@ -222,11 +307,11 @@ downloadFile() {
 }
 
 # Get available platforms for the package
-AVAILABLE_PLATFORMS=$(jq -r --arg pkg "$PACKAGE" '.packages[$pkg] | keys[]' "$CONFIG_FILE")
+AVAILABLE_PLATFORMS=$(getAvailablePlatforms "$PACKAGE")
 
 # Determine which platforms to download
 if [[ "$PLATFORM" == "all" ]]; then
-    PLATFORMS_TO_DOWNLOAD=$AVAILABLE_PLATFORMS
+    PLATFORMS_TO_DOWNLOAD="$AVAILABLE_PLATFORMS"
 else
     # Check if resolved platform exists for this package
     if echo "$AVAILABLE_PLATFORMS" | grep -q "^${RESOLVED_PLATFORM}$"; then
@@ -256,7 +341,13 @@ echo ""
 
 while IFS= read -r plat; do
     # Get filename template
-    FILENAME_TEMPLATE=$(jq -r --arg pkg "$PACKAGE" --arg plat "$plat" '.packages[$pkg][$plat]' "$CONFIG_FILE")
+    FILENAME_TEMPLATE=$(getFilenameTemplate "$PACKAGE" "$plat")
+
+    if [[ -z "$FILENAME_TEMPLATE" ]]; then
+        echo "Error: No filename template found for $PACKAGE:$plat"
+        ((FAILURE_COUNT++))
+        continue
+    fi
 
     # Replace {version} placeholder
     FILENAME="${FILENAME_TEMPLATE//\{version\}/$VERSION}"

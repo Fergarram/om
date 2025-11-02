@@ -24,7 +24,7 @@
 # OPTIONS
 #     -v VERSION
 #         Specify Electron version to download. Use "default" or omit to
-#         use the version specified in electron.json.
+#         use the version specified in electron.conf.
 
 #     -o OUTPUT_DIR
 #         Specify output directory for final app bundle. Default is
@@ -42,7 +42,7 @@
 #         $ cd om
 #         $ ./build_mac.sh
 
-#     This downloads Electron (version from electron.json) for your
+#     This downloads Electron (version from electron.conf) for your
 #     architecture, extracts it, and copies it as Om.app to ./bin/
 
 #     Use specific version:
@@ -90,7 +90,7 @@
 #     om/download_electron.sh
 #         Required download script
 
-#     om/electron.json
+#     om/electron.conf
 #         Configuration file with versions and package definitions
 
 #     build/mac/Info.plist
@@ -116,7 +116,6 @@
 
 # REQUIREMENTS
 #     - bash
-#     - jq (for JSON parsing)
 #     - unzip (for archive extraction)
 #     - curl or wget (for downloading)
 
@@ -131,7 +130,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOWNLOAD_SCRIPT="${SCRIPT_DIR}/download_electron.sh"
-CONFIG_FILE="${SCRIPT_DIR}/electron.json"
+CONFIG_FILE="${SCRIPT_DIR}/electron.conf"
 OUTPUT_DIR="${SCRIPT_DIR}/bin"
 APP_NAME="Om"
 
@@ -181,17 +180,14 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Check if jq is installed
-if ! command -v jq &> /dev/null; then
-    echo "Error: jq is required but not installed"
-    exit 1
-fi
-
 # Check if unzip is installed
 if ! command -v unzip &> /dev/null; then
     echo "Error: unzip is required but not installed"
     exit 1
 fi
+
+# Source configuration to get variables
+source "$CONFIG_FILE"
 
 # Detect current platform
 current_arch="$(uname -m)"
@@ -219,14 +215,13 @@ echo ""
 
 # Resolve version if using default
 if [[ "$version" == "default" ]]; then
-    actual_version=$(jq -r '.default_version' "$CONFIG_FILE")
+    actual_version="$DEFAULT_VERSION"
 else
     actual_version="$version"
 fi
 
-# Get package output directory from config
-package_output_dir=$(jq -r '.output_dir' "$CONFIG_FILE")
-electron_dir="${SCRIPT_DIR}/${package_output_dir}/electron/${actual_version}"
+# Use output directory from config
+electron_dir="${SCRIPT_DIR}/${OUTPUT_DIR}/electron/${actual_version}"
 
 # Check if zip file exists
 zip_file="${electron_dir}/electron-v${actual_version}-${platform}.zip"
@@ -275,11 +270,12 @@ if [[ ! -d "$electron_app" ]]; then
     exit 1
 fi
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
+# Create output directory (use bin instead of the packages dir)
+FINAL_OUTPUT_DIR="${SCRIPT_DIR}/bin"
+mkdir -p "$FINAL_OUTPUT_DIR"
 
 # Define final app location
-final_app="${OUTPUT_DIR}/${APP_NAME}.app"
+final_app="${FINAL_OUTPUT_DIR}/${APP_NAME}.app"
 
 # Remove existing app if present
 if [[ -d "$final_app" ]]; then
