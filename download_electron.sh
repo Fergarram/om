@@ -362,10 +362,11 @@ while IFS= read -r plat; do
     fi
 
     if downloadFile "$FILENAME" "$FULL_URL" "$OUTPUT_PATH"; then
-        ((SUCCESS_COUNT++))
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     else
-        ((FAILURE_COUNT++))
+        FAILURE_COUNT=$((FAILURE_COUNT + 1))
     fi
+
     echo ""
 done <<< "$PLATFORMS_TO_DOWNLOAD"
 
@@ -380,3 +381,5 @@ echo "========================================="
 if [[ $FAILURE_COUNT -gt 0 ]]; then
     exit 1
 fi
+
+exit 0
