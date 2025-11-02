@@ -30,8 +30,11 @@ function getContentType(file_path) {
 }
 
 function serveFile(res, file_path) {
+	console.log(`Attempting to serve: ${file_path}`);
+
 	fs.readFile(file_path, (err, data) => {
 		if (err) {
+			console.error(`Error reading file: ${err.message}`);
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
 			return;
@@ -44,6 +47,8 @@ function serveFile(res, file_path) {
 }
 
 function handleRequest(req, res) {
+	console.log(`Request: ${req.url}`);
+
 	let url_path = req.url === "/" ? "/index.html" : req.url;
 
 	// Remove query string
@@ -53,8 +58,14 @@ function handleRequest(req, res) {
 	const safe_path = path.normalize(url_path).replace(/^(\.\.[\/\\])+/, "");
 	const file_path = path.join(PUBLIC_DIR, safe_path);
 
+	console.log(`Resolved path: ${file_path}`);
+
 	// Ensure the resolved path is within PUBLIC_DIR
-	if (!file_path.startsWith(PUBLIC_DIR)) {
+	const resolved_public = path.resolve(PUBLIC_DIR);
+	const resolved_file = path.resolve(file_path);
+
+	if (!resolved_file.startsWith(resolved_public)) {
+		console.error(`Forbidden: ${resolved_file} is outside ${resolved_public}`);
 		res.writeHead(403, { "Content-Type": "text/plain" });
 		res.end("403 Forbidden");
 		return;
@@ -62,6 +73,7 @@ function handleRequest(req, res) {
 
 	fs.stat(file_path, (err, stats) => {
 		if (err) {
+			console.error(`Stat error: ${err.message}`);
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
 			return;
@@ -81,4 +93,23 @@ const server = http.createServer(handleRequest);
 server.listen(PORT, () => {
 	console.log(`Server running at http://localhost:${PORT}/`);
 	console.log(`Serving files from: ${PUBLIC_DIR}`);
+	console.log(`Resolved PUBLIC_DIR: ${path.resolve(PUBLIC_DIR)}`);
+
+	// Check if directory exists
+	if (!fs.existsSync(PUBLIC_DIR)) {
+		console.error(`ERROR: PUBLIC_DIR does not exist: ${PUBLIC_DIR}`);
+		console.error(`Create it with: mkdir -p ${PUBLIC_DIR}`);
+		return;
+	}
+
+	console.log(`Directory exists: YES`);
+
+	// List contents
+	try {
+		const files = fs.readdirSync(PUBLIC_DIR);
+		console.log(`Files in PUBLIC_DIR: ${files.join(", ")}`);
+	} catch (err) {
+		console.error(`Cannot read directory: ${err.message}`);
+		console.error(`Check permissions with: ls -la ${PUBLIC_DIR}`);
+	}
 });
