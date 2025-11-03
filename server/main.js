@@ -101,7 +101,7 @@ const options = {
 // HTTPS server
 https.createServer(options, handleRequest).listen(HTTPS_PORT, () => {
 	console.log(`HTTPS server running at https://fernando.computer/`);
-	console.log(`With auto reload setup.`);
+	console.log(`With some weird setup`);
 });
 
 // HTTP → HTTPS redirect
