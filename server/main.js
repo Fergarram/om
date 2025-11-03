@@ -1,3 +1,4 @@
+const { exec } = require("child_process");
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
@@ -6,6 +7,7 @@ const path = require("path");
 const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
 const PUBLIC_DIR = "/home/fernando/public";
+const OM_DIR = "/home/fernando/om"; // path to your repo
 
 const MIME_TYPES = {
 	".html": "text/html",
@@ -51,6 +53,23 @@ function handleRequest(req, res) {
 
 	const resolved_public = path.resolve(PUBLIC_DIR);
 	const resolved_file = path.resolve(file_path);
+
+	// --- Auto-pull endpoint ---
+	if (req.method === "POST" && req.url === "/api/pull-om") {
+		console.log("Pulling latest changes in om...");
+		exec(`cd ${OM_DIR} && git fetch origin main && git reset --hard origin/main`, (err, stdout, stderr) => {
+			if (err) {
+				console.error("Pull failed:", err);
+				res.writeHead(500, { "Content-Type": "text/plain" });
+				res.end("Pull failed");
+				return;
+			}
+			console.log(stdout || stderr);
+			res.writeHead(200, { "Content-Type": "text/plain" });
+			res.end("OK");
+		});
+		return;
+	}
 
 	if (!resolved_file.startsWith(resolved_public)) {
 		res.writeHead(403, { "Content-Type": "text/plain" });
