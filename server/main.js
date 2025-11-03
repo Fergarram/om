@@ -18,7 +18,7 @@ const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
 const BASE_PATH = IS_PROD ? "/home/fernando" : "/Users/fernando/repos";
 const OM_DIR = BASE_PATH + "/om";
-const SPACES_DIR = IS_PROD ? BASE_PATH + "/spaces" : "/Users/fernando/fernando.computer/public";
+const SPACES_DIR = IS_PROD ? BASE_PATH + "/public" : "/Users/fernando/fernando.computer/public";
 const MEDIA_DIR = BASE_PATH + "/media";
 const MODULES_DIR = OM_DIR + "/system/modules/client";
 
