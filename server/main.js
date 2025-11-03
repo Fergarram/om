@@ -7,7 +7,7 @@ const path = require("path");
 const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
 const PUBLIC_DIR = "/home/fernando/public";
-const OM_DIR = "/home/fernando/om"; // path to your repo
+const OM_DIR = "/home/fernando/om";
 
 const MIME_TYPES = {
 	".html": "text/html",
@@ -101,6 +101,7 @@ const options = {
 // HTTPS server
 https.createServer(options, handleRequest).listen(HTTPS_PORT, () => {
 	console.log(`HTTPS server running at https://fernando.computer/`);
+	console.log(`With auto reload setup.`);
 });
 
 // HTTP → HTTPS redirect
