@@ -94,8 +94,8 @@ function handleRequest(req, res) {
 
 // HTTPS options (after running certbot)
 const options = {
-	key: fs.readFileSync("/etc/letsencrypt/live/fernando.computer/privkey.pem"),
-	cert: fs.readFileSync("/etc/letsencrypt/live/fernando.computer/fullchain.pem"),
+	key: fs.readFileSync("/home/fernando/privkey.pem"),
+	cert: fs.readFileSync("/home/fernando/fullchain.pem"),
 };
 
 // HTTPS server
