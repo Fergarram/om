@@ -1,8 +1,10 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = 1996;
+const HTTP_PORT = 80;
+const HTTPS_PORT = 443;
 const PUBLIC_DIR = "/home/fernando/public";
 
 const MIME_TYPES = {
@@ -30,42 +32,27 @@ function getContentType(file_path) {
 }
 
 function serveFile(res, file_path) {
-	console.log(`Attempting to serve: ${file_path}`);
-
 	fs.readFile(file_path, (err, data) => {
 		if (err) {
-			console.error(`Error reading file: ${err.message}`);
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
 			return;
 		}
 
-		const content_type = getContentType(file_path);
-		res.writeHead(200, { "Content-Type": content_type });
+		res.writeHead(200, { "Content-Type": getContentType(file_path) });
 		res.end(data);
 	});
 }
 
 function handleRequest(req, res) {
-	console.log(`Request: ${req.url}`);
-
-	let url_path = req.url === "/" ? "/index.html" : req.url;
-
-	// Remove query string
-	url_path = url_path.split("?")[0];
-
-	// Sanitize path to prevent directory traversal
+	let url_path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
 	const safe_path = path.normalize(url_path).replace(/^(\.\.[\/\\])+/, "");
 	const file_path = path.join(PUBLIC_DIR, safe_path);
 
-	console.log(`Resolved path: ${file_path}`);
-
-	// Ensure the resolved path is within PUBLIC_DIR
 	const resolved_public = path.resolve(PUBLIC_DIR);
 	const resolved_file = path.resolve(file_path);
 
 	if (!resolved_file.startsWith(resolved_public)) {
-		console.error(`Forbidden: ${resolved_file} is outside ${resolved_public}`);
 		res.writeHead(403, { "Content-Type": "text/plain" });
 		res.end("403 Forbidden");
 		return;
@@ -73,43 +60,37 @@ function handleRequest(req, res) {
 
 	fs.stat(file_path, (err, stats) => {
 		if (err) {
-			console.error(`Stat error: ${err.message}`);
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
 			return;
 		}
 
 		if (stats.isDirectory()) {
-			const index_path = path.join(file_path, "index.html");
-			serveFile(res, index_path);
+			serveFile(res, path.join(file_path, "index.html"));
 		} else {
 			serveFile(res, file_path);
 		}
 	});
 }
 
-const server = http.createServer(handleRequest);
+// HTTPS options (after running certbot)
+const options = {
+	key: fs.readFileSync("/etc/letsencrypt/live/fernando.computer/privkey.pem"),
+	cert: fs.readFileSync("/etc/letsencrypt/live/fernando.computer/fullchain.pem"),
+};
 
-server.listen(PORT, () => {
-	console.log(`Server running at http://localhost:${PORT}/`);
-	console.log(`Serving files from: ${PUBLIC_DIR}`);
-	console.log(`Resolved PUBLIC_DIR: ${path.resolve(PUBLIC_DIR)}`);
-
-	// Check if directory exists
-	if (!fs.existsSync(PUBLIC_DIR)) {
-		console.error(`ERROR: PUBLIC_DIR does not exist: ${PUBLIC_DIR}`);
-		console.error(`Create it with: mkdir -p ${PUBLIC_DIR}`);
-		return;
-	}
-
-	console.log(`Directory exists: YES`);
-
-	// List contents
-	try {
-		const files = fs.readdirSync(PUBLIC_DIR);
-		console.log(`Files in PUBLIC_DIR: ${files.join(", ")}`);
-	} catch (err) {
-		console.error(`Cannot read directory: ${err.message}`);
-		console.error(`Check permissions with: ls -la ${PUBLIC_DIR}`);
-	}
+// HTTPS server
+https.createServer(options, handleRequest).listen(HTTPS_PORT, () => {
+	console.log(`HTTPS server running at https://fernando.computer/`);
 });
+
+// HTTP → HTTPS redirect
+http
+	.createServer((req, res) => {
+		const host = req.headers.host.replace(/:\d+$/, "");
+		res.writeHead(301, { Location: `https://${host}${req.url}` });
+		res.end();
+	})
+	.listen(HTTP_PORT, () => {
+		console.log(`Redirecting all HTTP traffic to HTTPS`);
+	});
