@@ -112,20 +112,24 @@ function runHttpServer() {
 	return http
 		.createServer((req, res) => {
 			if (IS_PROD) {
+				if (!req.headers.host) {
+					console.error("Request without Host header:", req.socket.remoteAddress);
+					res.writeHead(400);
+					res.end();
+					return;
+				}
+
 				const host = req.headers.host.replace(/:\d+$/, "");
-				res.writeHead(301, { Location: `https://${host}${req.url}` });
+				const redirect_url = `https://${host}${req.url}`;
+
+				res.writeHead(301, { Location: redirect_url });
 				res.end();
 			} else {
-				handleRequest(req, res);
+				res.writeHead(200, { "Content-Type": "text/plain" });
+				res.end("HTTP server running in development mode");
 			}
 		})
-		.listen(HTTP_PORT, () => {
-			if (IS_PROD) {
-				console.log(`Redirecting all HTTP traffic to HTTPS`);
-			} else {
-				console.log(`HTTP server running at http://localhost:${HTTP_PORT}/`);
-			}
-		});
+		.listen(HTTP_PORT);
 }
 
 //
