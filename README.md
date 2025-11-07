@@ -2,6 +2,23 @@
 
 Electron but with a different name and other defaults.
 
+## Windows
+TODO
+
+
+## Mac
+```bash
+./build_mac.sh
+```
+
+
+## Linux
+
+```bash
+./build_linux.sh
+```
+
+
 If running in ubuntu/debian you might need the following dependencies if running in headless server:
 
 ```bash

@@ -12,7 +12,8 @@ const path = require("path");
 // Config
 //
 
-const IS_PROD = true;
+const args = process.argv.slice(2);
+const IS_PROD = !args.includes("--dev");
 
 const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
@@ -20,7 +21,7 @@ const BASE_PATH = IS_PROD ? "/home/fernando" : "/Users/fernando/repos";
 const OM_DIR = BASE_PATH + "/om";
 const SPACES_DIR = IS_PROD ? BASE_PATH + "/public" : "/Users/fernando/fernando.computer/public";
 const MEDIA_DIR = BASE_PATH + "/media";
-const MODULES_DIR = OM_DIR + "/system/modules/client";
+const MODULES_DIR = SPACES_DIR + "/modules/";
 
 const options = IS_PROD
 	? {
@@ -58,7 +59,10 @@ const http_server = runHttpServer();
 function handleRequest(req, res) {
 	const url_path = req.url.split("?")[0];
 
-	// API routes
+	//
+	// API route
+	//
+
 	if (url_path.startsWith("/api/")) {
 		if (req.method !== "POST") {
 			res.writeHead(405, { "Content-Type": "text/plain" });
@@ -70,12 +74,19 @@ function handleRequest(req, res) {
 		return;
 	}
 
-	// Static file routes
+	//
+	// Media route
+	//
+
 	if (url_path.startsWith("/media/")) {
 		const media_path = url_path.slice(7);
 		handleStaticRoute(req, res, MEDIA_DIR, media_path);
 		return;
 	}
+
+	//
+	// Modules route
+	//
 
 	if (url_path.startsWith("/modules/")) {
 		const module_path = url_path.slice(9);
@@ -83,21 +94,30 @@ function handleRequest(req, res) {
 		return;
 	}
 
-	// Root path
+	//
+	// Index route
+	//
+
 	if (url_path === "/") {
 		res.writeHead(200, { "Content-Type": "text/plain" });
 		res.end("");
 		return;
 	}
 
-	// Space routes
+	//
+	// Space rote
+	//
+
 	const space_slug = url_path.slice(1);
 	if (space_slug && !space_slug.includes("/")) {
 		handleSpaceRoute(req, res, space_slug);
 		return;
 	}
 
-	// Not found
+	//
+	// 404 route
+	//
+
 	res.writeHead(404, { "Content-Type": "text/plain" });
 	res.end("404 Not Found");
 }
@@ -125,11 +145,12 @@ function runHttpServer() {
 				res.writeHead(301, { Location: redirect_url });
 				res.end();
 			} else {
-				res.writeHead(200, { "Content-Type": "text/plain" });
-				res.end("HTTP server running in development mode");
+				handleRequest(req, res);
 			}
 		})
-		.listen(HTTP_PORT);
+		.listen(HTTP_PORT, () => {
+			console.log(`HTTP server running at http://localhost:${HTTP_PORT}/`);
+		});
 }
 
 //
@@ -170,7 +191,10 @@ function handleStaticRoute(req, res, base_dir, url_path) {
 			res.writeHead(403, { "Content-Type": "text/plain" });
 			res.end("403 Forbidden");
 		} else {
-			serveFile(res, file_path);
+			// Check if this is the modules directory
+			const is_modules = base_dir === MODULES_DIR;
+			console.log("Serving module", url_path, is_modules)
+			serveFile(res, file_path, is_modules);
 		}
 	});
 }
@@ -229,7 +253,7 @@ function getContentType(file_path) {
 	return MIME_TYPES[ext] || "application/octet-stream";
 }
 
-function serveFile(res, file_path) {
+function serveFile(res, file_path, no_cache = false) {
 	fs.readFile(file_path, (err, data) => {
 		if (err) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
@@ -237,7 +261,16 @@ function serveFile(res, file_path) {
 			return;
 		}
 
-		res.writeHead(200, { "Content-Type": getContentType(file_path) });
+		const content_type = getContentType(file_path);
+		const headers = { "Content-Type": content_type };
+
+		if (no_cache && !IS_PROD) {
+			headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+			headers["Pragma"] = "no-cache";
+			headers["Expires"] = "0";
+		}
+
+		res.writeHead(200, headers);
 		res.end(data);
 	});
 }
