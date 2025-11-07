@@ -1,8 +1,26 @@
+//
+// MODULE LOADER 0.1.0
+// by fergarram
+//
+
+// Extends existing html script and styles functionality with:
+// - Support for inlined ES Modules
+// - Multiple sources of truth for JS and CSS modules (remote, inline, cache)
+// - API for editable exports and self-rewriting
+
+//
+// Settings
+//
+
 window.__blob_module_loader_settings__ = {
 	prefers_remote_modules: true,
 };
 
-window.addEventListener("load", async () => {
+//
+// Module Loader Setup
+//
+
+async function initializeBlobModuleLoader() {
 	const load_start_time = performance.now();
 	const blob_urls = new Map();
 	const remote_modules = new Map();
@@ -158,6 +176,7 @@ window.addEventListener("load", async () => {
 					const response = await fetch(remote_url);
 					remote_content = await response.text();
 
+					// @TODO: Instead of updating cache with fresh content it should be a setting for "backup_cached_modules" or something like this.
 					// Update the cache with fresh content
 					await setCachedModule(remote_url, remote_content);
 					console.log(`Updated cache for remote style from ${remote_url}`);
@@ -613,4 +632,7 @@ window.addEventListener("load", async () => {
 
 		console.log("HTML file download initiated");
 	};
-});
+}
+
+// Attach event listener
+window.addEventListener("load", initializeBlobModuleLoader);

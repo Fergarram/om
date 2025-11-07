@@ -99,10 +99,19 @@ function handleRequest(req, res) {
 	//
 
 	if (url_path === "/") {
-		res.writeHead(200, { "Content-Type": "text/plain" });
-		res.end("");
+		const home_path = path.join(SPACES_DIR, "welcome.html");
+
+		fs.stat(home_path, (err, stats) => {
+			if (err || !stats.isFile()) {
+				res.writeHead(200, { "Content-Type": "text/plain" });
+				res.end("no entrance");
+				return;
+			}
+
+			serveFile(res, home_path);
+		});
 		return;
-	}
+}
 
 	//
 	// Space rote
