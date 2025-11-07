@@ -9,11 +9,19 @@
 // - API for editable exports and self-rewriting
 
 //
+// TODO to v1:
+//
+// [ ] Keep identifiers for CSS adopted style sheets
+// [ ] Add backup system
+// [ ] Hooks for minification and formatting
+// [ ] Clear API for download, self-writing, CRUD modules, full html version management
+
+//
 // Settings
 //
 
 window.__blob_module_loader_settings__ = {
-	prefers_remote_modules: false,
+	prefers_remote_modules: location.hostname === "localhost" ? true : false,
 };
 
 //
@@ -176,8 +184,7 @@ async function initializeBlobModuleLoader() {
 					const response = await fetch(remote_url);
 					remote_content = await response.text();
 
-					// @TODO: Instead of updating cache with fresh content it should be a setting for "backup_cached_modules" or something like this.
-					// Update the cache with fresh content
+					// Overwrite cache with new source
 					await setCachedModule(remote_url, remote_content);
 					console.log(`Updated cache for remote style from ${remote_url}`);
 				} catch (fetch_error) {
