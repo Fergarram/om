@@ -13,7 +13,7 @@
 //
 
 window.__blob_module_loader_settings__ = {
-	prefers_remote_modules: true,
+	prefers_remote_modules: false,
 };
 
 //
