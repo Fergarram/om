@@ -2,6 +2,18 @@ import { useTags } from "@std/ima";
 import { css } from "@std/utils";
 const { canvas, pre } = useTags();
 
+
+//
+// Tests
+//
+
+console.log(BlobLoader)
+
+
+//
+// Cursor thing
+//
+
 // Create a 32x32 canvas for the cursor
 const cursor_canvas = canvas({
 	width: 32,
@@ -57,7 +69,7 @@ const content = pre(
 	},
 	`
 		Goals:
-		- finish module-loader todo list
+		- finish module-loader todo list [active]
 		- server api for auth
 		- arena-like api for CRUD for spaces/modules/media
 			- includes backups

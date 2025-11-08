@@ -11,13 +11,19 @@
 //
 // TODO
 // v1
-// [ ] Keep identifiers for CSS adopted style sheets
-// [ ] Add backup system
-// [ ] Hooks for minification and formatting
-// [ ] Better settings management?
-// [ ] Clear API for download, self-writing, CRUD modules, full html version management
+// [ ] Figure out media management. This might need to be treated in a different way.
+//     - Ideas include having a sort of "importmap" for media so we can use media assets in
+//       different ways like constants, macros, etc.
+// [ ] CRUD for modules and media
+// [ ] Add saveAsZipFile() which instead of inlined modules and assets it saves everything separately
+//     - This is useful for debugging purposes or when using an external IDE
+// [ ] Indexeddb backups for full html snapshots
 // v1.5
-// [ ] Optional TSC for lang="ts" or even lang="tsx"
+// [ ] Hooks for minification and formatting
+// [ ] Optional TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
+//     - maybe add a custom meta module type for this or have it be global in window
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //
 // Settings
@@ -32,33 +38,46 @@ window.__blob_module_loader_settings__ = {
 //
 
 // Attach event listener
-window.addEventListener("load", initializeBlobModuleLoader);
+window.addEventListener("load", setupBlobLoader);
 
-async function initializeBlobModuleLoader() {
+async function setupBlobLoader() {
 	const load_start_time = performance.now();
+
+	//
+	// State
+	//
 
 	const imports = {};
 	const import_map = document.createElement("script");
 	import_map.type = "importmap";
 
-	const blob_urls = new Map();
+	const blob_media_urls = new Map();
+	const blob_module_urls = new Map();
 	const blob_style_urls = new Map();
+	const remote_media = new Map();
 	const remote_modules = new Map();
 	const remote_styles = new Map();
-	const style_tags = document.querySelectorAll(`style[type="blob-module"]`);
-	const blob_scripts = document.querySelectorAll('script[type="blob-module"]');
 
+	const blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
+	const blob_style_tags = document.querySelectorAll(`style[type="blob-module"]`);
+	const blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
+
+	window.__blob_media__ = new Map();
 	window.__blob_styles__ = new Map();
 	window.__blob_modules__ = new Map();
+
+	window.__blob_media_map__ = new Map();
 	window.__blob_style_map__ = new Map();
 	window.__blob_module_map__ = new Map();
+
+	window.__blob_adopted_sheets__ = new Map(); // This is where both styles and media variable definitions live
 
 	//
 	// Process blob style tags
 	//
 
 	// First pass: collect all style contents and remote URLs
-	style_tags.forEach((style) => {
+	blob_style_tags.forEach((style) => {
 		const remote_url = style.getAttribute("remote");
 		const style_module_name = style.getAttribute("name");
 
@@ -68,6 +87,7 @@ async function initializeBlobModuleLoader() {
 			return;
 		}
 
+		// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 		const content = style.textContent.trim();
 
 		if (!content) {
@@ -150,29 +170,40 @@ async function initializeBlobModuleLoader() {
 		} catch (error) {
 			console.warn(`Failed to fetch remote style from "${remote_url}":`, error);
 			if (!__blob_styles__.has(style_name)) {
-				console.log(`Will keep original remote reference for style "${remote_url}"`);
-			} else if (__blob_styles__.has(style_name)) {
-				console.log(`Using local style for "${remote_url}"`);
+				// Mark the style tag as disabled since we have no content
+				const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+				if (style_tag) {
+					style_tag.setAttribute("disabled", "");
+					console.log(`Marked style "${style_name}" as disabled (no content available)`);
+				}
+			} else {
+				console.log(`Using local style for "${style_name}"`);
 			}
 		}
 	}
 
 	// Create blob URLs for all styles and update style tags
 	__blob_styles__.forEach((content, style_name) => {
+		// Find the corresponding style tag
+		const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+
+		// Skip if disabled
+		if (style_tag && style_tag.hasAttribute("disabled")) {
+			console.log(`Skipping disabled style: "${style_name}"`);
+			return;
+		}
+
 		const style_blob = new Blob([content], {
 			type: "text/css",
 		});
 		const blob_url = URL.createObjectURL(style_blob);
 		blob_style_urls.set(style_name, blob_url);
 
-		// Find the corresponding style tag and update it
-		const style_tag = Array.from(style_tags).find((tag) => tag.getAttribute("name") === style_name);
-		if (style_tag) {
+		if (style_tag && !window.__blob_adopted_sheets__.has(style_name)) {
 			const sheet = new CSSStyleSheet();
 			sheet.replaceSync(content);
 			document.adoptedStyleSheets.push(sheet);
-
-			// @TODO: Add identifier just in case.
+			window.__blob_adopted_sheets__.set(style_name, sheet);
 
 			style_tag.textContent = "";
 			style_tag.setAttribute("blob", blob_url);
@@ -202,7 +233,7 @@ async function initializeBlobModuleLoader() {
 	//
 
 	// First pass: collect all module contents and remote URLs, skip disabled modules
-	blob_scripts.forEach((script) => {
+	blob_script_tags.forEach((script) => {
 		const module_name = script.getAttribute("name");
 		const remote_url = script.getAttribute("remote");
 		const is_disabled = script.hasAttribute("disabled");
@@ -224,7 +255,7 @@ async function initializeBlobModuleLoader() {
 			return;
 		}
 
-		// @TODO: We could minify or format here since this will be the source map from blobs
+		// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 		const content = script.textContent.trim();
 
 		if (remote_url) {
@@ -313,7 +344,7 @@ async function initializeBlobModuleLoader() {
 			console.warn(`Failed to fetch remote module "${module_name}":`, error);
 			if (!__blob_modules__.has(module_name)) {
 				// Use remote URL directly in importmap
-				blob_urls.set(module_name, remote_url);
+				blob_module_urls.set(module_name, remote_url);
 				console.log(`Will use remote URL directly for module "${module_name}"`);
 			} else if (__blob_modules__.has(module_name)) {
 				console.log(`Using local module "${module_name}"`);
@@ -327,11 +358,11 @@ async function initializeBlobModuleLoader() {
 			type: "text/javascript",
 		});
 		const blob_url = URL.createObjectURL(module_blob);
-		blob_urls.set(module_name, blob_url);
+		blob_module_urls.set(module_name, blob_url);
 	});
 
 	// Clear script tag contents and add blob URL attributes (only for non-disabled modules)
-	blob_scripts.forEach((script) => {
+	blob_script_tags.forEach((script) => {
 		const module_name = script.getAttribute("name");
 		const is_disabled = script.hasAttribute("disabled");
 
@@ -339,7 +370,7 @@ async function initializeBlobModuleLoader() {
 			return;
 		}
 
-		const blob_url = blob_urls.get(module_name);
+		const blob_url = blob_module_urls.get(module_name);
 
 		if (blob_url) {
 			script.textContent = "";
@@ -348,7 +379,7 @@ async function initializeBlobModuleLoader() {
 	});
 
 	// Create import map with all blob URLs
-	blob_urls.forEach((url, name) => (imports[name] = url));
+	blob_module_urls.forEach((url, name) => (imports[name] = url));
 	import_map.textContent = JSON.stringify({ imports }, null, 2);
 	document.head.appendChild(import_map);
 
@@ -369,11 +400,11 @@ async function initializeBlobModuleLoader() {
 	}
 
 	// Populate the metadata map (including disabled modules for reference)
-	blob_scripts.forEach((script) => {
+	blob_script_tags.forEach((script) => {
 		const module_name = script.getAttribute("name");
 		const remote_url = script.getAttribute("remote") || null;
 		const is_disabled = script.hasAttribute("disabled");
-		const blob_url = blob_urls.get(module_name) || null;
+		const blob_url = blob_module_urls.get(module_name) || null;
 		const content = __blob_modules__.get(module_name) || "";
 		const src_bytes = new Blob([content]).size;
 
@@ -452,7 +483,7 @@ async function initializeBlobModuleLoader() {
 		}
 	}
 
-	async function clearBlobModuleCache(url = null) {
+	async function clearBlobLoaderCache(url = null) {
 		try {
 			const db = await openCache();
 			const transaction = db.transaction(["modules"], "readwrite");
@@ -501,7 +532,7 @@ async function initializeBlobModuleLoader() {
 		}
 
 		// Process module loader script
-		const module_loader_script = doc_clone.querySelector('script[id="module-loader"]');
+		const module_loader_script = doc_clone.querySelector('script[id="blob-loader"]');
 		if (module_loader_script) {
 			const src = module_loader_script.getAttribute("src");
 			const has_content = module_loader_script.textContent.trim().length > 0;
@@ -514,9 +545,9 @@ async function initializeBlobModuleLoader() {
 					module_loader_script.textContent = content;
 					module_loader_script.removeAttribute("src");
 					module_loader_script.removeAttribute("type");
-					console.log("Inlined module-loader script");
+					console.log("Inlined blob-loader script");
 				} catch (error) {
-					console.warn("Failed to fetch and inline module-loader script:", error);
+					console.warn("Failed to fetch and inline blob-loader script:", error);
 				}
 			}
 		}
@@ -557,9 +588,15 @@ async function initializeBlobModuleLoader() {
 			const style_name = style.getAttribute("name");
 			const remote_url = style.getAttribute("remote");
 			const no_download = style.hasAttribute("nodownload");
+			const is_disabled = style.hasAttribute("disabled");
 
 			if (style.hasAttribute("blob")) {
 				style.removeAttribute("blob");
+			}
+
+			// Skip processing for disabled styles
+			if (is_disabled) {
+				return;
 			}
 
 			const style_content = __blob_styles__.get(style_name);
@@ -584,7 +621,7 @@ async function initializeBlobModuleLoader() {
 		return `<!DOCTYPE html>\n${doc_clone.documentElement.outerHTML}`;
 	}
 
-	async function saveHtmlFile(force_inline = false) {
+	async function saveAsHtmlFile(force_inline = false) {
 		const html_content = await getDocumentOuterHtml(force_inline);
 
 		// Check if File System Access API is available
@@ -641,12 +678,17 @@ async function initializeBlobModuleLoader() {
 		console.log("HTML file download initiated");
 	}
 
-	window.BlobModuleLoader = {
+	async function saveAsZipFile() {
+		console.log("TODO");
+	}
+
+	window.BlobLoader = {
 		openCache,
 		getCachedModule,
 		setCachedModule,
-		clearBlobModuleCache,
+		clearBlobLoaderCache,
 		getDocumentOuterHtml,
-		saveHtmlFile,
+		saveAsHtmlFile,
+		saveAsZipFile,
 	};
 }

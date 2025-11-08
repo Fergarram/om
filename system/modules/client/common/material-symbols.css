@@ -4,7 +4,8 @@
 
 @font-face {
 	font-family: "Material Symbols";
-	src: url("/modules/common/material-symbols.ttf");
+	/*src: url("/modules/common/material-symbols.woff2");*/
+	src: var(--BM-material-symbols-woff2);
 	font-weight: 100 700;
 }
 
