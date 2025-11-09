@@ -281,4 +281,7 @@ children: [
 // Hydrate existing <main>
 if (root_el) {
 	root_el.replaceWith(Main()); // Pass props to Main() if needed
+} else {
+	console.warn("No <main> element found so we're creating one");
+	document.body.appendChild(Main());
 }

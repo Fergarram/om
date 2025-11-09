@@ -1,5 +1,5 @@
 //
-// MODULE LOADER 0.7.0
+// BLOB LOADER 0.10.0
 // by fergarram
 //
 
@@ -12,10 +12,7 @@
 
 //
 // TODO
-// v1 ====================================================================================================================================
-// [ ] Implement saveSnapshotInCache(snapshot_tag) for indexeddb backups for full html,js,css,media snapshots
-//     - This will be done automatically on successful setup using timestamp as tag (can be changed via settings)
-//     - We also need a restoreFromSnapshot(snapshot_tag) function. This function should be accessible specially if setup fails.
+// v1.0 === === === === === === === === === === === === === === === === === === === === ===
 // [ ] Better CRUD interface for modules (js, css, media)
 //     - We want to know what's in cache, what's inlined, what's remote, etc.
 //     - We want to be able to write an IDE module to add new modules, etc. so it would be useful to get access to all the internals
@@ -27,7 +24,7 @@
 //     More notes: This loader is not in charge of pushing changes to remotes, it just handles cache and inlines.
 //                 To push to remote, a hook would have to be passed which would be in charge of manually hitting an API or whatever.
 //
-// v1.5 ==================================================================================================================================
+// v1.5 === === === === === === === === === === === === === === === === === === === === ===
 // This version might require some internal refactorings, this is why a CRUD interface is important over just exposing internals directly.
 //
 // [ ] Hooks for minification and formatting (we already have the lib thing)
@@ -43,653 +40,1087 @@
 window.BlobLoader = {
 	settings: {
 		prefers_remote_modules: location.hostname === "localhost" ? true : false,
+		save_snapshot_on_load_when_different_from_last: true,
 	},
 	// lib: {}, // v1.5 --- We expose early (before page load) so that there can be non-module script tags with hooks
 };
 
 //
-// Module Loader Setup
+// Booting up the page
+// Before we add the page load event, we want to check if we're loading a cached "image" of the site.
 //
-//
 
-window.addEventListener("load", async () => {
-	const load_start_time = performance.now();
+(async () => {
+	const petition_to_restore = localStorage.getItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+	if (petition_to_restore) {
+		const snapshot = await getSnapshotFromCache(petition_to_restore);
 
-	//
-	// State
-	//
+		if (snapshot) {
+			console.log(`Restoring snapshot: ${snapshot.tag} (${petition_to_restore})`);
 
-	const importmap = {};
-	const import_map = document.createElement("script");
-	import_map.type = "importmap";
+			// Parse the HTML content
+			const parser = new DOMParser();
+			const snapshot_doc = parser.parseFromString(snapshot.html_content, "text/html");
 
-	const blob_media_urls = new Map();
-	const blob_module_urls = new Map();
-	const blob_style_urls = new Map();
+			// Replace current document's head
+			document.head.replaceChildren(...snapshot_doc.head.children);
 
-	const remote_media_hrefs = new Map();
-	const remote_modules_hrefs = new Map();
-	const remote_styles_hrefs = new Map();
+			// Replace current document's body
+			document.body.replaceChildren(...snapshot_doc.body.children);
 
-	const blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
-	const blob_style_tags = document.querySelectorAll(`style[type="blob-module"]`);
-	const blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
+			// Copy body attributes
+			Array.from(snapshot_doc.body.attributes).forEach((attr) => {
+				document.body.setAttribute(attr.name, attr.value);
+			});
 
-	const blob_media_sources = new Map();
-	const blob_style_sources = new Map();
-	const blob_modules_sources = new Map();
+			// Wait for next cycle... Not sure we need it since we'll wait for the page to load.
+			await new Promise((resolve) => setTimeout(resolve, 0));
 
-	const blob_media_map = new Map();
-	const blob_style_map = new Map();
-	const blob_module_map = new Map();
+			await loadAllBlobModules();
 
-	const media_css_vars = [];
-	const blob_media_blobs = new Map();
-	const blob_adopted_sheets = new Map();
-
-	//
-	// Global API export — needs to run before all else
-	//
-
-	window.BlobLoader = {
-		...window.BlobLoader,
-		getMediaUrl: (name) => blob_media_urls.get(name) || null,
-		openCache,
-		getCachedModule,
-		setCachedModule,
-		getCachedMedia,
-		setCachedMedia,
-		clearBlobLoaderCache,
-		getDocumentOuterHtml,
-		saveSnapshotInCache,
-		saveAsHtmlFile,
-		saveAsZipFile,
-	};
-
-	//
-	// Process blob media tags
-	//
-
-	// First pass: collect all media contents and remote URLs
-	blob_media_tags.forEach((link) => {
-		const media_name = link.getAttribute("name");
-		const remote_url = link.getAttribute("remote");
-		const inline_src = link.getAttribute("source");
-		const is_disabled = link.hasAttribute("disabled");
-
-		if (!media_name) {
-			console.warn("blob-module link missing name attribute");
-			return;
+			console.log("Snapshot restored, continuing with normal load process...");
+		} else {
+			console.warn(`Snapshot with session_id "${petition_to_restore}" not found`);
 		}
+	}
 
-		// Skip disabled media
-		if (is_disabled) {
-			console.log(`Skipping disabled media: "${media_name}"`);
-			return;
-		}
+	// Always remove
+	localStorage.removeItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
 
-		// Check for name collisions
-		if (blob_media_sources.has(media_name) || remote_media_hrefs.has(media_name)) {
-			console.warn(`Media name collision detected: "${media_name}" already exists. Skipping duplicate.`);
-			return;
-		}
+	//
+	// Module Loader Setup
+	//
 
-		if (inline_src) {
-			// Store inline data URL
-			blob_media_sources.set(media_name, inline_src);
-			if (remote_url) {
+	if (!petition_to_restore) {
+		window.addEventListener("load", loadAllBlobModules);
+	}
+
+	async function loadAllBlobModules() {
+		const load_start_time = performance.now();
+
+		//
+		// State
+		//
+
+		const importmap = {};
+		const import_map = document.createElement("script");
+		import_map.type = "importmap";
+
+		const blob_media_urls = new Map();
+		const blob_module_urls = new Map();
+		const blob_style_urls = new Map();
+
+		const remote_media_hrefs = new Map();
+		const remote_modules_hrefs = new Map();
+		const remote_styles_hrefs = new Map();
+
+		const blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
+		const blob_style_tags = document.querySelectorAll(`style[type="blob-module"]`);
+		const blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
+
+		const blob_media_sources = new Map();
+		const blob_style_sources = new Map();
+		const blob_modules_sources = new Map();
+
+		const blob_media_map = new Map();
+		const blob_style_map = new Map();
+		const blob_module_map = new Map();
+
+		const media_css_vars = [];
+		const blob_media_blobs = new Map();
+		const blob_adopted_sheets = new Map();
+
+		//
+		// Global API export — needs to run before all else
+		//
+
+		window.BlobLoader = {
+			...window.BlobLoader,
+			getMediaUrl: (name) => blob_media_urls.get(name) || null,
+			openCache,
+			getCachedModule,
+			setCachedModule,
+			getCachedMedia,
+			setCachedMedia,
+			clearBlobLoaderCache,
+			getDocumentOuterHtml,
+			saveSnapshotToCache,
+			getSnapshotFromCache,
+			listSnapshotsInCache,
+			deleteSnapshotFromCache,
+			saveSnapshotAsHtmlFile,
+			setSnapshotForBoot,
+			createBackupSnapshot,
+			saveAsHtmlFile,
+			saveAsZipFile,
+		};
+
+		//
+		// Process blob media tags
+		//
+
+		// First pass: collect all media contents and remote URLs
+		blob_media_tags.forEach((link) => {
+			const media_name = link.getAttribute("name");
+			const remote_url = link.getAttribute("remote");
+			const inline_src = link.getAttribute("source");
+			const is_disabled = link.hasAttribute("disabled");
+
+			if (!media_name) {
+				console.warn("blob-module link missing name attribute");
+				return;
+			}
+
+			// Skip disabled media
+			if (is_disabled) {
+				console.log(`Skipping disabled media: "${media_name}"`);
+				return;
+			}
+
+			// Check for name collisions
+			if (blob_media_sources.has(media_name) || remote_media_hrefs.has(media_name)) {
+				console.warn(`Media name collision detected: "${media_name}" already exists. Skipping duplicate.`);
+				return;
+			}
+
+			if (inline_src) {
+				// Store inline data URL
+				blob_media_sources.set(media_name, inline_src);
+				if (remote_url) {
+					remote_media_hrefs.set(media_name, remote_url);
+				}
+			} else if (remote_url) {
+				// Just remote URL
 				remote_media_hrefs.set(media_name, remote_url);
 			}
-		} else if (remote_url) {
-			// Just remote URL
-			remote_media_hrefs.set(media_name, remote_url);
-		}
-	});
+		});
 
-	// Fetch remote media (with caching) and create local copies before proceeding
-	for (const [media_name, remote_url] of remote_media_hrefs) {
-		try {
-			let media_blob;
-			let data_url_for_comparison = null;
+		// Fetch remote media (with caching) and create local copies before proceeding
+		for (const [media_name, remote_url] of remote_media_hrefs) {
+			try {
+				let media_blob;
+				let data_url_for_comparison = null;
 
-			if (BlobLoader.settings.prefers_remote_modules) {
-				// Auto-update mode: fetch from remote first, fallback to cache
-				try {
-					console.log(`Fetching remote media "${media_name}" from ${remote_url} (auto-update mode)`);
-					const response = await fetch(remote_url);
-					media_blob = await response.blob();
+				if (BlobLoader.settings.prefers_remote_modules) {
+					// Auto-update mode: fetch from remote first, fallback to cache
+					try {
+						console.log(`Fetching remote media "${media_name}" from ${remote_url} (auto-update mode)`);
+						const response = await fetch(remote_url);
+						media_blob = await response.blob();
 
-					// Update cache with blob
-					await setCachedMedia(remote_url, media_blob);
-					console.log(`Updated cache for remote media "${media_name}"`);
-				} catch (fetch_error) {
-					console.warn(`Failed to fetch remote media "${media_name}", falling back to cache:`, fetch_error);
+						// Update cache with blob
+						await setCachedMedia(remote_url, media_blob);
+						console.log(`Updated cache for remote media "${media_name}"`);
+					} catch (fetch_error) {
+						console.warn(`Failed to fetch remote media "${media_name}", falling back to cache:`, fetch_error);
 
-					// Fallback to cached version
+						// Fallback to cached version
+						const cached_media = await getCachedMedia(remote_url);
+						if (cached_media) {
+							console.log(`Using cached media "${media_name}" as fallback`);
+							media_blob = cached_media.blob;
+						} else {
+							throw new Error("No cached version available");
+						}
+					}
+				} else {
+					// Cache-first mode: check cache first, then fetch remote if needed
 					const cached_media = await getCachedMedia(remote_url);
+
 					if (cached_media) {
-						console.log(`Using cached media "${media_name}" as fallback`);
+						console.log(`Using cached media "${media_name}" from ${remote_url}`);
 						media_blob = cached_media.blob;
 					} else {
-						throw new Error("No cached version available");
+						console.log(`Fetching remote media "${media_name}" from ${remote_url}`);
+						const response = await fetch(remote_url);
+						media_blob = await response.blob();
+
+						// Cache the fetched content
+						await setCachedMedia(remote_url, media_blob);
+						console.log(`Cached remote media "${media_name}"`);
 					}
 				}
-			} else {
-				// Cache-first mode: check cache first, then fetch remote if needed
-				const cached_media = await getCachedMedia(remote_url);
 
-				if (cached_media) {
-					console.log(`Using cached media "${media_name}" from ${remote_url}`);
-					media_blob = cached_media.blob;
-				} else {
-					console.log(`Fetching remote media "${media_name}" from ${remote_url}`);
-					const response = await fetch(remote_url);
-					media_blob = await response.blob();
+				if (blob_media_sources.has(media_name)) {
+					// Compare with existing local content
+					const local_data_url = blob_media_sources.get(media_name);
 
-					// Cache the fetched content
-					await setCachedMedia(remote_url, media_blob);
-					console.log(`Cached remote media "${media_name}"`);
-				}
-			}
+					// Convert fetched blob to data URL for comparison only
+					const reader = new FileReader();
+					const remote_data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(media_blob);
+					});
 
-			if (blob_media_sources.has(media_name)) {
-				// Compare with existing local content
-				const local_data_url = blob_media_sources.get(media_name);
-
-				// Convert fetched blob to data URL for comparison only
-				const reader = new FileReader();
-				const remote_data_url = await new Promise((resolve) => {
-					reader.onloadend = () => resolve(reader.result);
-					reader.readAsDataURL(media_blob);
-				});
-
-				if (remote_data_url !== local_data_url) {
-					if (BlobLoader.settings.prefers_remote_modules) {
-						console.log(
-							`Remote and local content differ for media "${media_name}". Using remote content (auto-update mode).`,
-						);
-						blob_media_blobs.set(media_name, media_blob); // Use remote blob
-						blob_media_sources.set(media_name, remote_data_url); // Update source for saving
+					if (remote_data_url !== local_data_url) {
+						if (BlobLoader.settings.prefers_remote_modules) {
+							console.log(
+								`Remote and local content differ for media "${media_name}". Using remote content (auto-update mode).`,
+							);
+							blob_media_blobs.set(media_name, media_blob); // Use remote blob
+							blob_media_sources.set(media_name, remote_data_url); // Update source for saving
+						} else {
+							console.warn(`Remote and local content are different for media "${media_name}". Using local content.`);
+							// Convert local data URL to blob for consistency
+							const local_response = await fetch(local_data_url);
+							const local_blob = await local_response.blob();
+							blob_media_blobs.set(media_name, local_blob);
+						}
 					} else {
-						console.warn(`Remote and local content are different for media "${media_name}". Using local content.`);
-						// Convert local data URL to blob for consistency
-						const local_response = await fetch(local_data_url);
-						const local_blob = await local_response.blob();
-						blob_media_blobs.set(media_name, local_blob);
+						// Content is the same, use the blob we have
+						blob_media_blobs.set(media_name, media_blob);
 					}
 				} else {
-					// Content is the same, use the blob we have
+					// No local content, use fetched remote blob
 					blob_media_blobs.set(media_name, media_blob);
+
+					// Convert to data URL for storage purposes
+					const reader = new FileReader();
+					const remote_data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(media_blob);
+					});
+					blob_media_sources.set(media_name, remote_data_url);
+					console.log(`Successfully loaded remote media "${media_name}"`);
 				}
-			} else {
-				// No local content, use fetched remote blob
-				blob_media_blobs.set(media_name, media_blob);
-
-				// Convert to data URL for storage purposes
-				const reader = new FileReader();
-				const remote_data_url = await new Promise((resolve) => {
-					reader.onloadend = () => resolve(reader.result);
-					reader.readAsDataURL(media_blob);
-				});
-				blob_media_sources.set(media_name, remote_data_url);
-				console.log(`Successfully loaded remote media "${media_name}"`);
-			}
-		} catch (error) {
-			console.warn(`Failed to fetch remote media "${media_name}":`, error);
-			if (!blob_media_sources.has(media_name)) {
-				// Mark the link tag as disabled since we have no content
-				const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
-				if (link_tag) {
-					link_tag.setAttribute("disabled", "");
-					console.log(`Marked media "${media_name}" as disabled (no content available)`);
-				}
-			} else {
-				console.log(`Using local media for "${media_name}"`);
-			}
-		}
-	}
-
-	// Process local media sources (those without remote URLs or already in blob_media_blobs)
-	for (const [media_name, data_url] of blob_media_sources) {
-		// Skip if we already have a blob from remote fetching
-		if (blob_media_blobs.has(media_name)) {
-			continue;
-		}
-
-		// Find the corresponding link tag
-		const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
-
-		// Skip if disabled
-		if (link_tag && link_tag.hasAttribute("disabled")) {
-			console.log(`Skipping disabled media: "${media_name}"`);
-			continue;
-		}
-
-		// Convert data URL to blob
-		const res = await fetch(data_url);
-		const blob = await res.blob();
-		blob_media_blobs.set(media_name, blob);
-	}
-
-	// Create blob URLs from all blobs
-	for (const [media_name, blob] of blob_media_blobs) {
-		const blob_url = URL.createObjectURL(blob);
-		blob_media_urls.set(media_name, blob_url);
-
-		// Update link tag
-		const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
-		if (link_tag) {
-			link_tag.removeAttribute("src");
-			link_tag.setAttribute("href", blob_url);
-			link_tag.setAttribute("blob", blob_url);
-		}
-
-		// Add CSS variable definition only for images
-		if (blob.type.startsWith("image/")) {
-			media_css_vars.push(`--BM-${media_name.replaceAll(" ", "-")}: url('${blob_url}');`);
-		}
-
-		// Load fonts using FontFace API
-		if (
-			blob.type.startsWith("font/") ||
-			blob.type === "application/font-woff" ||
-			blob.type === "application/font-woff2" ||
-			blob.type === "application/x-font-ttf" ||
-			blob.type === "application/x-font-truetype" ||
-			blob.type === "application/x-font-opentype"
-		) {
-			const font = new FontFace(media_name, `url('${blob_url}')`, {
-				weight: "100 700",
-			});
-			// await font.load(); // We don't really need to block
-			document.fonts.add(font);
-		}
-
-		console.log(`Created blob URL for media "${media_name}"`);
-	}
-
-	// Create and adopt stylesheet with media CSS variables
-	if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
-		const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
-		const sheet = new CSSStyleSheet();
-		sheet.replaceSync(media_vars_css);
-		document.adoptedStyleSheets.push(sheet);
-		blob_adopted_sheets.set("__media_vars__", sheet);
-		console.log(`Adopted stylesheet for media variables (${media_css_vars.length} variables)`);
-	}
-
-	// Populate the media metadata map
-	blob_media_blobs.forEach((blob, media_name) => {
-		const blob_url = blob_media_urls.get(media_name);
-		const remote_url = remote_media_hrefs.get(media_name) || null;
-		const size_bytes = blob.size;
-
-		const metadata = {
-			name: media_name,
-			remote_url,
-			size_bytes,
-			blob_url,
-		};
-
-		blob_media_map.set(media_name, metadata);
-	});
-
-	//
-	// Process blob style tags
-	//
-
-	// First pass: collect all style contents and remote URLs
-	blob_style_tags.forEach((style) => {
-		const remote_url = style.getAttribute("remote");
-		const style_module_name = style.getAttribute("name");
-
-		// Check for name collisions
-		if (blob_style_sources.has(style_module_name) || remote_styles_hrefs.has(style_module_name)) {
-			console.warn(`Style URL collision detected: "${style_module_name}" already exists. Skipping duplicate.`);
-			return;
-		}
-
-		// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
-		const content = style.textContent.trim();
-
-		if (!content) {
-			// Empty content with remote URL - fetch remote
-			remote_styles_hrefs.set(style_module_name, remote_url);
-			return;
-		} else {
-			// Both remote and content exist - store local, compare later
-			blob_style_sources.set(style_module_name, content);
-			remote_styles_hrefs.set(style_module_name, remote_url);
-			return;
-		}
-	});
-
-	// Fetch remote styles (with caching) and create local copies before proceeding
-	for (const [style_name, remote_url] of remote_styles_hrefs) {
-		try {
-			let remote_content;
-
-			if (BlobLoader.settings.prefers_remote_modules) {
-				// Auto-update mode: fetch from remote first, fallback to cache
-				try {
-					console.log(`Fetching remote style from ${remote_url} (auto-update mode)`);
-					const response = await fetch(remote_url);
-					remote_content = await response.text();
-
-					// Overwrite cache with new source
-					await setCachedModule(remote_url, remote_content);
-					console.log(`Updated cache for remote style from ${remote_url}`);
-				} catch (fetch_error) {
-					console.warn(`Failed to fetch remote style from "${remote_url}", falling back to cache:`, fetch_error);
-
-					// Fallback to cached version
-					const cached_style = await getCachedModule(remote_url);
-					if (cached_style) {
-						console.log(`Using cached style from ${remote_url} as fallback`);
-						remote_content = cached_style.content;
-					} else {
-						throw new Error("No cached version available");
+			} catch (error) {
+				console.warn(`Failed to fetch remote media "${media_name}":`, error);
+				if (!blob_media_sources.has(media_name)) {
+					// Mark the link tag as disabled since we have no content
+					const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+					if (link_tag) {
+						link_tag.setAttribute("disabled", "");
+						console.log(`Marked media "${media_name}" as disabled (no content available)`);
 					}
-				}
-			} else {
-				// Cache-first mode: check cache first, then fetch remote if needed
-				const cached_style = await getCachedModule(remote_url);
-
-				if (cached_style) {
-					console.log(`Using cached style from ${remote_url}`);
-					remote_content = cached_style.content;
 				} else {
-					console.log(`Fetching remote style from ${remote_url}`);
-					const response = await fetch(remote_url);
-					remote_content = await response.text();
-
-					// Cache the fetched content
-					await setCachedModule(remote_url, remote_content);
-					console.log(`Cached remote style from ${remote_url}`);
+					console.log(`Using local media for "${media_name}"`);
 				}
-			}
-
-			if (blob_style_sources.has(style_name)) {
-				// Compare with existing local content
-				const local_content = blob_style_sources.get(style_name);
-				if (remote_content.trim() !== local_content.trim()) {
-					if (BlobLoader.settings.prefers_remote_modules) {
-						console.log(
-							`Remote and local content differ for style "${remote_url}". Using remote content (auto-update mode).`,
-						);
-						blob_style_sources.set(style_name, remote_content); // Use remote content
-					} else {
-						console.warn(`Remote and local content are different for style "${remote_url}". Using local content.`);
-						// Keep local content (no change needed)
-					}
-				}
-				// If content is the same, keep existing (local) content
-			} else {
-				// No local content, use fetched remote content
-				blob_style_sources.set(style_name, remote_content);
-				console.log(`Successfully loaded remote style from ${remote_url}`);
-			}
-		} catch (error) {
-			console.warn(`Failed to fetch remote style from "${remote_url}":`, error);
-			if (!blob_style_sources.has(style_name)) {
-				// Mark the style tag as disabled since we have no content
-				const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
-				if (style_tag) {
-					style_tag.setAttribute("disabled", "");
-					console.log(`Marked style "${style_name}" as disabled (no content available)`);
-				}
-			} else {
-				console.log(`Using local style for "${style_name}"`);
 			}
 		}
-	}
 
-	// Create blob URLs for all styles and update style tags
-	blob_style_sources.forEach((content, style_name) => {
-		// Find the corresponding style tag
-		const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+		// Process local media sources (those without remote URLs or already in blob_media_blobs)
+		for (const [media_name, data_url] of blob_media_sources) {
+			// Skip if we already have a blob from remote fetching
+			if (blob_media_blobs.has(media_name)) {
+				continue;
+			}
 
-		// Skip if disabled
-		if (style_tag && style_tag.hasAttribute("disabled")) {
-			console.log(`Skipping disabled style: "${style_name}"`);
-			return;
+			// Find the corresponding link tag
+			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+
+			// Skip if disabled
+			if (link_tag && link_tag.hasAttribute("disabled")) {
+				console.log(`Skipping disabled media: "${media_name}"`);
+				continue;
+			}
+
+			// Convert data URL to blob
+			const res = await fetch(data_url);
+			const blob = await res.blob();
+			blob_media_blobs.set(media_name, blob);
 		}
 
-		const style_blob = new Blob([content], {
-			type: "text/css",
-		});
-		const blob_url = URL.createObjectURL(style_blob);
-		blob_style_urls.set(style_name, blob_url);
+		// Create blob URLs from all blobs
+		for (const [media_name, blob] of blob_media_blobs) {
+			const blob_url = URL.createObjectURL(blob);
+			blob_media_urls.set(media_name, blob_url);
 
-		if (style_tag && !blob_adopted_sheets.has(style_name)) {
+			// Update link tag
+			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+			if (link_tag) {
+				link_tag.removeAttribute("src");
+				link_tag.setAttribute("href", blob_url);
+				link_tag.setAttribute("blob", blob_url);
+			}
+
+			// Add CSS variable definition only for images
+			if (blob.type.startsWith("image/")) {
+				media_css_vars.push(`--BM-${media_name.replaceAll(" ", "-")}: url('${blob_url}');`);
+			}
+
+			// Load fonts using FontFace API
+			if (
+				blob.type.startsWith("font/") ||
+				blob.type === "application/font-woff" ||
+				blob.type === "application/font-woff2" ||
+				blob.type === "application/x-font-ttf" ||
+				blob.type === "application/x-font-truetype" ||
+				blob.type === "application/x-font-opentype"
+			) {
+				const font = new FontFace(media_name, `url('${blob_url}')`, {
+					weight: "100 700",
+				});
+				// await font.load(); // We don't really need to block
+				document.fonts.add(font);
+			}
+
+			console.log(`Created blob URL for media "${media_name}"`);
+		}
+
+		// Create and adopt stylesheet with media CSS variables
+		if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
+			const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
 			const sheet = new CSSStyleSheet();
-			sheet.replaceSync(content);
+			sheet.replaceSync(media_vars_css);
 			document.adoptedStyleSheets.push(sheet);
-			blob_adopted_sheets.set(style_name, sheet);
-
-			style_tag.textContent = "";
-			style_tag.setAttribute("blob", blob_url);
-
-			console.log(`Adopted stylesheet for ${style_name}`);
-		}
-	});
-
-	// Populate the style metadata map
-	blob_style_sources.forEach((content, style_name) => {
-		const blob_url = blob_style_urls.get(style_name);
-		const src_bytes = new Blob([content]).size;
-		const remote_url = remote_styles_hrefs.get(style_name) || null;
-
-		const metadata = {
-			name: style_name,
-			remote_url,
-			src_bytes,
-			blob_url,
-		};
-
-		blob_style_map.set(style_name, metadata);
-	});
-
-	//
-	// Process blob script tags
-	//
-
-	// First pass: collect all module contents and remote URLs, skip disabled modules
-	blob_script_tags.forEach((script) => {
-		const module_name = script.getAttribute("name");
-		const remote_url = script.getAttribute("remote");
-		const is_disabled = script.hasAttribute("disabled");
-
-		if (!module_name) {
-			console.warn("blob-module script missing name attribute");
-			return;
+			blob_adopted_sheets.set("__media_vars__", sheet);
+			console.log(`Adopted stylesheet for media variables (${media_css_vars.length} variables)`);
 		}
 
-		// Skip disabled modules
-		if (is_disabled) {
-			console.log(`Skipping disabled module: "${module_name}"`);
-			return;
-		}
+		// Populate the media metadata map
+		blob_media_blobs.forEach((blob, media_name) => {
+			const blob_url = blob_media_urls.get(media_name);
+			const remote_url = remote_media_hrefs.get(media_name) || null;
+			const size_bytes = blob.size;
 
-		// Check for name collisions
-		if (blob_modules_sources.has(module_name) || remote_modules_hrefs.has(module_name)) {
-			console.warn(`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`);
-			return;
-		}
+			const metadata = {
+				name: media_name,
+				remote_url,
+				size_bytes,
+				blob_url,
+			};
 
-		// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
-		const content = script.textContent.trim();
+			blob_media_map.set(media_name, metadata);
+		});
 
-		if (remote_url) {
+		//
+		// Process blob style tags
+		//
+
+		// First pass: collect all style contents and remote URLs
+		blob_style_tags.forEach((style) => {
+			const remote_url = style.getAttribute("remote");
+			const style_module_name = style.getAttribute("name");
+
+			// Check for name collisions
+			if (blob_style_sources.has(style_module_name) || remote_styles_hrefs.has(style_module_name)) {
+				console.warn(`Style URL collision detected: "${style_module_name}" already exists. Skipping duplicate.`);
+				return;
+			}
+
+			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
+			const content = style.textContent.trim();
+
 			if (!content) {
 				// Empty content with remote URL - fetch remote
-				remote_modules_hrefs.set(module_name, remote_url);
+				remote_styles_hrefs.set(style_module_name, remote_url);
 				return;
 			} else {
 				// Both remote and content exist - store local, compare later
-				blob_modules_sources.set(module_name, content);
-				remote_modules_hrefs.set(module_name, remote_url);
+				blob_style_sources.set(style_module_name, content);
+				remote_styles_hrefs.set(style_module_name, remote_url);
 				return;
 			}
+		});
+
+		// Fetch remote styles (with caching) and create local copies before proceeding
+		for (const [style_name, remote_url] of remote_styles_hrefs) {
+			try {
+				let remote_content;
+
+				if (BlobLoader.settings.prefers_remote_modules) {
+					// Auto-update mode: fetch from remote first, fallback to cache
+					try {
+						console.log(`Fetching remote style from ${remote_url} (auto-update mode)`);
+						const response = await fetch(remote_url);
+						remote_content = await response.text();
+
+						// Overwrite cache with new source
+						await setCachedModule(remote_url, remote_content);
+						console.log(`Updated cache for remote style from ${remote_url}`);
+					} catch (fetch_error) {
+						console.warn(`Failed to fetch remote style from "${remote_url}", falling back to cache:`, fetch_error);
+
+						// Fallback to cached version
+						const cached_style = await getCachedModule(remote_url);
+						if (cached_style) {
+							console.log(`Using cached style from ${remote_url} as fallback`);
+							remote_content = cached_style.content;
+						} else {
+							throw new Error("No cached version available");
+						}
+					}
+				} else {
+					// Cache-first mode: check cache first, then fetch remote if needed
+					const cached_style = await getCachedModule(remote_url);
+
+					if (cached_style) {
+						console.log(`Using cached style from ${remote_url}`);
+						remote_content = cached_style.content;
+					} else {
+						console.log(`Fetching remote style from ${remote_url}`);
+						const response = await fetch(remote_url);
+						remote_content = await response.text();
+
+						// Cache the fetched content
+						await setCachedModule(remote_url, remote_content);
+						console.log(`Cached remote style from ${remote_url}`);
+					}
+				}
+
+				if (blob_style_sources.has(style_name)) {
+					// Compare with existing local content
+					const local_content = blob_style_sources.get(style_name);
+					if (remote_content.trim() !== local_content.trim()) {
+						if (BlobLoader.settings.prefers_remote_modules) {
+							console.log(
+								`Remote and local content differ for style "${remote_url}". Using remote content (auto-update mode).`,
+							);
+							blob_style_sources.set(style_name, remote_content); // Use remote content
+						} else {
+							console.warn(`Remote and local content are different for style "${remote_url}". Using local content.`);
+							// Keep local content (no change needed)
+						}
+					}
+					// If content is the same, keep existing (local) content
+				} else {
+					// No local content, use fetched remote content
+					blob_style_sources.set(style_name, remote_content);
+					console.log(`Successfully loaded remote style from ${remote_url}`);
+				}
+			} catch (error) {
+				console.warn(`Failed to fetch remote style from "${remote_url}":`, error);
+				if (!blob_style_sources.has(style_name)) {
+					// Mark the style tag as disabled since we have no content
+					const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+					if (style_tag) {
+						style_tag.setAttribute("disabled", "");
+						console.log(`Marked style "${style_name}" as disabled (no content available)`);
+					}
+				} else {
+					console.log(`Using local style for "${style_name}"`);
+				}
+			}
 		}
 
-		// No remote URL, just store content
-		blob_modules_sources.set(module_name, content);
-	});
+		// Create blob URLs for all styles and update style tags
+		blob_style_sources.forEach((content, style_name) => {
+			// Find the corresponding style tag
+			const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
 
-	// Fetch remote modules (with caching) and create local copies before proceeding
-	for (const [module_name, remote_url] of remote_modules_hrefs) {
-		try {
-			let remote_content;
+			// Skip if disabled
+			if (style_tag && style_tag.hasAttribute("disabled")) {
+				console.log(`Skipping disabled style: "${style_name}"`);
+				return;
+			}
 
-			if (BlobLoader.settings.prefers_remote_modules) {
-				// Auto-update mode: fetch from remote first, fallback to cache
-				try {
-					console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
-					const response = await fetch(remote_url);
-					remote_content = await response.text();
+			const style_blob = new Blob([content], {
+				type: "text/css",
+			});
+			const blob_url = URL.createObjectURL(style_blob);
+			blob_style_urls.set(style_name, blob_url);
 
-					// Update the cache with fresh content
-					await setCachedModule(remote_url, remote_content);
-					console.log(`Updated cache for remote module "${module_name}"`);
-				} catch (fetch_error) {
-					console.warn(`Failed to fetch remote module "${module_name}", falling back to cache:`, fetch_error);
+			if (style_tag && !blob_adopted_sheets.has(style_name)) {
+				const sheet = new CSSStyleSheet();
+				sheet.replaceSync(content);
+				document.adoptedStyleSheets.push(sheet);
+				blob_adopted_sheets.set(style_name, sheet);
 
-					// Fallback to cached version
+				style_tag.textContent = "";
+				style_tag.setAttribute("blob", blob_url);
+
+				console.log(`Adopted stylesheet for ${style_name}`);
+			}
+		});
+
+		// Populate the style metadata map
+		blob_style_sources.forEach((content, style_name) => {
+			const blob_url = blob_style_urls.get(style_name);
+			const src_bytes = new Blob([content]).size;
+			const remote_url = remote_styles_hrefs.get(style_name) || null;
+
+			const metadata = {
+				name: style_name,
+				remote_url,
+				src_bytes,
+				blob_url,
+			};
+
+			blob_style_map.set(style_name, metadata);
+		});
+
+		//
+		// Process blob script tags
+		//
+
+		// First pass: collect all module contents and remote URLs, skip disabled modules
+		blob_script_tags.forEach((script) => {
+			const module_name = script.getAttribute("name");
+			const remote_url = script.getAttribute("remote");
+			const is_disabled = script.hasAttribute("disabled");
+
+			if (!module_name) {
+				console.warn("blob-module script missing name attribute");
+				return;
+			}
+
+			// Skip disabled modules
+			if (is_disabled) {
+				console.log(`Skipping disabled module: "${module_name}"`);
+				return;
+			}
+
+			// Check for name collisions
+			if (blob_modules_sources.has(module_name) || remote_modules_hrefs.has(module_name)) {
+				console.warn(`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`);
+				return;
+			}
+
+			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
+			const content = script.textContent.trim();
+
+			if (remote_url) {
+				if (!content) {
+					// Empty content with remote URL - fetch remote
+					remote_modules_hrefs.set(module_name, remote_url);
+					return;
+				} else {
+					// Both remote and content exist - store local, compare later
+					blob_modules_sources.set(module_name, content);
+					remote_modules_hrefs.set(module_name, remote_url);
+					return;
+				}
+			}
+
+			// No remote URL, just store content
+			blob_modules_sources.set(module_name, content);
+		});
+
+		// Fetch remote modules (with caching) and create local copies before proceeding
+		for (const [module_name, remote_url] of remote_modules_hrefs) {
+			try {
+				let remote_content;
+
+				if (BlobLoader.settings.prefers_remote_modules) {
+					// Auto-update mode: fetch from remote first, fallback to cache
+					try {
+						console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
+						const response = await fetch(remote_url);
+						remote_content = await response.text();
+
+						// Update the cache with fresh content
+						await setCachedModule(remote_url, remote_content);
+						console.log(`Updated cache for remote module "${module_name}"`);
+					} catch (fetch_error) {
+						console.warn(`Failed to fetch remote module "${module_name}", falling back to cache:`, fetch_error);
+
+						// Fallback to cached version
+						const cached_module = await getCachedModule(remote_url);
+						if (cached_module) {
+							console.log(`Using cached module "${module_name}" as fallback`);
+							remote_content = cached_module.content;
+						} else {
+							throw new Error("No cached version available");
+						}
+					}
+				} else {
+					// Cache-first mode: check cache first, then fetch remote if needed
 					const cached_module = await getCachedModule(remote_url);
+
 					if (cached_module) {
-						console.log(`Using cached module "${module_name}" as fallback`);
+						console.log(`Using cached module "${module_name}" from ${remote_url}`);
 						remote_content = cached_module.content;
 					} else {
-						throw new Error("No cached version available");
+						console.log(`Fetching remote module "${module_name}" from ${remote_url}`);
+						const response = await fetch(remote_url);
+						remote_content = await response.text();
+
+						// Cache the fetched content
+						await setCachedModule(remote_url, remote_content);
+						console.log(`Cached remote module "${module_name}"`);
 					}
 				}
-			} else {
-				// Cache-first mode: check cache first, then fetch remote if needed
-				const cached_module = await getCachedModule(remote_url);
 
-				if (cached_module) {
-					console.log(`Using cached module "${module_name}" from ${remote_url}`);
-					remote_content = cached_module.content;
+				if (blob_modules_sources.has(module_name)) {
+					// Compare with existing local content
+					const local_content = blob_modules_sources.get(module_name);
+					if (remote_content.trim() !== local_content.trim()) {
+						if (BlobLoader.settings.prefers_remote_modules) {
+							console.log(
+								`Remote and local content differ for module "${module_name}". Using remote content (auto-update mode).`,
+							);
+							blob_modules_sources.set(module_name, remote_content); // Use remote content
+						} else {
+							console.warn(`Remote and local content are different for module "${module_name}". Using local content.`);
+							// Keep local content (no change needed)
+						}
+					}
+					// If content is the same, keep existing (local) content
 				} else {
-					console.log(`Fetching remote module "${module_name}" from ${remote_url}`);
-					const response = await fetch(remote_url);
-					remote_content = await response.text();
-
-					// Cache the fetched content
-					await setCachedModule(remote_url, remote_content);
-					console.log(`Cached remote module "${module_name}"`);
+					// No local content, use fetched remote content
+					blob_modules_sources.set(module_name, remote_content);
+					console.log(`Successfully loaded remote module "${module_name}"`);
+				}
+			} catch (error) {
+				console.warn(`Failed to fetch remote module "${module_name}":`, error);
+				if (!blob_modules_sources.has(module_name)) {
+					// Use remote URL directly in importmap
+					blob_module_urls.set(module_name, remote_url);
+					console.log(`Will use remote URL directly for module "${module_name}"`);
+				} else if (blob_modules_sources.has(module_name)) {
+					console.log(`Using local module "${module_name}"`);
 				}
 			}
+		}
 
-			if (blob_modules_sources.has(module_name)) {
-				// Compare with existing local content
-				const local_content = blob_modules_sources.get(module_name);
-				if (remote_content.trim() !== local_content.trim()) {
-					if (BlobLoader.settings.prefers_remote_modules) {
-						console.log(
-							`Remote and local content differ for module "${module_name}". Using remote content (auto-update mode).`,
-						);
-						blob_modules_sources.set(module_name, remote_content); // Use remote content
+		// Create blob URLs for all modules
+		blob_modules_sources.forEach((content, module_name) => {
+			const module_blob = new Blob([content], {
+				type: "text/javascript",
+			});
+			const blob_url = URL.createObjectURL(module_blob);
+			blob_module_urls.set(module_name, blob_url);
+		});
+
+		// Clear script tag contents and add blob URL attributes (only for non-disabled modules)
+		blob_script_tags.forEach((script) => {
+			const module_name = script.getAttribute("name");
+			const is_disabled = script.hasAttribute("disabled");
+
+			if (is_disabled) {
+				return;
+			}
+
+			const blob_url = blob_module_urls.get(module_name);
+
+			if (blob_url) {
+				script.textContent = "";
+				script.setAttribute("blob", blob_url);
+			}
+		});
+
+		// Create import map with all blob URLs
+		blob_module_urls.forEach((url, name) => (importmap[name] = url));
+		import_map.textContent = JSON.stringify({ imports: importmap }, null, 2);
+		document.head.appendChild(import_map);
+
+		// Run the main module if it exists and is not disabled
+		if (blob_modules_sources.has("main")) {
+			setTimeout(() => {
+				const main_script = document.createElement("script");
+				main_script.type = "module";
+				main_script.setAttribute("entrypoint", "");
+
+				// Stop performance timer and inject main script
+				main_script.textContent = `
+				const main_start_time = performance.now();
+				const load_duration = main_start_time - ${load_start_time};
+				console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
+
+				import("main");
+
+				// Make backup (if settings allow it)
+				if (BlobLoader.settings.save_snapshot_on_load_when_different_from_last) {
+					BlobLoader.createBackupSnapshot();
+				}
+			`;
+				document.head.appendChild(main_script);
+			}, 0);
+		}
+
+		// Populate the metadata map (including disabled modules for reference)
+		blob_script_tags.forEach((script) => {
+			const module_name = script.getAttribute("name");
+			const remote_url = script.getAttribute("remote") || null;
+			const is_disabled = script.hasAttribute("disabled");
+			const blob_url = blob_module_urls.get(module_name) || null;
+			const content = blob_modules_sources.get(module_name) || "";
+			const src_bytes = new Blob([content]).size;
+
+			const metadata = {
+				module_name,
+				src_bytes,
+				remote_url,
+				blob_url,
+				is_disabled,
+			};
+
+			blob_module_map.set(module_name, metadata);
+		});
+
+		//
+		// Blob-module loader API
+		//
+
+		async function getCachedMedia(url) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["media"], "readonly");
+				const store = transaction.objectStore("media");
+
+				return new Promise((resolve, reject) => {
+					const request = store.get(url);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => resolve(request.result);
+				});
+			} catch (error) {
+				console.warn("Failed to get cached media:", error);
+				return null;
+			}
+		}
+
+		async function setCachedMedia(url, blob) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["media"], "readwrite");
+				const store = transaction.objectStore("media");
+
+				const cache_entry = {
+					url: url,
+					blob: blob, // Store blob directly instead of data URL
+					timestamp: Date.now(),
+				};
+
+				return new Promise((resolve, reject) => {
+					const request = store.put(cache_entry);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => resolve();
+				});
+			} catch (error) {
+				console.warn("Failed to cache media:", error);
+			}
+		}
+
+		async function getCachedModule(url) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["modules"], "readonly");
+				const store = transaction.objectStore("modules");
+
+				return new Promise((resolve, reject) => {
+					const request = store.get(url);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => resolve(request.result);
+				});
+			} catch (error) {
+				console.warn("Failed to get cached module:", error);
+				return null;
+			}
+		}
+
+		async function setCachedModule(url, content) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["modules"], "readwrite");
+				const store = transaction.objectStore("modules");
+
+				const cache_entry = {
+					url: url,
+					content: content,
+					timestamp: Date.now(),
+				};
+
+				return new Promise((resolve, reject) => {
+					const request = store.put(cache_entry);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => resolve();
+				});
+			} catch (error) {
+				console.warn("Failed to cache module:", error);
+			}
+		}
+
+		async function clearBlobLoaderCache(url = null) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["modules"], "readwrite");
+				const store = transaction.objectStore("modules");
+
+				return new Promise((resolve, reject) => {
+					let request;
+
+					if (url) {
+						// Clear specific URL
+						request = store.delete(url);
+						request.onsuccess = () => {
+							console.log(`Cleared cache for: ${url}`);
+							resolve();
+						};
 					} else {
-						console.warn(`Remote and local content are different for module "${module_name}". Using local content.`);
-						// Keep local content (no change needed)
+						// Clear all cached modules
+						request = store.clear();
+						request.onsuccess = () => {
+							console.log("Cleared all blob-module cache");
+							resolve();
+						};
+					}
+
+					request.onerror = () => reject(request.error);
+				});
+			} catch (error) {
+				console.warn("Failed to clear cache:", error);
+			}
+		}
+
+		async function getDocumentOuterHtml(force_inline = false) {
+			// Clone the current document
+			const doc_clone = document.cloneNode(true);
+
+			// Remove the importmap script we added
+			const import_map_script = doc_clone.querySelector('script[type="importmap"]');
+			if (import_map_script) {
+				import_map_script.remove();
+			}
+
+			// Remove the main execution script we added
+			const main_execution_script = doc_clone.querySelector("script[entrypoint]");
+			if (main_execution_script) {
+				main_execution_script.remove();
+			}
+
+			// Process module loader script
+			const module_loader_script = doc_clone.querySelector('script[id="blob-loader"]');
+			if (module_loader_script) {
+				const src = module_loader_script.getAttribute("src");
+				const has_content = module_loader_script.textContent.trim().length > 0;
+
+				// Only fetch and inline if src exists and textContent is empty
+				if (src && !has_content) {
+					try {
+						const response = await fetch(src);
+						const content = await response.text();
+						module_loader_script.textContent = content;
+						module_loader_script.removeAttribute("src");
+						module_loader_script.removeAttribute("type");
+					} catch (error) {
+						console.warn("Failed to fetch and inline blob-loader script:", error);
 					}
 				}
-				// If content is the same, keep existing (local) content
-			} else {
-				// No local content, use fetched remote content
-				blob_modules_sources.set(module_name, remote_content);
-				console.log(`Successfully loaded remote module "${module_name}"`);
 			}
-		} catch (error) {
-			console.warn(`Failed to fetch remote module "${module_name}":`, error);
-			if (!blob_modules_sources.has(module_name)) {
-				// Use remote URL directly in importmap
-				blob_module_urls.set(module_name, remote_url);
-				console.log(`Will use remote URL directly for module "${module_name}"`);
-			} else if (blob_modules_sources.has(module_name)) {
-				console.log(`Using local module "${module_name}"`);
+
+			// Process blob-loader-lib scripts
+			const blob_loader_lib_scripts = doc_clone.querySelectorAll("script[blob-loader-lib]");
+			for (const lib_script of blob_loader_lib_scripts) {
+				const src = lib_script.getAttribute("src");
+				const has_content = lib_script.textContent.trim().length > 0;
+
+				// Only fetch and inline if src exists and textContent is empty
+				if (src && !has_content) {
+					try {
+						const response = await fetch(src);
+						const content = await response.text();
+						lib_script.textContent = content;
+						lib_script.removeAttribute("src");
+						lib_script.removeAttribute("type");
+						console.log(`Inlined blob-loader-lib script: ${src}`);
+					} catch (error) {
+						console.warn(`Failed to fetch and inline blob-loader-lib script ${src}:`, error);
+					}
+				}
+			}
+
+			// Process blob media links
+			const cloned_media_links = doc_clone.querySelectorAll('link[type="blob-module"]');
+			cloned_media_links.forEach((link) => {
+				const media_name = link.getAttribute("name");
+				const remote_url = link.getAttribute("remote");
+				const no_download = link.hasAttribute("nodownload");
+				const is_disabled = link.hasAttribute("disabled");
+
+				// Remove blob and href attributes
+				if (link.hasAttribute("blob")) {
+					link.removeAttribute("blob");
+				}
+				if (link.hasAttribute("href")) {
+					link.removeAttribute("href");
+				}
+
+				// Skip processing for disabled media
+				if (is_disabled) {
+					return;
+				}
+
+				const data_url = blob_media_sources.get(media_name);
+
+				if (no_download && !force_inline) {
+					// Keep empty with just the remote attribute
+					link.removeAttribute("source");
+				} else if (data_url) {
+					// Inline the data URL
+					link.setAttribute("source", data_url);
+				} else if (remote_url) {
+					// Fallback: keep remote reference if no local content
+					link.removeAttribute("source");
+				}
+			});
+
+			// Process blob-module scripts
+			const cloned_blob_scripts = doc_clone.querySelectorAll('script[type="blob-module"]');
+			cloned_blob_scripts.forEach((script) => {
+				const module_name = script.getAttribute("name");
+				const remote_url = script.getAttribute("remote");
+				const no_download = script.hasAttribute("nodownload");
+				const is_disabled = script.hasAttribute("disabled");
+
+				// Remove blob attribute if it exists
+				if (script.hasAttribute("blob")) {
+					script.removeAttribute("blob");
+				}
+
+				// Skip processing content for disabled modules
+				if (is_disabled) {
+					return;
+				}
+
+				// Get the module content
+				const module_content = blob_modules_sources.get(module_name);
+
+				// Check for nodownload modules
+				if ((module_content && !no_download) || force_inline) {
+					script.textContent = module_content;
+				} else if (no_download) {
+					// Keep the remote URL but clear any local content
+					script.textContent = "";
+				}
+			});
+
+			// Process remote styles
+			const cloned_style_tags = doc_clone.querySelectorAll('style[type="blob-module"]');
+			cloned_style_tags.forEach((style) => {
+				const style_name = style.getAttribute("name");
+				const remote_url = style.getAttribute("remote");
+				const no_download = style.hasAttribute("nodownload");
+				const is_disabled = style.hasAttribute("disabled");
+
+				if (style.hasAttribute("blob")) {
+					style.removeAttribute("blob");
+				}
+
+				// Skip processing for disabled styles
+				if (is_disabled) {
+					return;
+				}
+
+				const style_content = blob_style_sources.get(style_name);
+
+				if (no_download && !force_inline) {
+					// Keep empty with just the remote attribute
+					style.textContent = "";
+				} else if (style_content) {
+					// Inline the content
+					style.textContent = style_content;
+				} else if (remote_url) {
+					// Fallback: keep remote reference if no local content
+					style.textContent = "";
+				}
+			});
+
+			// Remove the blob link elements we created
+			const blob_links = doc_clone.querySelectorAll('link[href^="blob:"]');
+			blob_links.forEach((link) => link.remove());
+
+			// Get the full HTML
+			return `<!DOCTYPE html>\n${doc_clone.documentElement.outerHTML}`;
+		}
+
+		async function saveAsHtmlFile(force_inline = false) {
+			const html_content = await getDocumentOuterHtml(force_inline);
+
+			// Check if File System Access API is available
+			if (window.showSaveFilePicker) {
+				try {
+					// Show save file picker
+					const file_handle = await window.showSaveFilePicker({
+						suggestedName: `${document.title || Date.now()}.html`,
+						types: [
+							{
+								description: "HTML files",
+								accept: {
+									"text/html": [".html", ".htm"],
+								},
+							},
+						],
+					});
+
+					// Get html and create writable
+					const writable = await file_handle.createWritable();
+					await writable.write(html_content);
+					await writable.close();
+
+					console.log("HTML file saved successfully");
+					return;
+				} catch (error) {
+					if (error.name === "AbortError") {
+						console.log("Save operation was cancelled by user");
+						return;
+					} else {
+						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+					}
+				}
+			}
+
+			// Fallback to download method
+			alert("File System Access API not available, falling back to download");
+			console.log("File System Access API not available, falling back to download");
+
+			// Create and trigger download
+			const blob = new Blob([html_content], {
+				type: "text/html",
+			});
+			const url = URL.createObjectURL(blob);
+
+			const download_link = document.createElement("a");
+			download_link.href = url;
+			download_link.download = "index.html";
+			download_link.click();
+
+			// Clean up the blob URL
+			URL.revokeObjectURL(url);
+
+			console.log("HTML file download initiated");
+		}
+
+		async function saveAsZipFile() {
+			console.log("TODO");
+		}
+
+		async function saveSnapshotToCache(tag = "") {
+			try {
+				const html_content = await getDocumentOuterHtml(true);
+				const timestamp = Date.now();
+
+				// Generate session_id with fallback for browsers without crypto.randomUUID
+				let session_id;
+				if (typeof crypto !== "undefined" && crypto.randomUUID) {
+					session_id = crypto.randomUUID();
+				} else {
+					// Fallback: timestamp + random string
+					const random_part = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+					session_id = `${timestamp}_${random_part}`;
+				}
+
+				const db = await openCache();
+				const transaction = db.transaction(["snapshots"], "readwrite");
+				const store = transaction.objectStore("snapshots");
+
+				const snapshot_entry = {
+					session_id: session_id,
+					tag: tag || `snapshot_${timestamp}`,
+					html_content: html_content,
+					timestamp: timestamp,
+					document_title: document.title || "Untitled",
+				};
+
+				return new Promise((resolve, reject) => {
+					const request = store.put(snapshot_entry);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`);
+						resolve(session_id);
+					};
+				});
+			} catch (error) {
+				console.warn("Failed to save snapshot:", error);
+				throw error;
 			}
 		}
 	}
-
-	// Create blob URLs for all modules
-	blob_modules_sources.forEach((content, module_name) => {
-		const module_blob = new Blob([content], {
-			type: "text/javascript",
-		});
-		const blob_url = URL.createObjectURL(module_blob);
-		blob_module_urls.set(module_name, blob_url);
-	});
-
-	// Clear script tag contents and add blob URL attributes (only for non-disabled modules)
-	blob_script_tags.forEach((script) => {
-		const module_name = script.getAttribute("name");
-		const is_disabled = script.hasAttribute("disabled");
-
-		if (is_disabled) {
-			return;
-		}
-
-		const blob_url = blob_module_urls.get(module_name);
-
-		if (blob_url) {
-			script.textContent = "";
-			script.setAttribute("blob", blob_url);
-		}
-	});
-
-	// Create import map with all blob URLs
-	blob_module_urls.forEach((url, name) => (importmap[name] = url));
-	import_map.textContent = JSON.stringify({ imports: importmap }, null, 2);
-	document.head.appendChild(import_map);
-
-	// Run the main module if it exists and is not disabled
-	if (blob_modules_sources.has("main")) {
-		setTimeout(() => {
-			const main_script = document.createElement("script");
-			main_script.type = "module";
-			main_script.setAttribute("entrypoint", "");
-			main_script.textContent = `
-									const main_start_time = performance.now();
-									const load_duration = main_start_time - ${load_start_time};
-									console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
-									import("main");
-								`;
-			document.head.appendChild(main_script);
-		}, 0);
-	}
-
-	// Populate the metadata map (including disabled modules for reference)
-	blob_script_tags.forEach((script) => {
-		const module_name = script.getAttribute("name");
-		const remote_url = script.getAttribute("remote") || null;
-		const is_disabled = script.hasAttribute("disabled");
-		const blob_url = blob_module_urls.get(module_name) || null;
-		const content = blob_modules_sources.get(module_name) || "";
-		const src_bytes = new Blob([content]).size;
-
-		const metadata = {
-			module_name,
-			src_bytes,
-			remote_url,
-			blob_url,
-			is_disabled,
-		};
-
-		blob_module_map.set(module_name, metadata);
-	});
-
-	//
-	// Blob-module loader API
-	//
 
 	function openCache() {
 		return new Promise((resolve, reject) => {
 			const request = indexedDB.open(
 				"blob_module_cache",
-				2, // version
+				3, // version
 			);
 
 			request.onerror = () => reject(request.error);
@@ -717,344 +1148,141 @@ window.addEventListener("load", async () => {
 						unique: false,
 					});
 				}
+
+				// Snapshots store
+				if (!db.objectStoreNames.contains("snapshots")) {
+					const snapshots_store = db.createObjectStore("snapshots", {
+						keyPath: "session_id",
+					});
+					snapshots_store.createIndex("timestamp", "timestamp", {
+						unique: false,
+					});
+					snapshots_store.createIndex("tag", "tag", {
+						unique: false,
+					});
+				}
 			};
 		});
 	}
 
-	async function getCachedMedia(url) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["media"], "readonly");
-			const store = transaction.objectStore("media");
+	async function getSnapshotFromCache(session_id) {
+		const db = await openCache();
+		const transaction = db.transaction(["snapshots"], "readonly");
+		const store = transaction.objectStore("snapshots");
 
-			return new Promise((resolve, reject) => {
-				const request = store.get(url);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve(request.result);
-			});
-		} catch (error) {
-			console.warn("Failed to get cached media:", error);
-			return null;
-		}
+		return new Promise((resolve, reject) => {
+			const request = store.get(session_id);
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => resolve(request.result);
+		});
 	}
 
-	async function setCachedMedia(url, blob) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["media"], "readwrite");
-			const store = transaction.objectStore("media");
+	async function listSnapshotsInCache() {
+		const db = await openCache();
+		const transaction = db.transaction(["snapshots"], "readonly");
+		const store = transaction.objectStore("snapshots");
 
-			const cache_entry = {
-				url: url,
-				blob: blob, // Store blob directly instead of data URL
-				timestamp: Date.now(),
+		return new Promise((resolve, reject) => {
+			const request = store.getAll();
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => {
+				// Sort by timestamp descending (newest first)
+				const snapshots = request.result.sort((a, b) => b.timestamp - a.timestamp);
+				// Return only metadata, not full html_content
+				const snapshot_list = snapshots.map((s) => ({
+					session_id: s.session_id,
+					tag: s.tag,
+					timestamp: s.timestamp,
+					document_title: s.document_title,
+					size_bytes: new Blob([s.html_content]).size,
+				}));
+				resolve(snapshot_list);
 			};
-
-			return new Promise((resolve, reject) => {
-				const request = store.put(cache_entry);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve();
-			});
-		} catch (error) {
-			console.warn("Failed to cache media:", error);
-		}
+		});
 	}
 
-	async function getCachedModule(url) {
+	async function deleteSnapshotFromCache(session_id) {
 		try {
 			const db = await openCache();
-			const transaction = db.transaction(["modules"], "readonly");
-			const store = transaction.objectStore("modules");
+			const transaction = db.transaction(["snapshots"], "readwrite");
+			const store = transaction.objectStore("snapshots");
 
 			return new Promise((resolve, reject) => {
-				const request = store.get(url);
+				const request = store.delete(session_id);
 				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve(request.result);
+				request.onsuccess = () => {
+					console.log(`Deleted snapshot with session_id: ${session_id}`);
+					resolve();
+				};
 			});
 		} catch (error) {
-			console.warn("Failed to get cached module:", error);
-			return null;
+			console.warn("Failed to delete snapshot:", error);
+			throw error;
 		}
 	}
 
-	async function setCachedModule(url, content) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["modules"], "readwrite");
-			const store = transaction.objectStore("modules");
-
-			const cache_entry = {
-				url: url,
-				content: content,
-				timestamp: Date.now(),
-			};
-
-			return new Promise((resolve, reject) => {
-				const request = store.put(cache_entry);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve();
-			});
-		} catch (error) {
-			console.warn("Failed to cache module:", error);
-		}
+	async function saveSnapshotAsHtmlFile(session_id) {
+		// TODO
 	}
 
-	async function clearBlobLoaderCache(url = null) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["modules"], "readwrite");
-			const store = transaction.objectStore("modules");
+	async function setSnapshotForBoot(session_id = null) {
+		let target_session_id = session_id;
 
-			return new Promise((resolve, reject) => {
-				let request;
+		// If no session_id provided, get the most recent snapshot
+		if (!target_session_id) {
+			const snapshots = await listSnapshotsInCache();
 
-				if (url) {
-					// Clear specific URL
-					request = store.delete(url);
-					request.onsuccess = () => {
-						console.log(`Cleared cache for: ${url}`);
-						resolve();
-					};
-				} else {
-					// Clear all cached modules
-					request = store.clear();
-					request.onsuccess = () => {
-						console.log("Cleared all blob-module cache");
-						resolve();
-					};
-				}
+			if (snapshots.length === 0) {
+				console.log("No snapshots available in cache");
+				return;
+			}
 
-				request.onerror = () => reject(request.error);
-			});
-		} catch (error) {
-			console.warn("Failed to clear cache:", error);
+			// snapshots are already sorted by timestamp descending (newest first)
+			target_session_id = snapshots[0].session_id;
+			console.log(`No session_id provided, using most recent snapshot: "${snapshots[0].tag}" (${target_session_id})`);
 		}
+
+		// Verify the snapshot exists before setting it for boot
+		const snapshot = await getSnapshotFromCache(target_session_id);
+
+		if (!snapshot) {
+			console.log(`Snapshot with session_id "${target_session_id}" not found in cache`);
+			return;
+		}
+
+		// Set the localStorage flag that will be read on next boot
+		localStorage.setItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT", target_session_id);
+
+		console.log(`Set snapshot "${snapshot.tag}" (${target_session_id}) to load on next boot`);
+		return target_session_id;
 	}
 
-	async function getDocumentOuterHtml(force_inline = false) {
-		// Clone the current document
-		const doc_clone = document.cloneNode(true);
+	async function createBackupSnapshot() {
+		const current_html = await BlobLoader.getDocumentOuterHtml(true);
+		const snapshots = await listSnapshotsInCache();
 
-		// Remove the importmap script we added
-		const import_map_script = doc_clone.querySelector('script[type="importmap"]');
-		if (import_map_script) {
-			import_map_script.remove();
-		}
+		if (snapshots.length > 0) {
+			// Get the most recent snapshot
+			const last_snapshot = await BlobLoader.getSnapshotFromCache(snapshots[0].session_id);
 
-		// Remove the main execution script we added
-		const main_execution_script = doc_clone.querySelector("script[entrypoint]");
-		if (main_execution_script) {
-			main_execution_script.remove();
-		}
+			if (last_snapshot) {
+				// Parse both HTMLs and compare only the head contents
+				const parser = new DOMParser();
 
-		// Process module loader script
-		const module_loader_script = doc_clone.querySelector('script[id="blob-loader"]');
-		if (module_loader_script) {
-			const src = module_loader_script.getAttribute("src");
-			const has_content = module_loader_script.textContent.trim().length > 0;
+				const current_doc = parser.parseFromString(current_html, "text/html");
+				const last_doc = parser.parseFromString(last_snapshot.html_content, "text/html");
 
-			// Only fetch and inline if src exists and textContent is empty
-			if (src && !has_content) {
-				try {
-					const response = await fetch(src);
-					const content = await response.text();
-					module_loader_script.textContent = content;
-					module_loader_script.removeAttribute("src");
-					module_loader_script.removeAttribute("type");
-					console.log("Inlined blob-loader script");
-				} catch (error) {
-					console.warn("Failed to fetch and inline blob-loader script:", error);
-				}
-			}
-		}
+				const current_head = current_doc.head.innerHTML;
+				const last_head = last_doc.head.innerHTML;
 
-		// Process blob-loader-lib scripts
-		const blob_loader_lib_scripts = doc_clone.querySelectorAll("script[blob-loader-lib]");
-		for (const lib_script of blob_loader_lib_scripts) {
-			const src = lib_script.getAttribute("src");
-			const has_content = lib_script.textContent.trim().length > 0;
-
-			// Only fetch and inline if src exists and textContent is empty
-			if (src && !has_content) {
-				try {
-					const response = await fetch(src);
-					const content = await response.text();
-					lib_script.textContent = content;
-					lib_script.removeAttribute("src");
-					lib_script.removeAttribute("type");
-					console.log(`Inlined blob-loader-lib script: ${src}`);
-				} catch (error) {
-					console.warn(`Failed to fetch and inline blob-loader-lib script ${src}:`, error);
-				}
-			}
-		}
-
-		// Process blob media links
-		const cloned_media_links = doc_clone.querySelectorAll('link[type="blob-module"]');
-		cloned_media_links.forEach((link) => {
-			const media_name = link.getAttribute("name");
-			const remote_url = link.getAttribute("remote");
-			const no_download = link.hasAttribute("nodownload");
-			const is_disabled = link.hasAttribute("disabled");
-
-			// Remove blob and href attributes
-			if (link.hasAttribute("blob")) {
-				link.removeAttribute("blob");
-			}
-			if (link.hasAttribute("href")) {
-				link.removeAttribute("href");
-			}
-
-			// Skip processing for disabled media
-			if (is_disabled) {
-				return;
-			}
-
-			const data_url = blob_media_sources.get(media_name);
-
-			if (no_download && !force_inline) {
-				// Keep empty with just the remote attribute
-				link.removeAttribute("source");
-			} else if (data_url) {
-				// Inline the data URL
-				link.setAttribute("source", data_url);
-			} else if (remote_url) {
-				// Fallback: keep remote reference if no local content
-				link.removeAttribute("source");
-			}
-		});
-
-		// Process blob-module scripts
-		const cloned_blob_scripts = doc_clone.querySelectorAll('script[type="blob-module"]');
-		cloned_blob_scripts.forEach((script) => {
-			const module_name = script.getAttribute("name");
-			const remote_url = script.getAttribute("remote");
-			const no_download = script.hasAttribute("nodownload");
-			const is_disabled = script.hasAttribute("disabled");
-
-			// Remove blob attribute if it exists
-			if (script.hasAttribute("blob")) {
-				script.removeAttribute("blob");
-			}
-
-			// Skip processing content for disabled modules
-			if (is_disabled) {
-				return;
-			}
-
-			// Get the module content
-			const module_content = blob_modules_sources.get(module_name);
-
-			// Check for nodownload modules
-			if ((module_content && !no_download) || force_inline) {
-				script.textContent = module_content;
-			} else if (no_download) {
-				// Keep the remote URL but clear any local content
-				script.textContent = "";
-			}
-		});
-
-		// Process remote styles
-		const cloned_style_tags = doc_clone.querySelectorAll('style[type="blob-module"]');
-		cloned_style_tags.forEach((style) => {
-			const style_name = style.getAttribute("name");
-			const remote_url = style.getAttribute("remote");
-			const no_download = style.hasAttribute("nodownload");
-			const is_disabled = style.hasAttribute("disabled");
-
-			if (style.hasAttribute("blob")) {
-				style.removeAttribute("blob");
-			}
-
-			// Skip processing for disabled styles
-			if (is_disabled) {
-				return;
-			}
-
-			const style_content = blob_style_sources.get(style_name);
-
-			if (no_download && !force_inline) {
-				// Keep empty with just the remote attribute
-				style.textContent = "";
-			} else if (style_content) {
-				// Inline the content
-				style.textContent = style_content;
-			} else if (remote_url) {
-				// Fallback: keep remote reference if no local content
-				style.textContent = "";
-			}
-		});
-
-		// Remove the blob link elements we created
-		const blob_links = doc_clone.querySelectorAll('link[href^="blob:"]');
-		blob_links.forEach((link) => link.remove());
-
-		// Get the full HTML
-		return `<!DOCTYPE html>\n${doc_clone.documentElement.outerHTML}`;
-	}
-
-	async function saveAsHtmlFile(force_inline = false) {
-		const html_content = await getDocumentOuterHtml(force_inline);
-
-		// Check if File System Access API is available
-		if (window.showSaveFilePicker) {
-			try {
-				// Show save file picker
-				const file_handle = await window.showSaveFilePicker({
-					suggestedName: `${document.title || Date.now()}.html`,
-					types: [
-						{
-							description: "HTML files",
-							accept: {
-								"text/html": [".html", ".htm"],
-							},
-						},
-					],
-				});
-
-				// Get html and create writable
-				const writable = await file_handle.createWritable();
-				await writable.write(html_content);
-				await writable.close();
-
-				console.log("HTML file saved successfully");
-				return;
-			} catch (error) {
-				if (error.name === "AbortError") {
-					console.log("Save operation was cancelled by user");
+				if (current_head === last_head) {
+					console.log("Head contents unchanged from last backup, skipping save");
 					return;
-				} else {
-					console.warn("Failed to save file using File System Access API, falling back to download:", error);
 				}
 			}
 		}
 
-		// Fallback to download method
-		alert("File System Access API not available, falling back to download");
-		console.log("File System Access API not available, falling back to download");
-
-		// Create and trigger download
-		const blob = new Blob([html_content], {
-			type: "text/html",
-		});
-		const url = URL.createObjectURL(blob);
-
-		const download_link = document.createElement("a");
-		download_link.href = url;
-		download_link.download = "index.html";
-		download_link.click();
-
-		// Clean up the blob URL
-		URL.revokeObjectURL(url);
-
-		console.log("HTML file download initiated");
+		console.log("Saving backup");
+		return await BlobLoader.saveSnapshotToCache("Automatic backup");
 	}
-
-	async function saveAsZipFile() {
-		console.log("TODO");
-	}
-
-	async function saveSnapshotInCache() {
-		console.log("TODO");
-	}
-});
+})();
