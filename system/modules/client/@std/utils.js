@@ -150,6 +150,8 @@ export function isScrollable(element) {
 	);
 }
 
+window.useGlobalStyles = useGlobalStyles;
+
 export function useGlobalStyles(styles) {
 	// Skip if already added
 	if (__added_styles.has(styles)) {

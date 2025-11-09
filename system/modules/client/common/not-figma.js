@@ -1,3 +1,9 @@
+//
+// Not Figma Experiment
+//
+// Doesn't work on Firefox
+//
+
 import { useStyledTags, useCustomStyledTag, main, div, icon, span, pre, iframe, button } from "@std/ima-utils";
 import { css } from "@std/utils";
 
@@ -22,8 +28,8 @@ function buildIframeTree(iframe_window) {
 		iframe_document: doc,
 	});
 
-	// let external_count = 0;
-	// doc.body.appendChild($.div(() => external_count++));
+	let external_count = 0;
+	// doc.body.appendChild($iframe.div(() => external_count++));
 	doc.body.appendChild(
 		$iframe.div(
 			{
