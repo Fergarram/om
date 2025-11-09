@@ -1,54 +1,55 @@
 //
-// MODULE LOADER 0.1.0
+// MODULE LOADER 0.7.0
 // by fergarram
 //
 
-// Extends existing html script and styles functionality with:
-// - Support for inlined ES Modules
-// - Multiple sources of truth for JS and CSS modules (remote, inline, cache)
+// Extends existing html functionality with:
+// - Support for inlined ES modules
+// - Support for inlined CSS modules
+// - Support for inlined media modules (images, videos, fonts, etc)
+// - Multiple sources of truth for all module types (remote, inline, cache)
 // - API for editable exports and self-rewriting
 
 //
 // TODO
-// v1
-// [ ] CRUD for modules and media
-// [ ] Add saveAsZipFile() which instead of inlined modules and assets it saves everything separately
+// v1 ====================================================================================================================================
+// [ ] Implement saveSnapshotInCache(snapshot_tag) for indexeddb backups for full html,js,css,media snapshots
+//     - This will be done automatically on successful setup using timestamp as tag (can be changed via settings)
+//     - We also need a restoreFromSnapshot(snapshot_tag) function. This function should be accessible specially if setup fails.
+// [ ] Better CRUD interface for modules (js, css, media)
+//     - We want to know what's in cache, what's inlined, what's remote, etc.
+//     - We want to be able to write an IDE module to add new modules, etc. so it would be useful to get access to all the internals
+//     Draft: (we'll always require full page reload to see changes, this just manages what will happen on next load)
+//     - getBlobModule() — works for JS, CSS, Media. Returns all data and metadata.
+//     - addBlobModule() — works for JS, CSS, Media. Adds to [[next generation DOM]].
+//     - removeBlobModule() — works for JS, CSS, Media. Removes from [[next generation DOM]].
+//     - updateBlobModule() — works for JS, CSS, Media. Updates data and metadata the module in [[next generation DOM]].
+//     More notes: This loader is not in charge of pushing changes to remotes, it just handles cache and inlines.
+//                 To push to remote, a hook would have to be passed which would be in charge of manually hitting an API or whatever.
+//
+// v1.5 ==================================================================================================================================
+// This version might require some internal refactorings, this is why a CRUD interface is important over just exposing internals directly.
+//
+// [ ] Hooks for minification and formatting (we already have the lib thing)
+//     - TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
+// [ ] Implement saveAsZipFile() which instead of inlined modules and assets it saves everything separately
 //     - This is useful for debugging purposes or when using an external IDE
-// [ ] Indexeddb backups for full html snapshots
-// v1.5
-// [ ] Hooks for minification and formatting
-// [ ] Optional TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
-//     - maybe add a custom meta module type for this or have it be global in window
 //
-///////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// ISSUES:
-//
-// - Fonts dont work as media modules, need to try as=".." apprpoach, if font dont work (other would) then we just prompt
-//   the user to download the font which we tested and so the font file can be referenced system wide.
-//   It seems the issue with fonts is that url(blob/base64) are treated as images always so it just doesn't work.
-//
-// - Also about fonts, if that's not enough then we just stop using fonts for icons and we use svg and
-//   that's it. So essentially we would have media blobs and a special case for font blobs. I guess we
-//   can try this and even separate further because for example videos and other type of files we don't
-//   want those in css variables lol.
-//
-//   So I guess we do use an "as" attribute that helps us distinguish what we'll do with the file based on these categories:
-//   - images (we get css vars)
-//   - fonts (we generate adoptedSheet with @font-face definitions with inlined blob urls)
-//   - text files
-//   - binary files (known like mp3, mp4, etc and unkown extensions)
 
 //
 // Settings
 //
 
-window.__blob_module_loader_settings__ = {
-	prefers_remote_modules: location.hostname === "localhost" ? true : false,
+window.BlobLoader = {
+	settings: {
+		prefers_remote_modules: location.hostname === "localhost" ? true : false,
+	},
+	// lib: {}, // v1.5 --- We expose early (before page load) so that there can be non-module script tags with hooks
 };
 
 //
 // Module Loader Setup
+//
 //
 
 window.addEventListener("load", async () => {
@@ -84,7 +85,26 @@ window.addEventListener("load", async () => {
 
 	const media_css_vars = [];
 	const blob_media_blobs = new Map();
-	const blob_adopted_sheets = new Map(); // This is where both styles and media variable definitions live
+	const blob_adopted_sheets = new Map();
+
+	//
+	// Global API export — needs to run before all else
+	//
+
+	window.BlobLoader = {
+		...window.BlobLoader,
+		getMediaUrl: (name) => blob_media_urls.get(name) || null,
+		openCache,
+		getCachedModule,
+		setCachedModule,
+		getCachedMedia,
+		setCachedMedia,
+		clearBlobLoaderCache,
+		getDocumentOuterHtml,
+		saveSnapshotInCache,
+		saveAsHtmlFile,
+		saveAsZipFile,
+	};
 
 	//
 	// Process blob media tags
@@ -132,7 +152,7 @@ window.addEventListener("load", async () => {
 			let media_blob;
 			let data_url_for_comparison = null;
 
-			if (__blob_module_loader_settings__.prefers_remote_modules) {
+			if (BlobLoader.settings.prefers_remote_modules) {
 				// Auto-update mode: fetch from remote first, fallback to cache
 				try {
 					console.log(`Fetching remote media "${media_name}" from ${remote_url} (auto-update mode)`);
@@ -184,7 +204,7 @@ window.addEventListener("load", async () => {
 				});
 
 				if (remote_data_url !== local_data_url) {
-					if (__blob_module_loader_settings__.prefers_remote_modules) {
+					if (BlobLoader.settings.prefers_remote_modules) {
 						console.log(
 							`Remote and local content differ for media "${media_name}". Using remote content (auto-update mode).`,
 						);
@@ -264,8 +284,26 @@ window.addEventListener("load", async () => {
 			link_tag.setAttribute("blob", blob_url);
 		}
 
-		// Add CSS variable definition
-		media_css_vars.push(`--BM-${media_name}: url('${blob_url}') format('woff2');`);
+		// Add CSS variable definition only for images
+		if (blob.type.startsWith("image/")) {
+			media_css_vars.push(`--BM-${media_name.replaceAll(" ", "-")}: url('${blob_url}');`);
+		}
+
+		// Load fonts using FontFace API
+		if (
+			blob.type.startsWith("font/") ||
+			blob.type === "application/font-woff" ||
+			blob.type === "application/font-woff2" ||
+			blob.type === "application/x-font-ttf" ||
+			blob.type === "application/x-font-truetype" ||
+			blob.type === "application/x-font-opentype"
+		) {
+			const font = new FontFace(media_name, `url('${blob_url}')`, {
+				weight: "100 700",
+			});
+			// await font.load(); // We don't really need to block
+			document.fonts.add(font);
+		}
 
 		console.log(`Created blob URL for media "${media_name}"`);
 	}
@@ -331,7 +369,7 @@ window.addEventListener("load", async () => {
 		try {
 			let remote_content;
 
-			if (__blob_module_loader_settings__.prefers_remote_modules) {
+			if (BlobLoader.settings.prefers_remote_modules) {
 				// Auto-update mode: fetch from remote first, fallback to cache
 				try {
 					console.log(`Fetching remote style from ${remote_url} (auto-update mode)`);
@@ -375,7 +413,7 @@ window.addEventListener("load", async () => {
 				// Compare with existing local content
 				const local_content = blob_style_sources.get(style_name);
 				if (remote_content.trim() !== local_content.trim()) {
-					if (__blob_module_loader_settings__.prefers_remote_modules) {
+					if (BlobLoader.settings.prefers_remote_modules) {
 						console.log(
 							`Remote and local content differ for style "${remote_url}". Using remote content (auto-update mode).`,
 						);
@@ -504,7 +542,7 @@ window.addEventListener("load", async () => {
 		try {
 			let remote_content;
 
-			if (__blob_module_loader_settings__.prefers_remote_modules) {
+			if (BlobLoader.settings.prefers_remote_modules) {
 				// Auto-update mode: fetch from remote first, fallback to cache
 				try {
 					console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
@@ -548,7 +586,7 @@ window.addEventListener("load", async () => {
 				// Compare with existing local content
 				const local_content = blob_modules_sources.get(module_name);
 				if (remote_content.trim() !== local_content.trim()) {
-					if (__blob_module_loader_settings__.prefers_remote_modules) {
+					if (BlobLoader.settings.prefers_remote_modules) {
 						console.log(
 							`Remote and local content differ for module "${module_name}". Using remote content (auto-update mode).`,
 						);
@@ -830,6 +868,27 @@ window.addEventListener("load", async () => {
 			}
 		}
 
+		// Process blob-loader-lib scripts
+		const blob_loader_lib_scripts = doc_clone.querySelectorAll("script[blob-loader-lib]");
+		for (const lib_script of blob_loader_lib_scripts) {
+			const src = lib_script.getAttribute("src");
+			const has_content = lib_script.textContent.trim().length > 0;
+
+			// Only fetch and inline if src exists and textContent is empty
+			if (src && !has_content) {
+				try {
+					const response = await fetch(src);
+					const content = await response.text();
+					lib_script.textContent = content;
+					lib_script.removeAttribute("src");
+					lib_script.removeAttribute("type");
+					console.log(`Inlined blob-loader-lib script: ${src}`);
+				} catch (error) {
+					console.warn(`Failed to fetch and inline blob-loader-lib script ${src}:`, error);
+				}
+			}
+		}
+
 		// Process blob media links
 		const cloned_media_links = doc_clone.querySelectorAll('link[type="blob-module"]');
 		cloned_media_links.forEach((link) => {
@@ -995,16 +1054,7 @@ window.addEventListener("load", async () => {
 		console.log("TODO");
 	}
 
-	window.BlobLoader = {
-		blobMedia: (name) => blob_media_urls.get(name) || null,
-		openCache,
-		getCachedModule,
-		setCachedModule,
-		getCachedMedia,
-		setCachedMedia,
-		clearBlobLoaderCache,
-		getDocumentOuterHtml,
-		saveAsHtmlFile,
-		saveAsZipFile,
-	};
+	async function saveSnapshotInCache() {
+		console.log("TODO");
+	}
 });
