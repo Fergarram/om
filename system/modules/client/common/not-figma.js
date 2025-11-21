@@ -30,6 +30,7 @@ function buildIframeTree(iframe_window) {
 
 	let external_count = 0;
 	// doc.body.appendChild($iframe.div(() => external_count++));
+	// @LAST: This crazy approach is not stable and doesnt work on firefox.
 	doc.body.appendChild(
 		$iframe.div(
 			{

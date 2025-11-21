@@ -1,5 +1,5 @@
 //
-// BLOB LOADER 0.10.0
+// BLOB LOADER 0.12.0
 // by fergarram
 //
 
@@ -9,29 +9,37 @@
 // - Support for inlined media modules (images, videos, fonts, etc)
 // - Multiple sources of truth for all module types (remote, inline, cache)
 // - API for editable exports and self-rewriting
+//
 
 //
+// EXPERIMENTS TODO
+//
+// So we can use blobs to add new modules but we don't want to update running ones because we can't as such.
+// This means that we could have an API specifically for applets that essentially allows HOT RELOADING themselves.
+// Importing the same modified module each time, making sure we first clean up the previous running code and then
+// we start running the new code.
+//
+// Rehydration essentially. We hydrate an element that had already been hydrated.
+//
+// But this falls on the next library I'll write, which is for canvas related stuff.
+//
+
 // TODO
+//
 // v1.0 === === === === === === === === === === === === === === === === === === === === ===
-// [ ] Better CRUD interface for modules (js, css, media)
-//     - We want to know what's in cache, what's inlined, what's remote, etc.
-//     - We want to be able to write an IDE module to add new modules, etc. so it would be useful to get access to all the internals
-//     Draft: (we'll always require full page reload to see changes, this just manages what will happen on next load)
-//     - getBlobModule() — works for JS, CSS, Media. Returns all data and metadata.
-//     - addBlobModule() — works for JS, CSS, Media. Adds to [[next generation DOM]].
-//     - removeBlobModule() — works for JS, CSS, Media. Removes from [[next generation DOM]].
-//     - updateBlobModule() — works for JS, CSS, Media. Updates data and metadata the module in [[next generation DOM]].
-//     More notes: This loader is not in charge of pushing changes to remotes, it just handles cache and inlines.
-//                 To push to remote, a hook would have to be passed which would be in charge of manually hitting an API or whatever.
+//
+// [ ] Rename everything so that it's consistent: Media module, script module, style module. All are blob modules of different kinds.
+// [ ] Remove duplicated code into helper functions like the fns that download html files, etc.
 //
 // v1.5 === === === === === === === === === === === === === === === === === === === === ===
-// This version might require some internal refactorings, this is why a CRUD interface is important over just exposing internals directly.
 //
+// This version might require some internal refactorings, this is why a CRUD interface is important over just exposing internals directly.
 // [ ] Hooks for minification and formatting (we already have the lib thing)
 //     - TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
 // [ ] Implement saveAsZipFile() which instead of inlined modules and assets it saves everything separately
 //     - This is useful for debugging purposes or when using an external IDE
-//
+//     - It would be cool to stream into local files so you can open with the browser automatically
+//     - use fflate
 
 //
 // Settings
@@ -40,9 +48,11 @@
 window.BlobLoader = {
 	settings: {
 		prefers_remote_modules: location.hostname === "localhost" ? true : false,
-		save_snapshot_on_load_when_different_from_last: true,
+		always_boot_from_petition: false,
+		autosave_snapshot_on_load_when_different_from_last: true,
 	},
-	// lib: {}, // v1.5 --- We expose early (before page load) so that there can be non-module script tags with hooks
+	lib: {}, // We can add external non-module libraries that need to be IIFEs and attach themselves to the
+	// transformers: {}, // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
 };
 
 //
@@ -51,41 +61,41 @@ window.BlobLoader = {
 //
 
 (async () => {
-	const petition_to_restore = localStorage.getItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+	let petition_to_restore = localStorage.getItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+
 	if (petition_to_restore) {
+		// Check if snapshot exists before showing confirmation
 		const snapshot = await getSnapshotFromCache(petition_to_restore);
 
-		if (snapshot) {
+		if (
+			(snapshot && always_boot_from_petition) ||
+			(snapshot && confirm("A snapshot will be loaded instead of main document.\n\nDo you want to continue?"))
+		) {
 			console.log(`Restoring snapshot: ${snapshot.tag} (${petition_to_restore})`);
 
-			// Parse the HTML content
 			const parser = new DOMParser();
 			const snapshot_doc = parser.parseFromString(snapshot.html_content, "text/html");
 
-			// Replace current document's head
 			document.head.replaceChildren(...snapshot_doc.head.children);
-
-			// Replace current document's body
 			document.body.replaceChildren(...snapshot_doc.body.children);
 
-			// Copy body attributes
 			Array.from(snapshot_doc.body.attributes).forEach((attr) => {
 				document.body.setAttribute(attr.name, attr.value);
 			});
 
-			// Wait for next cycle... Not sure we need it since we'll wait for the page to load.
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await finish(); // Wait for next cycle to make sure DOM finished with previuous tasks
 
 			await loadAllBlobModules();
 
 			console.log("Snapshot restored, continuing with normal load process...");
+		} else if (!snapshot) {
+			console.log(`Snapshot with session_id "${petition_to_restore}" not found`);
+			removeSnapshotBootPetition();
+			window.location.reload(); // Reloading because for some reason it wouldn't work otherwise...
 		} else {
-			console.warn(`Snapshot with session_id "${petition_to_restore}" not found`);
+			petition_to_restore = false;
 		}
 	}
-
-	// Always remove
-	localStorage.removeItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
 
 	//
 	// Module Loader Setup
@@ -94,6 +104,10 @@ window.BlobLoader = {
 	if (!petition_to_restore) {
 		window.addEventListener("load", loadAllBlobModules);
 	}
+
+	//
+	// Boot time functions
+	//
 
 	async function loadAllBlobModules() {
 		const load_start_time = performance.now();
@@ -131,28 +145,53 @@ window.BlobLoader = {
 		const blob_adopted_sheets = new Map();
 
 		//
-		// Global API export — needs to run before all else
+		// Global API export
 		//
 
 		window.BlobLoader = {
+			// Initial settings
 			...window.BlobLoader,
+
+			// Runtime functions (module/media/style management)
 			getMediaUrl: (name) => blob_media_urls.get(name) || null,
-			openCache,
 			getCachedModule,
 			setCachedModule,
+			deleteCachedModule,
 			getCachedMedia,
 			setCachedMedia,
+			deleteCachedMedia,
+			runNonExportingModuleScript,
 			clearBlobLoaderCache,
 			getDocumentOuterHtml,
+			saveAsHtmlFile,
+			saveAsZipFile,
+
+			// Clones
+			// @LAST: This is a mock of the API. Running will fail.
+			cloneDocument,
+			getCloneOuterHtmlFile,
+			saveCloneAsHtmlFile,
+			saveCloneAsZipFile,
+			saveCloneAsSnapshot,
+			addCloneModule,
+			getCloneModule,
+			updateCloneModule,
+			removeCloneModule,
+			addCloneMediaModule,
+			getCloneMediaModule,
+			updateCloneMediaModule,
+			removeCloneMediaModule,
+
+			// Boot time functions (snapshot/cache management)
+			openCache,
 			saveSnapshotToCache,
 			getSnapshotFromCache,
 			listSnapshotsInCache,
 			deleteSnapshotFromCache,
 			saveSnapshotAsHtmlFile,
 			setSnapshotForBoot,
+			removeSnapshotBootPetition,
 			createBackupSnapshot,
-			saveAsHtmlFile,
-			saveAsZipFile,
 		};
 
 		//
@@ -373,14 +412,28 @@ window.BlobLoader = {
 			const remote_url = remote_media_hrefs.get(media_name) || null;
 			const size_bytes = blob.size;
 
-			const metadata = {
+			// Find the corresponding link tag to extract metadata
+			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+
+			// Extract all additional attributes as metadata
+			const known_attrs = new Set(["name", "remote", "disabled", "blob", "href", "type", "source", "nodownload"]);
+			const metadata = {};
+
+			if (link_tag) {
+				Array.from(link_tag.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						metadata[attr.name] = attr.value;
+					}
+				});
+			}
+
+			blob_media_map.set(media_name, {
 				name: media_name,
 				remote_url,
 				size_bytes,
 				blob_url,
-			};
-
-			blob_media_map.set(media_name, metadata);
+				metadata,
+			});
 		});
 
 		//
@@ -529,14 +582,28 @@ window.BlobLoader = {
 			const src_bytes = new Blob([content]).size;
 			const remote_url = remote_styles_hrefs.get(style_name) || null;
 
-			const metadata = {
+			// Find the corresponding style tag to extract metadata
+			const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+
+			// Extract all additional attributes as metadata
+			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+			const metadata = {};
+
+			if (style_tag) {
+				Array.from(style_tag.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						metadata[attr.name] = attr.value;
+					}
+				});
+			}
+
+			blob_style_map.set(style_name, {
 				name: style_name,
 				remote_url,
 				src_bytes,
 				blob_url,
-			};
-
-			blob_style_map.set(style_name, metadata);
+				metadata,
+			});
 		});
 
 		//
@@ -696,13 +763,14 @@ window.BlobLoader = {
 
 		// Run the main module if it exists and is not disabled
 		if (blob_modules_sources.has("main")) {
-			setTimeout(() => {
-				const main_script = document.createElement("script");
-				main_script.type = "module";
-				main_script.setAttribute("entrypoint", "");
+			await finish();
 
-				// Stop performance timer and inject main script
-				main_script.textContent = `
+			const main_script = document.createElement("script");
+			main_script.type = "module";
+			main_script.setAttribute("entrypoint", "");
+
+			// Stop performance timer and inject main script
+			main_script.textContent = `
 				const main_start_time = performance.now();
 				const load_duration = main_start_time - ${load_start_time};
 				console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
@@ -710,12 +778,11 @@ window.BlobLoader = {
 				import("main");
 
 				// Make backup (if settings allow it)
-				if (BlobLoader.settings.save_snapshot_on_load_when_different_from_last) {
+				if (BlobLoader.settings.autosave_snapshot_on_load_when_different_from_last) {
 					BlobLoader.createBackupSnapshot();
 				}
 			`;
-				document.head.appendChild(main_script);
-			}, 0);
+			document.head.appendChild(main_script);
 		}
 
 		// Populate the metadata map (including disabled modules for reference)
@@ -727,19 +794,28 @@ window.BlobLoader = {
 			const content = blob_modules_sources.get(module_name) || "";
 			const src_bytes = new Blob([content]).size;
 
-			const metadata = {
+			// Extract all additional attributes as metadata
+			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+			const metadata = {};
+
+			Array.from(script.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
+
+			blob_module_map.set(module_name, {
 				module_name,
 				src_bytes,
 				remote_url,
 				blob_url,
 				is_disabled,
-			};
-
-			blob_module_map.set(module_name, metadata);
+				metadata,
+			});
 		});
 
 		//
-		// Blob-module loader API
+		// Runtime functions
 		//
 
 		async function getCachedMedia(url) {
@@ -1070,10 +1146,6 @@ window.BlobLoader = {
 			console.log("HTML file download initiated");
 		}
 
-		async function saveAsZipFile() {
-			console.log("TODO");
-		}
-
 		async function saveSnapshotToCache(tag = "") {
 			try {
 				const html_content = await getDocumentOuterHtml(true);
@@ -1113,6 +1185,344 @@ window.BlobLoader = {
 				console.warn("Failed to save snapshot:", error);
 				throw error;
 			}
+		}
+
+		async function saveAsZipFile() {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		async function deleteCachedModule(url) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["modules"], "readwrite");
+				const store = transaction.objectStore("modules");
+
+				return new Promise((resolve, reject) => {
+					const request = store.delete(url);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Deleted cached module: ${url}`);
+						resolve();
+					};
+				});
+			} catch (error) {
+				console.warn("Failed to delete cached module:", error);
+				throw error;
+			}
+		}
+
+		// @IMPR: Only thing that changes is the object store key so we can probably merge with deleteCachedModule
+		async function deleteCachedMedia(url) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["media"], "readwrite");
+				const store = transaction.objectStore("media");
+
+				return new Promise((resolve, reject) => {
+					const request = store.delete(url);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Deleted cached media: ${url}`);
+						resolve();
+					};
+				});
+			} catch (error) {
+				console.warn("Failed to delete cached media:", error);
+				throw error;
+			}
+		}
+
+		async function runNonExportingModuleScript(source) {
+			// Create a blob from the source code
+			const module_blob = new Blob([source], {
+				type: "text/javascript",
+			});
+
+			// Create a blob URL
+			const blob_url = URL.createObjectURL(module_blob);
+
+			try {
+				// Import the module
+				await import(blob_url);
+				console.log("Non-exporting module script executed successfully");
+			} catch (error) {
+				console.error("Failed to execute non-exporting module script:", error);
+				throw error;
+			} finally {
+				// Clean up the blob URL after import
+				URL.revokeObjectURL(blob_url);
+			}
+		}
+
+		async function cloneDocument() {
+			const current_html = await BlobLoader.getDocumentOuterHtml(true);
+			const parser = new DOMParser();
+			const clone_doc = parser.parseFromString(current_html, "text/html");
+
+			// Build fresh maps from the cloned DOM
+			const clone_modules = new Map();
+			const clone_styles = new Map();
+			const clone_media = new Map();
+
+			// Extract script modules
+			const clone_script_tags = clone_doc.querySelectorAll('script[type="blob-module"]');
+			clone_script_tags.forEach((script) => {
+				const module_name = script.getAttribute("name");
+				const remote_url = script.getAttribute("remote") || null;
+				const is_disabled = script.hasAttribute("disabled");
+				const src = script.textContent.trim();
+
+				// Extract metadata
+				const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+				const metadata = {};
+				Array.from(script.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						metadata[attr.name] = attr.value;
+					}
+				});
+
+				clone_modules.set(module_name, {
+					src,
+					remote_url,
+					is_disabled,
+					metadata,
+				});
+			});
+
+			// Extract style modules
+			const clone_style_tags = clone_doc.querySelectorAll('style[type="blob-module"]');
+			clone_style_tags.forEach((style) => {
+				const style_name = style.getAttribute("name");
+				const remote_url = style.getAttribute("remote") || null;
+				const is_disabled = style.hasAttribute("disabled");
+				const src = style.textContent.trim();
+
+				// Extract metadata
+				const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+				const metadata = {};
+				Array.from(style.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						metadata[attr.name] = attr.value;
+					}
+				});
+
+				clone_styles.set(style_name, {
+					src,
+					remote_url,
+					is_disabled,
+					metadata,
+				});
+			});
+
+			// Extract media modules
+			const clone_media_tags = clone_doc.querySelectorAll('link[type="blob-module"]');
+			clone_media_tags.forEach((link) => {
+				const media_name = link.getAttribute("name");
+				const remote_url = link.getAttribute("remote") || null;
+				const is_disabled = link.hasAttribute("disabled");
+				const src = link.getAttribute("source") || null; // data URL
+
+				// Extract metadata
+				const known_attrs = new Set(["name", "remote", "disabled", "blob", "href", "type", "source", "nodownload"]);
+				const metadata = {};
+				Array.from(link.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						metadata[attr.name] = attr.value;
+					}
+				});
+
+				clone_media.set(media_name, {
+					src,
+					remote_url,
+					is_disabled,
+					metadata,
+				});
+			});
+
+			return {
+				doc: clone_doc,
+				modules: clone_modules,
+				styles: clone_styles,
+				media: clone_media,
+			};
+		}
+
+		function getCloneOuterHtmlFile(clone) {
+			return `<!DOCTYPE html>\n${clone.doc.documentElement.outerHTML}`;
+		}
+
+		async function saveCloneAsHtmlFile(clone) {
+			const html_content = getCloneOuterHtmlFile(clone);
+
+			// Check if File System Access API is available
+			if (window.showSaveFilePicker) {
+				try {
+					// Show save file picker
+					const file_handle = await window.showSaveFilePicker({
+						suggestedName: `${clone.doc.title || Date.now()}.html`,
+						types: [
+							{
+								description: "HTML files",
+								accept: {
+									"text/html": [".html", ".htm"],
+								},
+							},
+						],
+					});
+
+					// Get html and create writable
+					const writable = await file_handle.createWritable();
+					await writable.write(html_content);
+					await writable.close();
+
+					console.log("HTML file saved successfully");
+					return;
+				} catch (error) {
+					if (error.name === "AbortError") {
+						console.log("Save operation was cancelled by user");
+						return;
+					} else {
+						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+					}
+				}
+			}
+
+			// Fallback to download method
+			alert("File System Access API not available, falling back to download");
+			console.log("File System Access API not available, falling back to download");
+
+			// Create and trigger download
+			const blob = new Blob([html_content], {
+				type: "text/html",
+			});
+			const url = URL.createObjectURL(blob);
+
+			const download_link = document.createElement("a");
+			download_link.href = url;
+			download_link.download = "index.html";
+			download_link.click();
+
+			// Clean up the blob URL
+			URL.revokeObjectURL(url);
+
+			console.log("HTML file download initiated");
+		}
+
+		async function saveCloneAsSnapshot(clone, tag = "") {
+			try {
+				const html_content = getCloneOuterHtmlFile(clone);
+				const timestamp = Date.now();
+
+				// Generate session_id with fallback for browsers without crypto.randomUUID
+				let session_id;
+				if (typeof crypto !== "undefined" && crypto.randomUUID) {
+					session_id = crypto.randomUUID();
+				} else {
+					// Fallback: timestamp + random string
+					const random_part = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+					session_id = `${timestamp}_${random_part}`;
+				}
+
+				const db = await openCache();
+				const transaction = db.transaction(["snapshots"], "readwrite");
+				const store = transaction.objectStore("snapshots");
+
+				const snapshot_entry = {
+					session_id: session_id,
+					tag: tag || `snapshot_${timestamp}`,
+					html_content: html_content,
+					timestamp: timestamp,
+					document_title: clone.doc.title || "Untitled clone",
+				};
+
+				return new Promise((resolve, reject) => {
+					const request = store.put(snapshot_entry);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Clone snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`);
+						resolve(session_id);
+					};
+				});
+			} catch (error) {
+				console.warn("Failed to save clone snapshot:", error);
+				throw error;
+			}
+		}
+
+		function saveCloneAsZipFile(clone) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function addCloneModule(clone, module) {
+			if (clone.modules.has(module.name)) {
+				console.warn(`Module "${module.name}" already exists in clone`);
+				return false;
+			}
+
+			clone.modules.set(module.name, {
+				src: module.src || "",
+				remote_url: module.remote_url || null,
+				is_disabled: module.is_disabled || false,
+				metadata: module.metadata || {},
+			});
+
+			const script = clone.doc.createElement("script");
+			script.setAttribute("type", "blob-module");
+			script.setAttribute("name", module.name);
+			script.textContent = module.src || "";
+
+			if (module.remote_url) {
+				script.setAttribute("remote", module.remote_url);
+			}
+
+			if (module.is_disabled) {
+				script.setAttribute("disabled", "");
+			}
+
+			Object.entries(module.metadata || {}).forEach(([key, value]) => {
+				script.setAttribute(key, value);
+			});
+
+			clone.doc.head.appendChild(script);
+
+			return true;
+		}
+
+		function getCloneModule(clone, module_name) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function updateCloneModule(clone, module_name, module_data) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function removeCloneModule(clone, module_name) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function addCloneMediaModule(clone, module_name, module_data) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function getCloneMediaModule(clone, media_name) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function updateCloneMediaModule(clone, media_name, module_data) {
+			// TODO: Implementation needed
+			alert("TODO");
+		}
+
+		function removeCloneMediaModule(clone, media_name) {
+			// TODO: Implementation needed
+			alert("TODO");
 		}
 	}
 
@@ -1222,7 +1632,81 @@ window.BlobLoader = {
 	}
 
 	async function saveSnapshotAsHtmlFile(session_id) {
-		// TODO
+		try {
+			// Get the snapshot from cache
+			const snapshot = await getSnapshotFromCache(session_id);
+
+			if (!snapshot) {
+				console.warn(`Snapshot with session_id "${session_id}" not found`);
+				return;
+			}
+
+			const html_content = snapshot.html_content;
+			const suggested_filename = `${snapshot.document_title || snapshot.tag || "snapshot"}.html`.replace(
+				/[^a-z0-9_\-\.]/gi,
+				"_",
+			);
+
+			// Check if File System Access API is available
+			if (window.showSaveFilePicker) {
+				try {
+					// Show save file picker
+					const file_handle = await window.showSaveFilePicker({
+						suggestedName: suggested_filename,
+						types: [
+							{
+								description: "HTML files",
+								accept: {
+									"text/html": [".html", ".htm"],
+								},
+							},
+						],
+					});
+
+					// Get html and create writable
+					const writable = await file_handle.createWritable();
+					await writable.write(html_content);
+					await writable.close();
+
+					console.log(`Snapshot "${snapshot.tag}" saved successfully`);
+					return;
+				} catch (error) {
+					if (error.name === "AbortError") {
+						console.log("Save operation was cancelled by user");
+						return;
+					} else {
+						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+					}
+				}
+			}
+
+			// Fallback to download method
+			alert("File System Access API not available, falling back to download");
+			console.log("File System Access API not available, falling back to download");
+
+			// Create and trigger download
+			const blob = new Blob([html_content], {
+				type: "text/html",
+			});
+			const url = URL.createObjectURL(blob);
+
+			const download_link = document.createElement("a");
+			download_link.href = url;
+			download_link.download = suggested_filename;
+			download_link.click();
+
+			// Clean up the blob URL
+			URL.revokeObjectURL(url);
+
+			console.log(`Snapshot "${snapshot.tag}" download initiated`);
+		} catch (error) {
+			console.error("Failed to save snapshot as HTML file:", error);
+			throw error;
+		}
+	}
+
+	function removeSnapshotBootPetition() {
+		localStorage.removeItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
 	}
 
 	async function setSnapshotForBoot(session_id = null) {
@@ -1286,3 +1770,12 @@ window.BlobLoader = {
 		return await BlobLoader.saveSnapshotToCache("Automatic backup");
 	}
 })();
+
+//
+// Global Utils
+//
+
+function finish(t = 0) {
+	// Wait for next cycle to make sure DOM finished with previuous tasks or other related goals
+	return new Promise((resolve) => setTimeout(resolve, 0));
+}

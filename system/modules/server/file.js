@@ -1,7 +1,7 @@
 const { ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs/promises");
-const { convert_from_windows_path } = require("../shared/utils.js");
+const { convert_from_windows_path } = require("./utils.js");
 
 //
 // Bridge Exports

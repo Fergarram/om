@@ -295,6 +295,7 @@ function updateReactiveComponents() {
 	requestAnimationFrame(updateReactiveComponents);
 }
 
+// @NOTE: Me construido aquello que he jurado destruir... un garbage collector! D:
 function cleanupDisconnectedReactives() {
 	// Cleanup reactive nodes
 	let write_index = 0;
