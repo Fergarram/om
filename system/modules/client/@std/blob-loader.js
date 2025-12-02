@@ -1,5 +1,5 @@
 //
-// BLOB LOADER 0.12.0
+// BLOB LOADER 0.9.0
 // by fergarram
 //
 
@@ -167,16 +167,22 @@ window.BlobLoader = {
 			saveAsZipFile,
 
 			// Clones
-			// @LAST: This is a mock of the API. Running will fail.
 			cloneDocument,
 			getCloneOuterHtmlFile,
 			saveCloneAsHtmlFile,
 			saveCloneAsZipFile,
 			saveCloneAsSnapshot,
-			addCloneModule,
-			getCloneModule,
-			updateCloneModule,
-			removeCloneModule,
+
+			addCloneScriptModule,
+			getCloneScriptModule,
+			updateCloneScriptModule,
+			removeCloneScriptModule,
+
+			addCloneStyleModule,
+			getCloneStyleModule,
+			updateCloneStyleModule,
+			removeCloneStyleModule,
+
 			addCloneMediaModule,
 			getCloneMediaModule,
 			updateCloneMediaModule,
@@ -1451,11 +1457,11 @@ window.BlobLoader = {
 		}
 
 		function saveCloneAsZipFile(clone) {
-			// TODO: Implementation needed
+			// TODO: v1.5 Implementation needed
 			alert("TODO");
 		}
 
-		function addCloneModule(clone, module) {
+		function addCloneScriptModule(clone, module) {
 			if (clone.modules.has(module.name)) {
 				console.warn(`Module "${module.name}" already exists in clone`);
 				return false;
@@ -1490,39 +1496,411 @@ window.BlobLoader = {
 			return true;
 		}
 
-		function getCloneModule(clone, module_name) {
-			// TODO: Implementation needed
-			alert("TODO");
+		function getCloneScriptModule(clone, module_name) {
+			if (!clone.modules.has(module_name)) {
+				console.warn(`Module "${module_name}" not found in clone`);
+				return null;
+			}
+
+			const module_data = clone.modules.get(module_name);
+
+			// Return a copy to prevent accidental mutations
+			return {
+				name: module_name,
+				src: module_data.src,
+				remote_url: module_data.remote_url,
+				is_disabled: module_data.is_disabled,
+				metadata: { ...module_data.metadata },
+			};
 		}
 
-		function updateCloneModule(clone, module_name, module_data) {
-			// TODO: Implementation needed
-			alert("TODO");
+		function updateCloneScriptModule(clone, module_name, module_data) {
+			if (!clone.modules.has(module_name)) {
+				console.warn(`Module "${module_name}" not found in clone`);
+				return false;
+			}
+
+			// Get current module data
+			const current_module = clone.modules.get(module_name);
+
+			// Update the module in the map with provided data, keeping existing values for unspecified fields
+			clone.modules.set(module_name, {
+				src: module_data.src !== undefined ? module_data.src : current_module.src,
+				remote_url: module_data.remote_url !== undefined ? module_data.remote_url : current_module.remote_url,
+				is_disabled: module_data.is_disabled !== undefined ? module_data.is_disabled : current_module.is_disabled,
+				metadata:
+					module_data.metadata !== undefined
+						? { ...current_module.metadata, ...module_data.metadata }
+						: current_module.metadata,
+			});
+
+			// Find and update the corresponding script tag in the cloned document
+			const script_tags = clone.doc.querySelectorAll('script[type="blob-module"]');
+			for (const script of script_tags) {
+				if (script.getAttribute("name") === module_name) {
+					// Update textContent if src was provided
+					if (module_data.src !== undefined) {
+						script.textContent = module_data.src;
+					}
+
+					// Update remote attribute
+					if (module_data.remote_url !== undefined) {
+						if (module_data.remote_url) {
+							script.setAttribute("remote", module_data.remote_url);
+						} else {
+							script.removeAttribute("remote");
+						}
+					}
+
+					// Update disabled attribute
+					if (module_data.is_disabled !== undefined) {
+						if (module_data.is_disabled) {
+							script.setAttribute("disabled", "");
+						} else {
+							script.removeAttribute("disabled");
+						}
+					}
+
+					// Update metadata attributes
+					if (module_data.metadata !== undefined) {
+						Object.entries(module_data.metadata).forEach(([key, value]) => {
+							if (value === null || value === undefined) {
+								script.removeAttribute(key);
+							} else {
+								script.setAttribute(key, value);
+							}
+						});
+					}
+
+					console.log(`Updated module "${module_name}" in clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Module "${module_name}" was in map but script tag not found in clone DOM`);
+			return false;
 		}
 
-		function removeCloneModule(clone, module_name) {
-			// TODO: Implementation needed
-			alert("TODO");
+		function removeCloneScriptModule(clone, module_name) {
+			if (!clone.modules.has(module_name)) {
+				console.warn(`Module "${module_name}" not found in clone`);
+				return false;
+			}
+
+			// Remove from the modules map
+			clone.modules.delete(module_name);
+
+			// Find and remove the corresponding script tag from the cloned document
+			const script_tags = clone.doc.querySelectorAll('script[type="blob-module"]');
+			for (const script of script_tags) {
+				if (script.getAttribute("name") === module_name) {
+					script.remove();
+					console.log(`Removed module "${module_name}" from clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Module "${module_name}" was in map but script tag not found in clone DOM`);
+			return false;
 		}
 
-		function addCloneMediaModule(clone, module_name, module_data) {
-			// TODO: Implementation needed
-			alert("TODO");
+		function addCloneStyleModule(clone, style_name, style_data) {
+			if (clone.styles.has(style_name)) {
+				console.warn(`Style module "${style_name}" already exists in clone`);
+				return false;
+			}
+
+			clone.styles.set(style_name, {
+				src: style_data.src || "",
+				remote_url: style_data.remote_url || null,
+				is_disabled: style_data.is_disabled || false,
+				metadata: style_data.metadata || {},
+			});
+
+			const style = clone.doc.createElement("style");
+			style.setAttribute("type", "blob-module");
+			style.setAttribute("name", style_name);
+			style.textContent = style_data.src || "";
+
+			if (style_data.remote_url) {
+				style.setAttribute("remote", style_data.remote_url);
+			}
+
+			if (style_data.is_disabled) {
+				style.setAttribute("disabled", "");
+			}
+
+			Object.entries(style_data.metadata || {}).forEach(([key, value]) => {
+				style.setAttribute(key, value);
+			});
+
+			clone.doc.head.appendChild(style);
+
+			return true;
+		}
+
+		function getCloneStyleModule(clone, style_name) {
+			if (!clone.styles.has(style_name)) {
+				console.warn(`Style module "${style_name}" not found in clone`);
+				return null;
+			}
+
+			const style_data = clone.styles.get(style_name);
+
+			// Return a copy to prevent accidental mutations
+			return {
+				name: style_name,
+				src: style_data.src,
+				remote_url: style_data.remote_url,
+				is_disabled: style_data.is_disabled,
+				metadata: { ...style_data.metadata },
+			};
+		}
+
+		function updateCloneStyleModule(clone, style_name, style_data) {
+			if (!clone.styles.has(style_name)) {
+				console.warn(`Style module "${style_name}" not found in clone`);
+				return false;
+			}
+
+			// Get current style data
+			const current_style = clone.styles.get(style_name);
+
+			// Update the style in the map with provided data, keeping existing values for unspecified fields
+			clone.styles.set(style_name, {
+				src: style_data.src !== undefined ? style_data.src : current_style.src,
+				remote_url: style_data.remote_url !== undefined ? style_data.remote_url : current_style.remote_url,
+				is_disabled: style_data.is_disabled !== undefined ? style_data.is_disabled : current_style.is_disabled,
+				metadata:
+					style_data.metadata !== undefined
+						? { ...current_style.metadata, ...style_data.metadata }
+						: current_style.metadata,
+			});
+
+			// Find and update the corresponding style tag in the cloned document
+			const style_tags = clone.doc.querySelectorAll('style[type="blob-module"]');
+			for (const style of style_tags) {
+				if (style.getAttribute("name") === style_name) {
+					// Update textContent if src was provided
+					if (style_data.src !== undefined) {
+						style.textContent = style_data.src;
+					}
+
+					// Update remote attribute
+					if (style_data.remote_url !== undefined) {
+						if (style_data.remote_url) {
+							style.setAttribute("remote", style_data.remote_url);
+						} else {
+							style.removeAttribute("remote");
+						}
+					}
+
+					// Update disabled attribute
+					if (style_data.is_disabled !== undefined) {
+						if (style_data.is_disabled) {
+							style.setAttribute("disabled", "");
+						} else {
+							style.removeAttribute("disabled");
+						}
+					}
+
+					// Update metadata attributes
+					if (style_data.metadata !== undefined) {
+						Object.entries(style_data.metadata).forEach(([key, value]) => {
+							if (value === null || value === undefined) {
+								style.removeAttribute(key);
+							} else {
+								style.setAttribute(key, value);
+							}
+						});
+					}
+
+					console.log(`Updated style module "${style_name}" in clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Style module "${style_name}" was in map but style tag not found in clone DOM`);
+			return false;
+		}
+
+		function removeCloneStyleModule(clone, style_name) {
+			if (!clone.styles.has(style_name)) {
+				console.warn(`Style module "${style_name}" not found in clone`);
+				return false;
+			}
+
+			// Remove from the styles map
+			clone.styles.delete(style_name);
+
+			// Find and remove the corresponding style tag from the cloned document
+			const style_tags = clone.doc.querySelectorAll('style[type="blob-module"]');
+			for (const style of style_tags) {
+				if (style.getAttribute("name") === style_name) {
+					style.remove();
+					console.log(`Removed style module "${style_name}" from clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Style module "${style_name}" was in map but style tag not found in clone DOM`);
+			return false;
+		}
+
+		function addCloneMediaModule(clone, media_name, media_data) {
+			if (clone.media.has(media_name)) {
+				console.warn(`Media module "${media_name}" already exists in clone`);
+				return false;
+			}
+
+			clone.media.set(media_name, {
+				src: media_data.src || null,
+				remote_url: media_data.remote_url || null,
+				is_disabled: media_data.is_disabled || false,
+				metadata: media_data.metadata || {},
+			});
+
+			const link = clone.doc.createElement("link");
+			link.setAttribute("type", "blob-module");
+			link.setAttribute("name", media_name);
+
+			if (media_data.src) {
+				link.setAttribute("source", media_data.src);
+			}
+
+			if (media_data.remote_url) {
+				link.setAttribute("remote", media_data.remote_url);
+			}
+
+			if (media_data.is_disabled) {
+				link.setAttribute("disabled", "");
+			}
+
+			Object.entries(media_data.metadata || {}).forEach(([key, value]) => {
+				link.setAttribute(key, value);
+			});
+
+			clone.doc.head.appendChild(link);
+
+			return true;
 		}
 
 		function getCloneMediaModule(clone, media_name) {
-			// TODO: Implementation needed
-			alert("TODO");
+			if (!clone.media.has(media_name)) {
+				console.warn(`Media module "${media_name}" not found in clone`);
+				return null;
+			}
+
+			const media_data = clone.media.get(media_name);
+
+			// Return a copy to prevent accidental mutations
+			return {
+				name: media_name,
+				src: media_data.src,
+				remote_url: media_data.remote_url,
+				is_disabled: media_data.is_disabled,
+				metadata: { ...media_data.metadata },
+			};
 		}
 
-		function updateCloneMediaModule(clone, media_name, module_data) {
-			// TODO: Implementation needed
-			alert("TODO");
+		function updateCloneMediaModule(clone, media_name, media_data) {
+			if (!clone.media.has(media_name)) {
+				console.warn(`Media module "${media_name}" not found in clone`);
+				return false;
+			}
+
+			// Get current media data
+			const current_media = clone.media.get(media_name);
+
+			// Update the media in the map with provided data, keeping existing values for unspecified fields
+			clone.media.set(media_name, {
+				src: media_data.src !== undefined ? media_data.src : current_media.src,
+				remote_url: media_data.remote_url !== undefined ? media_data.remote_url : current_media.remote_url,
+				is_disabled: media_data.is_disabled !== undefined ? media_data.is_disabled : current_media.is_disabled,
+				metadata:
+					media_data.metadata !== undefined
+						? { ...current_media.metadata, ...media_data.metadata }
+						: current_media.metadata,
+			});
+
+			// Find and update the corresponding link tag in the cloned document
+			const link_tags = clone.doc.querySelectorAll('link[type="blob-module"]');
+			for (const link of link_tags) {
+				if (link.getAttribute("name") === media_name) {
+					// Update source attribute if src was provided
+					if (media_data.src !== undefined) {
+						if (media_data.src) {
+							link.setAttribute("source", media_data.src);
+						} else {
+							link.removeAttribute("source");
+						}
+					}
+
+					// Update remote attribute
+					if (media_data.remote_url !== undefined) {
+						if (media_data.remote_url) {
+							link.setAttribute("remote", media_data.remote_url);
+						} else {
+							link.removeAttribute("remote");
+						}
+					}
+
+					// Update disabled attribute
+					if (media_data.is_disabled !== undefined) {
+						if (media_data.is_disabled) {
+							link.setAttribute("disabled", "");
+						} else {
+							link.removeAttribute("disabled");
+						}
+					}
+
+					// Update metadata attributes
+					if (media_data.metadata !== undefined) {
+						Object.entries(media_data.metadata).forEach(([key, value]) => {
+							if (value === null || value === undefined) {
+								link.removeAttribute(key);
+							} else {
+								link.setAttribute(key, value);
+							}
+						});
+					}
+
+					console.log(`Updated media module "${media_name}" in clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Media module "${media_name}" was in map but link tag not found in clone DOM`);
+			return false;
 		}
 
 		function removeCloneMediaModule(clone, media_name) {
-			// TODO: Implementation needed
-			alert("TODO");
+			if (!clone.media.has(media_name)) {
+				console.warn(`Media module "${media_name}" not found in clone`);
+				return false;
+			}
+
+			// Remove from the media map
+			clone.media.delete(media_name);
+
+			// Find and remove the corresponding link tag from the cloned document
+			const link_tags = clone.doc.querySelectorAll('link[type="blob-module"]');
+			for (const link of link_tags) {
+				if (link.getAttribute("name") === media_name) {
+					link.remove();
+					console.log(`Removed media module "${media_name}" from clone`);
+					return true;
+				}
+			}
+
+			// This shouldn't happen if the clone is properly synchronized
+			console.warn(`Media module "${media_name}" was in map but link tag not found in clone DOM`);
+			return false;
 		}
 	}
 

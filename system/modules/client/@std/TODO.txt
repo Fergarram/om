@@ -4,7 +4,7 @@ BLOB LOADER SUMMARY - NEXT STEPS FOR v1.0
 
 OVERVIEW
 --------
-The Blob Loader is a system for managing inline ES modules, CSS modules, and media 
+The Blob Loader is a system for managing inline ES modules, CSS modules, and media
 files in HTML documents with support for remote sources, caching, and snapshots.
 
 CURRENT STATE
@@ -23,7 +23,7 @@ REMAINING TASKS FOR v1.0
    - getCachedModule/setCachedModule/deleteCachedModule
    - getCachedMedia/setCachedMedia/deleteCachedMedia
    - runNonExportingModuleScript (stub)
-   
+
    Need to implement:
    - Complete deleteCachedModule() and deleteCachedMedia() functions
    - Complete runNonExportingModuleScript() for dynamic module loading
@@ -58,11 +58,49 @@ NOTES ON DESIGN
 ----------------
 - Not responsible for pushing to remotes (needs external hooks)
 
-FUTURE (v1.5+)
---------------
+
+==============================================================================
+
+
+FUTURE (v1.5+) TODO
+=============================
+
 - Hooks for minification/formatting
 - TypeScript/TSX support via transformers
 - saveAsZipFile() with separate files instead of inline (uses fflate)
-- Stream to local files for external IDE usage
 
-==============================================================================
+TS/TSX TRANSPILATION MODES
+--------------------------
+
+MODE 1: SIMPLE TRANSPILATION (NO SOURCEMAP)
+----------------------------------------------
+- HTML contains: lang="ts" with TS source in textContent
+- On load: transpile TS → JS, cache JS in IndexedDB
+- Runtime: use cached JS (fast)
+- On export: write original TS back to HTML
+- Next load: transpile again (but use cache if available)
+
+Key: TS is source-of-truth in HTML, JS is derived cache
+
+
+MODE 2: SELF-CONTAINED (WITH SOURCEMAP)
+------------------------------------------
+- HTML contains: lang="ts" sourcemap="inline" with JS+sourcemap in textContent
+- On load: parse existing JS, no transpilation needed
+- Runtime: use the JS directly (fastest)
+- Can extract TS from sourcemap anytime
+- On export: can write JS+sourcemap OR extract and write TS
+- Next load: no transpilation needed at all
+
+Key: JS+sourcemap is source-of-truth in HTML
+
+
+MODE 3: UPGRADE PATH (GENERATE SOURCEMAP)
+--------------------------------------------
+- Start with Option 1 (TS in HTML, JS cached)
+- Call something like convertToSourcemapMode()
+- Re-transpile with sourcemap enabled
+- Update HTML to contain JS+sourcemap instead of TS
+- Now in Option 2
+
+Key: Transition from "TS in HTML" to "JS+sourcemap in HTML"
