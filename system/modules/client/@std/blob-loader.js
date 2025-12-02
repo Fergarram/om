@@ -23,6 +23,8 @@
 //
 // But this falls on the next library I'll write, which is for canvas related stuff.
 //
+// I think I need to enter a testing stage again where I try to build a canvas thing to work with the modules.
+//
 
 // TODO
 //
