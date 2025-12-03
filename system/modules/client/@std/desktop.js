@@ -1,4 +1,4 @@
-import { mountApplet, useAppletTag, registerApplet } from "desktop";
+import { mountApplet, createApplet, registerApplet } from "desktop";
 import { useStyledTags, uuid } from "ima-utils";
 
 const $ = useStyledTags();
@@ -42,13 +42,13 @@ export function useCalculatorApplet(prev_el) {
 	// Build node element
 	//
 
-	const applet_el = useAppletTag(
+	const applet_el = createApplet(
 		// adds needed attributes for "motion", "tsid", position, etc.
 		{
 			id: instance_id,
 			name: "calculator",
-			x: 0,
-			y: 0,
+			x: 0, // not-passed as attr
+			y: 0, // not-passed as attr
 			"reactive-attr": () => some_variable,
 			onmousemove(e) {
 				// inherits element event listeners
