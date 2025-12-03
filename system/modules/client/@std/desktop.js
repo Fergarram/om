@@ -1,101 +1,87 @@
-// destkop.js
-const registered_applets = new Map();
-const unhydrated_applets = new Map();
+import { mountApplet, useAppletTag, registerApplet } from "desktop";
+import { useStyledTags, uuid } from "ima-utils";
 
-Array.from(document.querySelectorAll("desktop-applet")).forEach((el) => {
-	const name = el.getAttribute("name");
-	if (!unhydrated_applets.has(name)) {
-		unhydrated_applets.set(name, []);
-	}
-	unhydrated_applets.get(name).push(el);
-});
+const $ = useStyledTags();
 
-export function registerAppletTag(applet_definition) {
-	// This runs we'll be already "booted" meaning page has loaded.
+// NON-LEAKY STATE
+let some_variable = 0;
+const active_calculators = new Map();
 
-	// registration-id is not an attribute.
-	const applet_registration = { ...applet_definition, "registration-id": "generate-uuid" };
+// LESS ERGONIMIC STATE BUT LOWER-LEVEL
+let arena = new ArrayBuffer(100_000_000);
+// Will never be collected but won't leak — we skip object management, etc
 
-	if (registered_applets.has(applet_registration.id)) {
-		// We might have to pass an el arg so we'll need a query.
-		applet_registration.onhotreload(); // Still need to try to see which data I'll need to pass
-		// I think most ideally you trigger onConnect by remounting via
-		// const parent = el.parentNode;
-		// parent.removeChild(el);
-		// parent.appendChild(el);
-		// or if this dont work just shift them around
-		// or we just remount the whole desktop parent instead of looping.
-	}
+// HYDRATION REGISTER
+registerApplet(useCalculatorApplet);
 
-	registered_applets.set(applet_registration.id, applet_registration);
+// MAIN WAY TO USE THE APPLET EXTERNALLY
+export function useCalculatorApplet(prev_el) {
+	//
+	// Local state
+	//
 
-	const applets_to_hydrate = unhydrated_applets.get(applet_registration.name);
-	if (applets_to_hydrate) {
-		unhydrated_applets.delete(applet_registration.name);
-		// Can we delete first and hydrate after?
-		applets_to_hydrate.forEach((applet_el) => {
-			applet_registration.onhydrate(applet_el);
-		});
-	}
-}
+	// Leaky state could be easly added like this
+	// let leaky_obj = { something: "hello" };
+	// Sometimes that's ok for static data or visible lifecycles
+	// but sometimes this will cause performance issues when
+	// dealing with large amounts of data like:
+	// let some_data = new ArrayBuffer(100_000_000);
+	// that remains used in closures hidden within closures
+	// with lifecycles you don't really manage fully
 
-//
-// in ima-utils.js
-//
-export function replaceEl(...args) {
-	// just wrapper that takes args and returns proper format or whatever.
-}
+	// so we can also do
+	const instance_id = uuid();
+	active_calculators.set(instance_id, {
+		count: 0, // or get from prev_el attributes
+		some_val: prev_el.getAttribute("some-attr") || "default_value",
+	});
 
-// This is where iframes are interesting.
-// How much better performance and safety can you get just by using iframes?
-// But also, iframes are limited in their interactions with the current DOM.
+	const state = active_calculators.get(instance_id);
 
-/// EXAMPLE
-// we'd need to import registerAppletTag, replaceEl, and useTags.
+	//
+	// Build node element
+	//
 
-// This registration process should run before page load.
-// But this is not possible if running via blob-module.
-// So we'll have some bad renders if we leverage the connected thng.
-registerAppletTag({
-	name: "your-applet-name",
-	"some-initial-attribute": "stored in html",
-	onhydrate(self_el) {
-		const { div } = useTags();
-		// This runs from onConnected in the custom element
-		// so self_el is "this" at this point in time.
-
-		const bg_color = self_el.style.backgroundColor;
-		console.log(bg_color);
-
-		// or
-
-		const attrs = extractAttrs(self_el);
-		console.log(attrs.style); // would print CSS string
-
-		const where_is_our_data_stored = "here";
-		let what_about_local_data = "here too";
-
-		setInterval(() => {
-			what_about_local_data = Math.random().toString(36).substring(2, 15);
-		}, 1000);
-
-		replaceEl(
-			self_el,
-			{
-				...attrs,
-				// optional attrs like ima
-				"attributes-replaced": "",
+	const applet_el = useAppletTag(
+		// adds needed attributes for "motion", "tsid", position, etc.
+		{
+			id: instance_id,
+			name: "calculator",
+			x: 0,
+			y: 0,
+			"reactive-attr": () => some_variable,
+			onmousemove(e) {
+				// inherits element event listeners
 			},
-			div(where_is_our_data_stored),
-			div(() => what_about_local_data),
-			div("ima-style children"),
-			div("like so"),
-		);
-	},
-	onremove() {
-		// after .remove() is called, using onDisconnected
-	},
-	onlift() {},
-	ondrop() {},
-	onresize() {},
-});
+			onconnect(e) {
+				console.log("I guess we can have this", e);
+			},
+			ondisconnect(e) {
+				console.log("I guess we can have this", e);
+				active_calculators.delete(instance_id); // Clean up
+			},
+			onresize(e) {
+				// Wrapper for resize observer
+			},
+			onlift(e) {
+				// Wrapper for when the attr motion changed
+			},
+			onplace(e) {
+				// Wrapper for when the attr motion changed
+			},
+			styles: `
+				& {
+					background: white;
+					color: black;
+				}
+			`,
+		},
+		$.div("We just build the tree", () => state.count),
+	);
+
+	//
+	// Mount the element to the desktop
+	//
+
+	mountApplet(applet_el);
+}
