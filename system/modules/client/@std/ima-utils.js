@@ -6,8 +6,8 @@
 // by fergarram
 //
 
-import { useTags } from "@std/ima";
-import { stringToBase64, createStyleSheet, getAdoptedStyleSheet, createShadowStyleSheet } from "@std/utils";
+import { useTags } from "ima";
+import { stringToBase64, createStyleSheet, getAdoptedStyleSheet, createShadowStyleSheet } from "utils";
 
 export function useStyledTags(opts) {
 	return useTags({
@@ -46,29 +46,23 @@ export function useStyledTags(opts) {
 	});
 }
 
-export function useCustomStyledTag(tag_name, definition, opts) {
-	return useCustomTag(tag_name, definition, {
-		...opts,
-		use_styles: true,
-	});
-}
-
-export function useCustomTag(tag_name, definition, opts) {
+export function registerCustomTag(tag_name, definition = {}, opts) {
 	if (!customElements.get(tag_name)) {
 		customElements.define(
 			tag_name,
 			class extends HTMLElement {
 				static observedAttributes = definition.attrs ?? [];
-				#connected;
-				#disconnected;
-				#adopted;
-				#attributeChanged;
+				#onconnected;
+				#ondisconnected;
+				#onadopted;
+				#onattributechanged;
 
 				constructor() {
 					super();
 
 					const ac = new AbortController();
-					const $listen = (evt, handler, options = true) => {
+
+					this.$on = (evt, handler, options = true) => {
 						let defaultOptions = { signal: ac.signal };
 						if (typeof options === "boolean") {
 							defaultOptions.capture = options;
@@ -80,29 +74,38 @@ export function useCustomTag(tag_name, definition, opts) {
 
 					this.ac = ac;
 
-					const { connected, disconnected, adopted, attributeChanged } = definition.apply(this, [{ $listen }]) ?? {};
+					this.#onconnected = definition.onconnected?.bind(this);
+					this.#ondisconnected = definition.ondisconnected?.bind(this);
+					this.#onadopted = definition.onadopted?.bind(this);
+					this.#onattributechanged = definition.onattributechanged?.bind(this);
 
-					this.#connected = connected?.bind(this);
-					this.#disconnected = disconnected?.bind(this);
-					this.#adopted = adopted?.bind(this);
-					this.#attributeChanged = attributeChanged?.bind(this);
+					// Run setup at end of constructor
+					definition.setup?.call(this);
 				}
 
 				connectedCallback() {
-					this.#connected?.();
+					this.#onconnected?.();
+					this.dispatchEvent(new CustomEvent("connected"));
 				}
 
 				disconnectedCallback() {
-					this.#disconnected?.();
+					this.#ondisconnected?.();
+					this.dispatchEvent(new CustomEvent("disconnected"));
 					this.ac.abort();
 				}
 
 				adoptedCallback() {
-					this.#adopted?.();
+					this.#onadopted?.();
+					this.dispatchEvent(new CustomEvent("adopted"));
 				}
 
 				attributeChangedCallback(...args) {
-					this.#attributeChanged?.(...args);
+					this.#onattributechanged?.(...args);
+					this.dispatchEvent(
+						new CustomEvent("attributechanged", {
+							detail: { name: args[0], old_value: args[1], new_value: args[2] },
+						}),
+					);
 				}
 			},
 		);
@@ -116,35 +119,9 @@ export function useCustomTag(tag_name, definition, opts) {
 	}
 }
 
-const tags = useStyledTags();
-
-export const main = tags.main;
-export const div = tags.div;
-export const span = tags.span;
-export const pre = tags.pre;
-export const icon = tags.icon;
-export const canvas = tags.canvas;
-export const input = tags.input;
-export const textarea = tags.textarea;
-export const select = tags.select;
-export const option = tags.option;
-export const iframe = tags.iframe;
-export const button = tags.button;
-export const webview = tags.webview;
-export const label = tags.label;
-export const form = tags.form;
-export const fieldset = tags.fieldset;
-export const legend = tags.legend;
-export const a = tags.a;
-export const img = tags.img;
-export const video = tags.video;
-export const audio = tags.audio;
-export const header = tags.header;
-export const footer = tags.footer;
-export const ul = tags.ul;
-export const ol = tags.ol;
-export const li = tags.li;
-export const code = tags.code;
-export const dialog = tags.dialog;
-export const details = tags.details;
-export const summary = tags.summary;
+export function registerCustomStyledTag(tag_name, definition = {}, opts) {
+	return registerCustomTag(tag_name, definition, {
+		...opts,
+		use_styles: true,
+	});
+}
