@@ -18,6 +18,7 @@ const active_calculators = new Map();
 export const CalculatorApplet = registerAppletTag("calculator", {
 	setup() {
 		// Local state via "this"
+		// But! this state is publicly accessed. You may want this or may not.
 		// We can extract data here before hydrating so it's cleaner
 	},
 	hydrate() {
@@ -27,6 +28,10 @@ export const CalculatorApplet = registerAppletTag("calculator", {
 		// this.style.whatever in case you need to do something there but usually not the case.
 		const applet_el = $.div("this is the content");
 		this.replaceChildren(applet_el);
+		// if you want you could use a shadow dom here too
+	},
+	onresize(entry) {
+		// We get the entry, but we also get "this"
 	},
 	onremove() {
 		// clean up or whatever
