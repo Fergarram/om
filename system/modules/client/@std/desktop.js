@@ -1,11 +1,17 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
-import { isScrollable, finish } from "utils";
+import { isScrollable, finish, css, uniqueId, useGlobalStyles } from "utils";
 import { initializeBackgroundCanvas } from "wallpaper";
 
 //
 // Config
 //
+
+const LEFT_BUTTON = 0;
+const MIDDLE_BUTTON = 1;
+const RIGHT_BUTTON = 2;
+const BACK_BUTTON = 3;
+const FORWARD_BUTTON = 4;
 
 const HANDLE_CONFIG = {
 	EDGE_SIZE: 12,
@@ -16,25 +22,16 @@ const HANDLE_CONFIG = {
 const ZOOM_EVENT_DELAY = 150;
 const SCROLL_EVENT_DELAY = 150;
 
-const IS_TRACKPAD = false;
-
 const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 1;
+const MAX_ZOOM = 5;
 
-const surface_initial_width = 100_000;
-const surface_initial_height = 100_000; //surface_initial_width * (window.innerHeight / window.innerWidth);
+const SURFACE_WIDTH = 100_000;
+const SURFACE_HEIGHT = 100_000;
 
 //
-// State
+// Desktop View (ustom element setup)
 //
 
-let applet_initializers = {};
-let place_callbacks = [];
-let remove_callbacks = [];
-let order_change_callbacks = [];
-let superkeydown = true;
-
-// Camera Controls
 let camera_x = 0;
 let camera_y = 0;
 let scrolling_timeout = null;
@@ -51,36 +48,6 @@ let zoom_level = 1;
 let is_zooming = false;
 let scroll_thumb_x = 0;
 let scroll_thumb_y = 0;
-
-// Applet Interactions
-let last_mouse_x = 0;
-let last_mouse_y = 0;
-let delta_x = 0;
-let delta_y = 0;
-let dragged_applet = null;
-let dragging_x = 0;
-let dragging_y = 0;
-let last_width = 0;
-let last_height = 0;
-let last_left = 0;
-let last_top = 0;
-let current_mouse_button = null;
-let min_width = 10;
-let min_height = 10;
-let is_resizing = false;
-let resize_edge = null;
-let is_right_resize = false;
-let resize_start_width = 0;
-let resize_start_height = 0;
-let resize_start_x = 0;
-let resize_start_y = 0;
-let resize_quadrant = null;
-let resize_start_left = 0;
-let resize_start_top = 0;
-
-//
-// Custom element setup
-//
 
 const { div, main, canvas } = useTags();
 
@@ -104,6 +71,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 		const canvas_el =
 			this.querySelector("#desktop-canvas") ||
 			this.appendChild(
+				// @TODO: This canvas needs a fallback image for when not available.
+				// The wallpaper should deal with this fallback somehow.
 				canvas({
 					id: "desktop-canvas",
 					style: `
@@ -122,23 +91,25 @@ export const Desktop = registerCustomTag("desktop-view", {
 				main(
 					{
 						id: "desktop",
-						style: `
+						style: css`
 							position: relative;
 							width: 100%;
 							height: auto;
 							flex-grow: 1;
+							/* @TODO: overflow scroll is NO JS fallback, we need a fallback */
 							overflow: hidden;
 						`,
 					},
 					div({
 						id: "desktop-surface",
+						// still not sure if I need to set this
 						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 						style: `
 							position: absolute;
 							transform-origin: 0 0;
 							transform: scale(1);
-							width: ${surface_initial_width}px;
-							height: ${surface_initial_height}px;
+							width: ${SURFACE_WIDTH}px;
+							height: ${SURFACE_HEIGHT}px;
 						`,
 					}),
 				),
@@ -166,11 +137,15 @@ export const Desktop = registerCustomTag("desktop-view", {
 		await finish();
 
 		// Here we would deal with the WebGL wallpaper.
-		const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(desktop_el, canvas_el);
+		const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(
+			desktop_el,
+			canvas_el,
+		);
 
 		handleResize();
 
-		// Scroll to the center of the canvas. This may cause a jumping effect with async events so we might remove this.
+		// Scroll to the center of the canvas. This may cause a jumping
+		// effect with async events so we might remove this.
 		scrollToCenter();
 
 		//
@@ -189,41 +164,13 @@ export const Desktop = registerCustomTag("desktop-view", {
 		window.addEventListener("mouseup", windowMouseUp);
 		window.addEventListener("mousemove", windowMouseMove);
 
-		requestAnimationFrame(step);
-
-		//
-		// Desktop closures
-		//
-
-		function scrollToCenter() {
-			const rect = surface_el.getBoundingClientRect();
-			desktop_el.scroll({
-				left: rect.width / 2 - desktop_el.offsetWidth / 2,
-				top: rect.height / 2 - desktop_el.offsetHeight / 2,
-			});
-		}
-
-		function updateSurfaceScale() {
-			surface_el.style.transform = `scale(${current_scale})`;
-			zoom_level = current_scale;
-		}
-
 		function handleResize() {
 			resizeCanvas();
 			drawWallpaper(camera_x, camera_y, current_scale);
 		}
 
 		async function handleGlobalKeydown(e) {
-			// Prevent default window zooming
-			if ((e.ctrlKey || e.metaKey) && e.key === "=") {
-				e.preventDefault();
-			} else if ((e.ctrlKey || e.metaKey) && e.key === "-") {
-				e.preventDefault();
-			} else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
-				e.preventDefault();
-			}
-
-			if (e.altKey) {
+			if (e.ctrlKey || e.metaKey) {
 				// Store current scroll position and viewport dimensions
 				const prev_scroll_x = desktop_el.scrollLeft;
 				const prev_scroll_y = desktop_el.scrollTop;
@@ -234,15 +181,15 @@ export const Desktop = registerCustomTag("desktop-view", {
 				const center_x = (prev_scroll_x + viewport_width / 2) / current_scale;
 				const center_y = (prev_scroll_y + viewport_height / 2) / current_scale;
 
-				if (e.key === "≠") {
+				if (e.key === "=") {
 					e.preventDefault();
 					is_zooming = true;
-					current_scale = Math.min(current_scale + 0.1, 1.0);
-				} else if (e.key === "–") {
+					current_scale = Math.min(current_scale + 0.1, MAX_ZOOM);
+				} else if (e.key === "-") {
 					e.preventDefault();
 					is_zooming = true;
-					current_scale = Math.max(current_scale - 0.1, 0.1);
-				} else if (e.key === "º") {
+					current_scale = Math.max(current_scale - 0.1, MIN_ZOOM);
+				} else if (e.key === "0") {
 					e.preventDefault();
 					is_zooming = true;
 					current_scale = 1.0;
@@ -281,13 +228,13 @@ export const Desktop = registerCustomTag("desktop-view", {
 				target = target.parentElement;
 			}
 
-			if (IS_TRACKPAD && superkeydown && e.shiftKey && !e.ctrlKey) {
+			if (!e.ctrlKey && !e.metaKey) {
 				e.preventDefault();
 				desktop_el.scrollTo({
-					left: camera_x + e.deltaX,
-					top: camera_y + e.deltaY,
+					left: camera_x + e.deltaX * 1.2,
+					top: camera_y + e.deltaY * 1.2,
 				});
-			} else if ((superkeydown && !is_panning) || (IS_TRACKPAD && superkeydown && e.shiftKey && e.ctrlKey)) {
+			} else if ((e.metaKey || e.ctrlKey) && !is_panning) {
 				e.preventDefault();
 
 				// Store current scroll position and viewport dimensions
@@ -305,7 +252,10 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 				// Calculate a scale factor that's smaller at low zoom levels
 				// The 0.05 at scale 1.0 will reduce to 0.005 at scale 0.1
-				const scale_factor = Math.max(0.005, current_scale * 0.05);
+				const base_scale_factor = Math.max(0.005, current_scale * 0.05);
+
+				// Make mouse wheel zoom faster than trackpad
+				const scale_factor = base_scale_factor;
 
 				// Calculate new scale with variable increment based on current scale
 				const delta = e.deltaY > 0 ? -scale_factor : scale_factor;
@@ -369,7 +319,10 @@ export const Desktop = registerCustomTag("desktop-view", {
 		}
 
 		function surfaceMouseDown(e) {
-			if ((superkeydown && e.button === 1) || (superkeydown && e.button === 0 && e.target === surface_el)) {
+			if (
+				e.button === MIDDLE_BUTTON ||
+				((e.ctrlKey || e.metaKey) && e.button === LEFT_BUTTON && e.target === surface_el)
+			) {
 				e.preventDefault();
 				is_panning = true;
 				document.body.classList.add("is-panning");
@@ -387,7 +340,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 		function windowMouseDown(e) {}
 
 		function windowMouseUp(e) {
-			if (e.button === 1 || e.button === 0) {
+			if (e.button === MIDDLE_BUTTON || e.button === LEFT_BUTTON) {
 				is_panning = false;
 				document.body.classList.remove("is-panning");
 			}
@@ -405,6 +358,12 @@ export const Desktop = registerCustomTag("desktop-view", {
 				last_middle_click_y = e.clientY;
 			}
 		}
+
+		//
+		// Frame callback loop
+		//
+
+		requestAnimationFrame(step);
 
 		function step() {
 			// Process any pending mouse movements in the animation frame
@@ -453,24 +412,326 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 			requestAnimationFrame(step);
 		}
+
+		//
+		// Desktop utilities
+		//
+
+		function scrollToCenter() {
+			const rect = surface_el.getBoundingClientRect();
+			desktop_el.scroll({
+				left: rect.width / 2 - desktop_el.offsetWidth / 2,
+				top: rect.height / 2 - desktop_el.offsetHeight / 2,
+			});
+		}
+
+		function updateSurfaceScale() {
+			surface_el.style.transform = `scale(${current_scale})`;
+			zoom_level = current_scale;
+		}
 	},
 });
 
+//
+// Applets (custom element setup)
+//
+
+let last_mouse_x = 0;
+let last_mouse_y = 0;
+let delta_x = 0;
+let delta_y = 0;
+let dragged_applet = null;
+let dragging_x = 0;
+let dragging_y = 0;
+let last_width = 0;
+let last_height = 0;
+let last_left = 0;
+let last_top = 0;
+let current_mouse_button = null;
+let min_width = 10;
+let min_height = 10;
+let is_resizing = false;
+let resize_edge = null;
+let is_right_resize = false;
+let resize_start_width = 0;
+let resize_start_height = 0;
+let resize_start_x = 0;
+let resize_start_y = 0;
+let resize_quadrant = null;
+let resize_start_left = 0;
+let resize_start_top = 0;
+
 export function registerAppletTag(name, config, ...children) {
+	function preventContextMenu(e) {
+		if ((e.metaKey || e.ctrlKey) && e.button === 2) {
+			e.preventDefault();
+			return false;
+		}
+		return true;
+	}
+
+	async function handleAppletMouseDown(e) {
+		if (!e.target || dragged_applet !== null || is_panning) return;
+
+		current_mouse_button = e.button;
+
+		const target = e.target;
+		const is_contenteditable =
+			target.isContentEditable || target.closest('[contenteditable="true"]');
+		// const is_drag_handle = target.hasAttribute("drag-handle"); // Don't know if I still want this
+
+		const is_super_down = e.metaKey || e.ctrlKey;
+
+		if (
+			this.getAttribute("motion") !== "idle" ||
+			target.tagName === "A" ||
+			target.tagName === "BUTTON" ||
+			target.tagName === "INPUT" ||
+			target.tagName === "TEXTAREA" ||
+			target.tagName === "SELECT" ||
+			is_contenteditable ||
+			(target.tagName === "IMG" && target.getAttribute("draggable") !== "false")
+		) {
+			if (is_super_down) e.preventDefault();
+		}
+
+		// Start resize interaction
+		if (is_super_down && current_mouse_button === RIGHT_BUTTON) {
+			e.preventDefault();
+
+			// Start resizing with right click
+			is_right_resize = true;
+			dragged_applet = this;
+
+			// Store initial dimensions and mouse position
+			resize_start_width = this.offsetWidth;
+			resize_start_height = this.offsetHeight;
+			resize_start_x = e.clientX;
+			resize_start_y = e.clientY;
+			resize_start_left = parseInt(this.style.left) || 0;
+			resize_start_top = parseInt(this.style.top) || 0;
+
+			// Determine which quadrant the click happened in
+			const applet_rect = this.getBoundingClientRect();
+			const click_x = e.clientX;
+			const click_y = e.clientY;
+
+			// Calculate relative position within the applet
+			const relative_x = (click_x - applet_rect.left) / applet_rect.width;
+			const relative_y = (click_y - applet_rect.top) / applet_rect.height;
+
+			// Determine quadrant (tl, tr, bl, br)
+			if (relative_x < 0.5) {
+				if (relative_y < 0.5) {
+					resize_quadrant = "tl"; // top-left
+				} else {
+					resize_quadrant = "bl"; // bottom-left
+				}
+			} else {
+				if (relative_y < 0.5) {
+					resize_quadrant = "tr"; // top-right
+				} else {
+					resize_quadrant = "br"; // bottom-right
+				}
+			}
+
+			// Set styling for resize operation
+			this.style.willChange = "width, height, left, top";
+		}
+		// Start drag interaction
+		else if (is_super_down && current_mouse_button === LEFT_BUTTON) {
+			e.preventDefault();
+
+			document.body.classList.add("is-dragging");
+			let x = Number(this.style.left.replace("px", ""));
+			let y = Number(this.style.top.replace("px", ""));
+
+			dragging_x = x;
+			dragging_y = y;
+			last_mouse_x = e.clientX;
+			last_mouse_y = e.clientY;
+
+			this.style.willChange = "filter, transform, left, top";
+
+			await finish();
+
+			this.style.left = "0";
+			this.style.top = "0";
+			this.setAttribute("motion", "elevated");
+			// I should take more care of the transform, rotate, scale values here...
+			// Z and scale are currently arbitrary and rotation is simply not there.
+			this.style.transform = `translate(${x}px, ${y}px) translateZ(0) scale(1.01)`;
+
+			dragged_applet = this;
+		}
+
+		// Add mousemove and mouseup events on mousedown
+		window.addEventListener("mousemove", handleAppletMouseMove);
+		window.addEventListener("mouseup", handleAppletMouseUp);
+	}
+
+	async function handleAppletMouseUp(e) {
+		window.removeEventListener("mousemove", handleAppletMouseMove);
+		window.removeEventListener("mouseup", handleAppletMouseUp);
+
+		if (!dragged_applet) return;
+
+		if (current_mouse_button === LEFT_BUTTON) {
+			document.body.classList.remove("is-dragging");
+
+			if (!e.shiftKey) {
+				dragged_applet.style.left = `${dragging_x}px`;
+				dragged_applet.style.top = `${dragging_y}px`;
+				dragged_applet.style.removeProperty("transform");
+				dragged_applet.style.removeProperty("will-change");
+				await finish();
+				dragged_applet.style.removeProperty("transition");
+				await finish();
+				dragged_applet.setAttribute("motion", "idle");
+			} else {
+				dragged_applet.style.removeProperty("will-change");
+			}
+		}
+		// Handle completion of right-click resize
+		else if (current_mouse_button === RIGHT_BUTTON && is_right_resize) {
+			// Clean up
+			is_resizing = false;
+			is_right_resize = false;
+			const ev = new CustomEvent("applet-resize-stop", { detail: { applet: dragged_applet } });
+			window.dispatchEvent(ev);
+			resize_quadrant = null;
+			dragged_applet.style.removeProperty("will-change");
+			dragged_applet.setAttribute("motion", "idle");
+			document.body.classList.remove("is-resizing");
+		}
+
+		dragged_applet = null;
+	}
+
+	async function handleAppletMouseMove(e) {
+		// Handle regular drag operation
+		if (current_mouse_button === LEFT_BUTTON) {
+			delta_x = (last_mouse_x - e.clientX) / current_scale;
+			delta_y = (last_mouse_y - e.clientY) / current_scale;
+			last_mouse_x = e.clientX;
+			last_mouse_y = e.clientY;
+
+			dragging_x = dragging_x - delta_x;
+			dragging_y = dragging_y - delta_y;
+
+			if (dragged_applet && !e.shiftKey) {
+				// I should take more care of the transform, rotate, scale values here...
+				// Z and scale are currently arbitrary and rotation is simply not there.
+				dragged_applet.style.transform = `translate(${dragging_x}px, ${dragging_y}px) translateZ(0) scale(1.01)`;
+			} else if (dragged_applet && e.shiftKey) {
+				dragged_applet.style.left = `${dragging_x}px`;
+				dragged_applet.style.top = `${dragging_y}px`;
+			}
+		}
+		// Handle right-click resize operation with quadrants
+		else if (current_mouse_button === RIGHT_BUTTON && is_right_resize && dragged_applet) {
+			// Calculate how much the mouse has moved since starting the resize
+			const dx = (e.clientX - resize_start_x) / current_scale;
+			const dy = (e.clientY - resize_start_y) / current_scale;
+
+			// Get computed style to respect min-width and min-height CSS properties
+			const computed_style = window.getComputedStyle(dragged_applet);
+			const css_min_width = parseFloat(computed_style.minWidth) || min_width;
+			const css_min_height = parseFloat(computed_style.minHeight) || min_height;
+
+			// Initialize new dimensions and position
+			let new_width = resize_start_width;
+			let new_height = resize_start_height;
+			let new_left = resize_start_left;
+			let new_top = resize_start_top;
+
+			// Apply changes based on which quadrant the resize started in
+			switch (resize_quadrant) {
+				case "br": // bottom-right
+					// Just adjust width and height
+					new_width = Math.max(css_min_width, resize_start_width + dx);
+					new_height = Math.max(css_min_height, resize_start_height + dy);
+					break;
+
+				case "bl": // bottom-left
+					// Adjust width (inversely) and height, and reposition left
+					const width_change_bl = Math.min(dx, resize_start_width - css_min_width);
+					new_width = Math.max(css_min_width, resize_start_width - dx);
+					new_height = Math.max(css_min_height, resize_start_height + dy);
+					new_left = resize_start_left + (resize_start_width - new_width);
+					break;
+
+				case "tr": // top-right
+					// Adjust width and height (inversely), and reposition top
+					new_width = Math.max(css_min_width, resize_start_width + dx);
+					new_height = Math.max(css_min_height, resize_start_height - dy);
+					new_top = resize_start_top + (resize_start_height - new_height);
+					break;
+
+				case "tl": // top-left
+					// Adjust width and height (both inversely), and reposition both
+					new_width = Math.max(css_min_width, resize_start_width - dx);
+					new_height = Math.max(css_min_height, resize_start_height - dy);
+					new_left = resize_start_left + (resize_start_width - new_width);
+					new_top = resize_start_top + (resize_start_height - new_height);
+					break;
+			}
+
+			// Apply the new dimensions and position
+			dragged_applet.style.width = `${new_width}px`;
+			dragged_applet.style.height = `${new_height}px`;
+			dragged_applet.style.left = `${new_left}px`;
+			dragged_applet.style.top = `${new_top}px`;
+
+			// Set state
+			if (!is_resizing) {
+				is_resizing = true;
+				const ev = new CustomEvent("applet-resize-start", {
+					detail: { applet: dragged_applet },
+				});
+				window.dispatchEvent(ev);
+				document.body.classList.add("is-resizing");
+				dragged_applet.setAttribute("motion", "resizing");
+			}
+		}
+	}
+
 	return registerCustomTag(`applet-${name}`, {
 		setup() {
-			// We can extract state from the applet wrapper html here like motion, tsid, etc
+			config.setup?.call(this);
 
 			this.resize_observer = null;
-
-			// Call setup last
-			config.setup?.call(this);
+			this.$on("contextmenu", preventContextMenu);
+			this.$on("mousedown", handleAppletMouseDown);
 		},
 		onconnected() {
-			// Update needed attributes for "motion", "tsid", position, etc.
-			// Should we await for this?
+			const attrs = {
+				instance: uniqueId(),
+				motion: "idle", // idle, elevated, resizing
+				// I think I need to change my approach to elevation because
+				// for multiplayer this wont work
+				//
+				// I think an approach where we just keep adding to the z-index
+				// and then eventually we clean up by moving it back to the smallest
+				// is probably the way to go since that shouldn't cause issues with
+				// keeping track of all the z-index values
+				style: `
+					position: absolute;
+					left: ${50000 /* get from "this" */}px;
+					top: ${50000 /* get from "this" */}px;
+					z-index: ${1 /* get from "this" */};
+					width: ${400 /* get from "this" */}px;
+					height: ${400 /* get from "this" */}px;
+					display: block;
+				`,
+			};
+
+			for (const [attr, value] of Object.entries(attrs)) {
+				// Resets existing attributes
+				this.setAttribute(attr, value);
+			}
+
 			config.hydrate?.call(this);
-			// Inject children. It will have callbacks that use data or simply use primitives on the tree it builds.
 
 			if (config.onresize) {
 				this.resize_observer = new ResizeObserver((entries) => {
@@ -492,3 +753,11 @@ export function registerAppletTag(name, config, ...children) {
 		},
 	});
 }
+
+useGlobalStyles(`
+	body.is-panning,
+	body.is-dragging,
+	body.is-resizing {
+		user-select: none;
+	}
+`);

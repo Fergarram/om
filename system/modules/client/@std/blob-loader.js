@@ -51,7 +51,7 @@ window.BlobLoader = {
 	settings: {
 		prefers_remote_modules: location.hostname === "localhost" ? true : false,
 		always_boot_from_petition: false,
-		autosave_snapshot_on_load_when_different_from_last: true,
+		autosave_snapshot_on_load_when_different_from_last: false,
 	},
 	lib: {}, // We can add external non-module libraries that need to be IIFEs and attach themselves to the
 	// transformers: {}, // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
@@ -1155,8 +1155,13 @@ window.BlobLoader = {
 		}
 
 		async function saveSnapshotToCache(tag = "") {
+			const snapshot_start = performance.now();
+
 			try {
+				const html_start = performance.now();
 				const html_content = await getDocumentOuterHtml(true);
+				const html_duration = performance.now() - html_start;
+
 				const timestamp = Date.now();
 
 				// Generate session_id with fallback for browsers without crypto.randomUUID
@@ -1169,10 +1174,6 @@ window.BlobLoader = {
 					session_id = `${timestamp}_${random_part}`;
 				}
 
-				const db = await openCache();
-				const transaction = db.transaction(["snapshots"], "readwrite");
-				const store = transaction.objectStore("snapshots");
-
 				const snapshot_entry = {
 					session_id: session_id,
 					tag: tag || `snapshot_${timestamp}`,
@@ -1181,14 +1182,32 @@ window.BlobLoader = {
 					document_title: document.title || "Untitled",
 				};
 
-				return new Promise((resolve, reject) => {
+				// Yield to browser before heavy IDB write
+				await finish();
+
+				const db_start = performance.now();
+				const db = await openCache();
+				const transaction = db.transaction(["snapshots"], "readwrite");
+				const store = transaction.objectStore("snapshots");
+
+				const result = await new Promise((resolve, reject) => {
 					const request = store.put(snapshot_entry);
 					request.onerror = () => reject(request.error);
 					request.onsuccess = () => {
+						const db_duration = performance.now() - db_start;
+						const total_duration = performance.now() - snapshot_start;
+
 						console.log(`Snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`);
+						console.log(`  HTML generation: ${html_duration.toFixed(2)}ms`);
+						console.log(`  IDB write: ${db_duration.toFixed(2)}ms`);
+						console.log(`  Total: ${total_duration.toFixed(2)}ms`);
+						console.log(`  Size: ${(html_content.length / 1024).toFixed(2)} KB`);
+
 						resolve(session_id);
 					};
 				});
+
+				return result;
 			} catch (error) {
 				console.warn("Failed to save snapshot:", error);
 				throw error;

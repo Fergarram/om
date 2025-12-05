@@ -433,3 +433,7 @@ export function cn(...classes) {
 		.filter(Boolean)
 		.join(" ");
 }
+
+export function isTrackpadDelta(delta) {
+
+}

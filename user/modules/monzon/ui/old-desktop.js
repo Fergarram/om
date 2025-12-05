@@ -162,7 +162,7 @@ export async function initializeDesktop(om_space) {
 
 	observer.observe(surface(), { childList: true });
 
-	onAppletPlace(handleAppleyPlacement);
+	onAppletPlace(handleAppletPlacement);
 
 	handleResize();
 
@@ -500,11 +500,15 @@ export async function placeApplet(applet, first_mount = false) {
 		applet.setAttribute("om-tsid", uuid);
 
 		if (!first_mount) {
-			addShadowClone(applet, uuid);
+			// Create shadow clone
+			const shadow_clone = document.createElement("div");
+			shadow_clone.style.position = "absolute";
+			shadow_clone.setAttribute("om-tsid", uuid);
+			shadow_root.appendChild(shadow_clone);
+			const new_z_index = shadow_root.children.length;
+			applet.style.zIndex = new_z_index;
 		}
 	}
-
-	if (!first_mount) save();
 }
 
 export async function removeApplet(applet) {
@@ -523,21 +527,6 @@ export function lift(tsid) {
 		win.style.zIndex = new_z_index;
 		order_change_callbacks.forEach((c) => c(win, new_z_index));
 	});
-}
-
-function save() {
-	// console.log("If we want to save the current applet layout");
-}
-
-function addShadowClone(win, id) {
-	const shadow_clone = document.createElement("div");
-	shadow_clone.style.position = "absolute";
-	shadow_clone.setAttribute("om-tsid", id);
-	shadow_root.appendChild(shadow_clone);
-	const new_z_index = shadow_root.children.length;
-	win.style.zIndex = new_z_index;
-	// Trigger z-index change callbacks
-	order_change_callbacks.forEach((c) => c(win, new_z_index));
 }
 
 function removeShadowClone(win) {
@@ -561,7 +550,7 @@ function removeShadowClone(win) {
 	}
 }
 
-async function handleAppleyPlacement(applet, first_mount = false) {
+async function handleAppletPlacement(applet, first_mount = false) {
 	if (!first_mount) {
 		await finish();
 		applet.setAttribute("om-motion", "idle");
