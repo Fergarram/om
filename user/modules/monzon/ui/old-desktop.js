@@ -168,18 +168,15 @@ export async function initializeDesktop(om_space) {
 
 	window.addEventListener("resize", handleResize);
 	window.addEventListener("keydown", handleGlobalKeydown);
-
 	desktop.addEventListener("wheel", desktopWheel, { passive: false });
 	desktop.addEventListener("scroll", desktopScroll);
 	surface().addEventListener("mousedown", surfaceMouseDown);
-
 	window.addEventListener("mouseleave", windowMouseOut);
 	window.addEventListener("mouseout", windowMouseOut);
-	// window.addEventListener("dblclick", windowDblClick);
+	window.addEventListener("dblclick", windowDblClick);
 	window.addEventListener("mousedown", windowMouseDown);
 	window.addEventListener("mouseup", windowMouseUp);
 	window.addEventListener("mousemove", windowMouseMove);
-
 	requestAnimationFrame(step);
 
 	scrollToCenter();

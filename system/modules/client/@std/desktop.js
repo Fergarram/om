@@ -1,6 +1,7 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
 import { isScrollable, finish } from "utils";
+import { initializeBackgroundCanvas } from "wallpaper";
 
 //
 // Config
@@ -15,7 +16,7 @@ const HANDLE_CONFIG = {
 const ZOOM_EVENT_DELAY = 150;
 const SCROLL_EVENT_DELAY = 150;
 
-const IS_TRACKPAD = true;
+const IS_TRACKPAD = false;
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 1;
@@ -31,7 +32,7 @@ let applet_initializers = {};
 let place_callbacks = [];
 let remove_callbacks = [];
 let order_change_callbacks = [];
-let superkeydown = false;
+let superkeydown = true;
 
 // Camera Controls
 let camera_x = 0;
@@ -87,10 +88,18 @@ export const Desktop = registerCustomTag("desktop-view", {
 	setup() {
 		this.shadow_map = null;
 	},
+
+	//
+	// Hydration for desktop
+	//
 	async onconnected() {
-		//
-		// Hydrate desktop setup
-		//
+		// Setting up the root element styles.
+		this.style.display = "flex";
+		this.style.position = "absolute";
+		this.style.top = "0";
+		this.style.left = "0";
+		this.style.width = "100%";
+		this.style.height = "100%";
 
 		const canvas_el =
 			this.querySelector("#desktop-canvas") ||
@@ -100,8 +109,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 					style: `
 						position: absolute;
 						width: 100%;
-						height: auto;
-						bottom: 0;
+						height: 100%;
 						flex-grow: 1;
 						overflow: hidden;
 					`,
@@ -124,6 +132,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 					},
 					div({
 						id: "desktop-surface",
+						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 						style: `
 							position: absolute;
 							transform-origin: 0 0;
@@ -143,6 +152,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 				div({
 					id: "applet-shadow-map",
 					style: `
+						width: 0;
+						height: 0;
 						pointer-events: none;
 						opacity: 0;
 					`,
@@ -156,6 +167,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		// Here we would deal with the WebGL wallpaper.
 		const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(desktop_el, canvas_el);
+
+		handleResize();
 
 		// Scroll to the center of the canvas. This may cause a jumping effect with async events so we might remove this.
 		scrollToCenter();
