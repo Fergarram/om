@@ -22,11 +22,10 @@ export const CalculatorApplet = registerAppletTag("calculator", {
 		// to prevent performance problems
 
 		// Starting position could be set here.
-		this.start_x = 50_000;
-		this.start_y = 50_000;
+		this.start_x = 3484 / 2;
+		this.start_y = 4772 / 2;
 		this.start_w = 300;
 		this.start_h = 80;
-		this.start_z = 1;
 	},
 	hydrate() {
 		// render can happen here via replacing or appending.
@@ -57,7 +56,7 @@ export const CalculatorApplet = registerAppletTag("calculator", {
 				},
 				$.icon({
 					name: "acute",
-					style: "font-size: 1.5rem"
+					style: "font-size: 1.5rem",
 				}),
 				"This is a calculator:\n",
 				$.span(
@@ -104,8 +103,6 @@ BlobLoader.addStyleModule(
 			gap: 1rem;
 		}
 	`,
-	{
-		notes: "Will override module when loaded.",
-	},
+	{},
 	{ override: true },
 );

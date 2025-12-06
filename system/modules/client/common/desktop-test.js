@@ -9,6 +9,9 @@ if (!document.querySelector("desktop-view")) {
 	document.body.appendChild(Desktop());
 	await finish();
 	mountApplet(CalculatorApplet());
+	mountApplet(CalculatorApplet());
+	mountApplet(CalculatorApplet());
+	mountApplet(CalculatorApplet());
 }
 
 // this is the main entry point module. this is where we load all the wanted applet modules and everything else.

@@ -1,6 +1,6 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
-import { isScrollable, finish, css, uniqueId, useGlobalStyles } from "utils";
+import { isScrollable, finish, css, uniqueId } from "utils";
 // import { initializeBackgroundCanvas } from "wallpaper";
 
 //
@@ -27,8 +27,8 @@ const SCROLL_EVENT_DELAY = 150;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 
-const SURFACE_WIDTH = 100_000;
-const SURFACE_HEIGHT = 100_000;
+const SURFACE_WIDTH = 3484;
+const SURFACE_HEIGHT = 4772;
 
 //
 // Desktop View (ustom element setup)
@@ -50,6 +50,7 @@ let zoom_level = 1;
 let is_zooming = false;
 let scroll_thumb_x = 0;
 let scroll_thumb_y = 0;
+let last_z_index = 0;
 
 const { div, main, canvas } = useTags();
 
@@ -107,7 +108,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 							transform: scale(1);
 							width: ${SURFACE_WIDTH}px;
 							height: ${SURFACE_HEIGHT}px;
-							background-image: url('https://d2w9rnfcy7mm78.cloudfront.net/41584958/original_1c6c86d6b39276ab6ffe0c736c99b8f9.jpg?1764893177?bc=0');
+							background-image: url('https://d2w9rnfcy7mm78.cloudfront.net/39159719/original_0c8869bdf8199507f764e8bde2492f8b.jpg?1756494517?bc=0');
 						`,
 					}),
 				),
@@ -440,7 +441,8 @@ let resize_start_top = 0;
 
 export function registerAppletTag(name, config) {
 	async function handleAppletMouseDown(e) {
-		if (!e.target || dragged_applet !== null || is_panning) return;
+		if (!e.target || e.target === e.currentTarget || dragged_applet !== null || is_panning)
+			return;
 
 		current_mouse_button = e.button;
 
@@ -674,10 +676,16 @@ export function registerAppletTag(name, config) {
 
 	return registerCustomTag(`applet-${name}`, {
 		setup() {
+			// Update last_z_index if this applet has a higher z-index
+			const current_z = parseInt(this.style.zIndex) || this.start_z;
+			if (current_z >= last_z_index) {
+				last_z_index = current_z + 1;
+			}
+
 			// Default starting dimensions and position
 			this.start_x = 0;
 			this.start_y = 0;
-			this.start_z = 0;
+			this.start_z = last_z_index++;
 			this.start_w = 0;
 			this.start_h = 0;
 
@@ -726,6 +734,7 @@ export function registerAppletTag(name, config) {
 		onattributechanged(name, old_value, new_value) {
 			if (name === "motion") {
 				if (new_value === MOTION_LIFT && old_value !== MOTION_LIFT) {
+					this.style.zIndex = last_z_index++;
 					config.onlift?.call(this);
 				} else if (new_value === MOTION_IDLE && old_value !== MOTION_IDLE) {
 					config.onplace?.call(this);
@@ -749,13 +758,34 @@ export function registerAppletTag(name, config) {
 // Global styles to prevent unwanted selection
 //
 
-useGlobalStyles(`
-	body.is-panning,
-	body.is-dragging,
-	body.is-resizing {
-		user-select: none;
-	}
-`);
+BlobLoader.addStyleModule(
+	"desktop-styles",
+	css`
+		body {
+			user-select: none;
+			background-color: black;
+		}
+
+		desktop-view [motion] > :first-child {
+			transition: box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+		}
+
+		desktop-view [motion="${MOTION_IDLE}"] > :first-child,
+		desktop-view [motion="${MOTION_RESIZE}"] > :first-child {
+			box-shadow:
+				0 1px 3px rgba(0, 0, 0, 0.12),
+				0 1px 2px rgba(0, 0, 0, 0.24);
+		}
+
+		desktop-view [motion="${MOTION_LIFT}"] > :first-child {
+			box-shadow:
+				0 19px 38px rgba(0, 0, 0, 0.3),
+				0 15px 12px rgba(0, 0, 0, 0.22);
+		}
+	`,
+	{},
+	{ override: true },
+);
 
 //
 // Utilities

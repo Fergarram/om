@@ -24,3 +24,12 @@ icon::before {
 	content: attr(name);
 	display: inline-block;
 }
+
+/*
+Here's an interesting idea.
+What if we make the icon element always create an image whenever it changes?
+This way we'd have a fallback form for them.
+Because media modules need JS to be available.
+or
+do base64 with the src? is this possible?
+*/
