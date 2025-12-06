@@ -71,7 +71,10 @@ window.BlobLoader = {
 
 		if (
 			(snapshot && always_boot_from_petition) ||
-			(snapshot && confirm("A snapshot will be loaded instead of main document.\n\nDo you want to continue?"))
+			(snapshot &&
+				confirm(
+					"A snapshot will be loaded instead of main document.\n\nDo you want to continue?",
+				))
 		) {
 			console.log(`Restoring snapshot: ${snapshot.tag} (${petition_to_restore})`);
 
@@ -131,7 +134,7 @@ window.BlobLoader = {
 		const remote_styles_hrefs = new Map();
 
 		const blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
-		const blob_style_tags = document.querySelectorAll(`style[type="blob-module"]`);
+		const blob_style_tags = document.querySelectorAll(`style[blob-module]`);
 		const blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
 
 		const blob_media_sources = new Map();
@@ -162,6 +165,7 @@ window.BlobLoader = {
 			getCachedMedia,
 			setCachedMedia,
 			deleteCachedMedia,
+			addStyleModule,
 			runNonExportingModuleScript,
 			clearBlobLoaderCache,
 			getDocumentOuterHtml,
@@ -226,7 +230,9 @@ window.BlobLoader = {
 
 			// Check for name collisions
 			if (blob_media_sources.has(media_name) || remote_media_hrefs.has(media_name)) {
-				console.warn(`Media name collision detected: "${media_name}" already exists. Skipping duplicate.`);
+				console.warn(
+					`Media name collision detected: "${media_name}" already exists. Skipping duplicate.`,
+				);
 				return;
 			}
 
@@ -251,7 +257,9 @@ window.BlobLoader = {
 				if (BlobLoader.settings.prefers_remote_modules) {
 					// Auto-update mode: fetch from remote first, fallback to cache
 					try {
-						console.log(`Fetching remote media "${media_name}" from ${remote_url} (auto-update mode)`);
+						console.log(
+							`Fetching remote media "${media_name}" from ${remote_url} (auto-update mode)`,
+						);
 						const response = await fetch(remote_url);
 						media_blob = await response.blob();
 
@@ -259,7 +267,10 @@ window.BlobLoader = {
 						await setCachedMedia(remote_url, media_blob);
 						console.log(`Updated cache for remote media "${media_name}"`);
 					} catch (fetch_error) {
-						console.warn(`Failed to fetch remote media "${media_name}", falling back to cache:`, fetch_error);
+						console.warn(
+							`Failed to fetch remote media "${media_name}", falling back to cache:`,
+							fetch_error,
+						);
 
 						// Fallback to cached version
 						const cached_media = await getCachedMedia(remote_url);
@@ -307,7 +318,9 @@ window.BlobLoader = {
 							blob_media_blobs.set(media_name, media_blob); // Use remote blob
 							blob_media_sources.set(media_name, remote_data_url); // Update source for saving
 						} else {
-							console.warn(`Remote and local content are different for media "${media_name}". Using local content.`);
+							console.warn(
+								`Remote and local content are different for media "${media_name}". Using local content.`,
+							);
 							// Convert local data URL to blob for consistency
 							const local_response = await fetch(local_data_url);
 							const local_blob = await local_response.blob();
@@ -334,7 +347,9 @@ window.BlobLoader = {
 				console.warn(`Failed to fetch remote media "${media_name}":`, error);
 				if (!blob_media_sources.has(media_name)) {
 					// Mark the link tag as disabled since we have no content
-					const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+					const link_tag = Array.from(blob_media_tags).find(
+						(tag) => tag.getAttribute("name") === media_name,
+					);
 					if (link_tag) {
 						link_tag.setAttribute("disabled", "");
 						console.log(`Marked media "${media_name}" as disabled (no content available)`);
@@ -353,7 +368,9 @@ window.BlobLoader = {
 			}
 
 			// Find the corresponding link tag
-			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+			const link_tag = Array.from(blob_media_tags).find(
+				(tag) => tag.getAttribute("name") === media_name,
+			);
 
 			// Skip if disabled
 			if (link_tag && link_tag.hasAttribute("disabled")) {
@@ -373,7 +390,9 @@ window.BlobLoader = {
 			blob_media_urls.set(media_name, blob_url);
 
 			// Update link tag
-			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+			const link_tag = Array.from(blob_media_tags).find(
+				(tag) => tag.getAttribute("name") === media_name,
+			);
 			if (link_tag) {
 				link_tag.removeAttribute("src");
 				link_tag.setAttribute("href", blob_url);
@@ -421,10 +440,21 @@ window.BlobLoader = {
 			const size_bytes = blob.size;
 
 			// Find the corresponding link tag to extract metadata
-			const link_tag = Array.from(blob_media_tags).find((tag) => tag.getAttribute("name") === media_name);
+			const link_tag = Array.from(blob_media_tags).find(
+				(tag) => tag.getAttribute("name") === media_name,
+			);
 
 			// Extract all additional attributes as metadata
-			const known_attrs = new Set(["name", "remote", "disabled", "blob", "href", "type", "source", "nodownload"]);
+			const known_attrs = new Set([
+				"name",
+				"remote",
+				"disabled",
+				"blob",
+				"href",
+				"type",
+				"source",
+				"nodownload",
+			]);
 			const metadata = {};
 
 			if (link_tag) {
@@ -454,8 +484,13 @@ window.BlobLoader = {
 			const style_module_name = style.getAttribute("name");
 
 			// Check for name collisions
-			if (blob_style_sources.has(style_module_name) || remote_styles_hrefs.has(style_module_name)) {
-				console.warn(`Style URL collision detected: "${style_module_name}" already exists. Skipping duplicate.`);
+			if (
+				blob_style_sources.has(style_module_name) ||
+				remote_styles_hrefs.has(style_module_name)
+			) {
+				console.warn(
+					`Style URL collision detected: "${style_module_name}" already exists. Skipping duplicate.`,
+				);
 				return;
 			}
 
@@ -490,7 +525,10 @@ window.BlobLoader = {
 						await setCachedModule(remote_url, remote_content);
 						console.log(`Updated cache for remote style from ${remote_url}`);
 					} catch (fetch_error) {
-						console.warn(`Failed to fetch remote style from "${remote_url}", falling back to cache:`, fetch_error);
+						console.warn(
+							`Failed to fetch remote style from "${remote_url}", falling back to cache:`,
+							fetch_error,
+						);
 
 						// Fallback to cached version
 						const cached_style = await getCachedModule(remote_url);
@@ -529,7 +567,9 @@ window.BlobLoader = {
 							);
 							blob_style_sources.set(style_name, remote_content); // Use remote content
 						} else {
-							console.warn(`Remote and local content are different for style "${remote_url}". Using local content.`);
+							console.warn(
+								`Remote and local content are different for style "${remote_url}". Using local content.`,
+							);
 							// Keep local content (no change needed)
 						}
 					}
@@ -543,7 +583,9 @@ window.BlobLoader = {
 				console.warn(`Failed to fetch remote style from "${remote_url}":`, error);
 				if (!blob_style_sources.has(style_name)) {
 					// Mark the style tag as disabled since we have no content
-					const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+					const style_tag = Array.from(blob_style_tags).find(
+						(tag) => tag.getAttribute("name") === style_name,
+					);
 					if (style_tag) {
 						style_tag.setAttribute("disabled", "");
 						console.log(`Marked style "${style_name}" as disabled (no content available)`);
@@ -557,7 +599,9 @@ window.BlobLoader = {
 		// Create blob URLs for all styles and update style tags
 		blob_style_sources.forEach((content, style_name) => {
 			// Find the corresponding style tag
-			const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+			const style_tag = Array.from(blob_style_tags).find(
+				(tag) => tag.getAttribute("name") === style_name,
+			);
 
 			// Skip if disabled
 			if (style_tag && style_tag.hasAttribute("disabled")) {
@@ -571,16 +615,29 @@ window.BlobLoader = {
 			const blob_url = URL.createObjectURL(style_blob);
 			blob_style_urls.set(style_name, blob_url);
 
-			if (style_tag && !blob_adopted_sheets.has(style_name)) {
-				const sheet = new CSSStyleSheet();
-				sheet.replaceSync(content);
-				document.adoptedStyleSheets.push(sheet);
-				blob_adopted_sheets.set(style_name, sheet);
+			if (style_tag) {
+				// Only create adopted stylesheet if there was a remote URL but no initial inline content
+				const had_remote = remote_styles_hrefs.has(style_name);
+				const had_initial_content = style_tag.textContent.trim().length > 0;
 
-				style_tag.textContent = "";
-				style_tag.setAttribute("blob", blob_url);
+				if (had_remote && !had_initial_content && !blob_adopted_sheets.has(style_name)) {
+					// This was fetched from remote, use adopted stylesheet
+					const sheet = new CSSStyleSheet();
+					sheet.replaceSync(content);
+					document.adoptedStyleSheets.push(sheet);
+					blob_adopted_sheets.set(style_name, sheet);
 
-				console.log(`Adopted stylesheet for ${style_name}`);
+					style_tag.textContent = "";
+					style_tag.setAttribute("blob", blob_url);
+
+					console.log(`Adopted stylesheet for ${style_name} (fetched from remote)`);
+				} else {
+					// Keep inline content in the style tag
+					style_tag.textContent = content;
+					style_tag.setAttribute("blob", blob_url);
+
+					console.log(`Kept inline stylesheet for ${style_name}`);
+				}
 			}
 		});
 
@@ -591,7 +648,9 @@ window.BlobLoader = {
 			const remote_url = remote_styles_hrefs.get(style_name) || null;
 
 			// Find the corresponding style tag to extract metadata
-			const style_tag = Array.from(blob_style_tags).find((tag) => tag.getAttribute("name") === style_name);
+			const style_tag = Array.from(blob_style_tags).find(
+				(tag) => tag.getAttribute("name") === style_name,
+			);
 
 			// Extract all additional attributes as metadata
 			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
@@ -637,7 +696,9 @@ window.BlobLoader = {
 
 			// Check for name collisions
 			if (blob_modules_sources.has(module_name) || remote_modules_hrefs.has(module_name)) {
-				console.warn(`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`);
+				console.warn(
+					`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`,
+				);
 				return;
 			}
 
@@ -669,7 +730,9 @@ window.BlobLoader = {
 				if (BlobLoader.settings.prefers_remote_modules) {
 					// Auto-update mode: fetch from remote first, fallback to cache
 					try {
-						console.log(`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`);
+						console.log(
+							`Fetching remote module "${module_name}" from ${remote_url} (auto-update mode)`,
+						);
 						const response = await fetch(remote_url);
 						remote_content = await response.text();
 
@@ -677,7 +740,10 @@ window.BlobLoader = {
 						await setCachedModule(remote_url, remote_content);
 						console.log(`Updated cache for remote module "${module_name}"`);
 					} catch (fetch_error) {
-						console.warn(`Failed to fetch remote module "${module_name}", falling back to cache:`, fetch_error);
+						console.warn(
+							`Failed to fetch remote module "${module_name}", falling back to cache:`,
+							fetch_error,
+						);
 
 						// Fallback to cached version
 						const cached_module = await getCachedModule(remote_url);
@@ -716,7 +782,9 @@ window.BlobLoader = {
 							);
 							blob_modules_sources.set(module_name, remote_content); // Use remote content
 						} else {
-							console.warn(`Remote and local content are different for module "${module_name}". Using local content.`);
+							console.warn(
+								`Remote and local content are different for module "${module_name}". Using local content.`,
+							);
 							// Keep local content (no change needed)
 						}
 					}
@@ -1059,7 +1127,7 @@ window.BlobLoader = {
 			});
 
 			// Process remote styles
-			const cloned_style_tags = doc_clone.querySelectorAll('style[type="blob-module"]');
+			const cloned_style_tags = doc_clone.querySelectorAll("style[blob-module]");
 			cloned_style_tags.forEach((style) => {
 				const style_name = style.getAttribute("name");
 				const remote_url = style.getAttribute("remote");
@@ -1128,7 +1196,10 @@ window.BlobLoader = {
 						console.log("Save operation was cancelled by user");
 						return;
 					} else {
-						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+						console.warn(
+							"Failed to save file using File System Access API, falling back to download:",
+							error,
+						);
 					}
 				}
 			}
@@ -1170,7 +1241,9 @@ window.BlobLoader = {
 					session_id = crypto.randomUUID();
 				} else {
 					// Fallback: timestamp + random string
-					const random_part = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+					const random_part =
+						Math.random().toString(36).substring(2, 15) +
+						Math.random().toString(36).substring(2, 15);
 					session_id = `${timestamp}_${random_part}`;
 				}
 
@@ -1197,7 +1270,9 @@ window.BlobLoader = {
 						const db_duration = performance.now() - db_start;
 						const total_duration = performance.now() - snapshot_start;
 
-						console.log(`Snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`);
+						console.log(
+							`Snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`,
+						);
 						console.log(`  HTML generation: ${html_duration.toFixed(2)}ms`);
 						console.log(`  IDB write: ${db_duration.toFixed(2)}ms`);
 						console.log(`  Total: ${total_duration.toFixed(2)}ms`);
@@ -1237,6 +1312,83 @@ window.BlobLoader = {
 				console.warn("Failed to delete cached module:", error);
 				throw error;
 			}
+		}
+
+		function addStyleModule(style_name, style_content, metadata = {}, options = {}) {
+			const { override = false } = options;
+
+			// Check if style already exists
+			if (blob_style_sources.has(style_name)) {
+				if (!override) {
+					console.warn(
+						`Style module "${style_name}" already exists. Use override option to replace it.`,
+					);
+					return false;
+				}
+
+				console.log(`Overriding existing style module "${style_name}"`);
+
+				// Remove existing style tag
+				const existing_style_tag = document.querySelector(
+					`style[blob-module][name="${style_name}"]`,
+				);
+				if (existing_style_tag) {
+					existing_style_tag.remove();
+				}
+
+				// Remove from adopted sheets if it exists there
+				if (blob_adopted_sheets.has(style_name)) {
+					const sheet = blob_adopted_sheets.get(style_name);
+					const sheet_index = document.adoptedStyleSheets.indexOf(sheet);
+					if (sheet_index !== -1) {
+						document.adoptedStyleSheets.splice(sheet_index, 1);
+					}
+					blob_adopted_sheets.delete(style_name);
+				}
+
+				// Revoke old blob URL
+				const old_blob_url = blob_style_urls.get(style_name);
+				if (old_blob_url) {
+					URL.revokeObjectURL(old_blob_url);
+				}
+			}
+
+			// Add to sources map
+			blob_style_sources.set(style_name, style_content);
+
+			// Create blob URL
+			const style_blob = new Blob([style_content], {
+				type: "text/css",
+			});
+			const blob_url = URL.createObjectURL(style_blob);
+			blob_style_urls.set(style_name, blob_url);
+
+			// Create style tag
+			const style_tag = document.createElement("style");
+			style_tag.setAttribute("blob-module", "");
+			style_tag.setAttribute("name", style_name);
+			style_tag.setAttribute("blob", blob_url);
+			style_tag.textContent = style_content;
+
+			// Add metadata attributes
+			Object.entries(metadata).forEach(([key, value]) => {
+				style_tag.setAttribute(key, value);
+			});
+
+			// Add to document head
+			document.head.appendChild(style_tag);
+
+			// Update metadata map
+			blob_style_map.set(style_name, {
+				name: style_name,
+				remote_url: null,
+				src_bytes: style_blob.size,
+				blob_url: blob_url,
+				metadata: metadata,
+			});
+
+			console.log(`Added new style module "${style_name}"`);
+			return true;
 		}
 
 		// @IMPR: Only thing that changes is the object store key so we can probably merge with deleteCachedModule
@@ -1301,7 +1453,14 @@ window.BlobLoader = {
 				const src = script.textContent.trim();
 
 				// Extract metadata
-				const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+				const known_attrs = new Set([
+					"name",
+					"remote",
+					"disabled",
+					"blob",
+					"type",
+					"nodownload",
+				]);
 				const metadata = {};
 				Array.from(script.attributes).forEach((attr) => {
 					if (!known_attrs.has(attr.name)) {
@@ -1318,7 +1477,7 @@ window.BlobLoader = {
 			});
 
 			// Extract style modules
-			const clone_style_tags = clone_doc.querySelectorAll('style[type="blob-module"]');
+			const clone_style_tags = clone_doc.querySelectorAll("style[blob-module]");
 			clone_style_tags.forEach((style) => {
 				const style_name = style.getAttribute("name");
 				const remote_url = style.getAttribute("remote") || null;
@@ -1326,7 +1485,14 @@ window.BlobLoader = {
 				const src = style.textContent.trim();
 
 				// Extract metadata
-				const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+				const known_attrs = new Set([
+					"name",
+					"remote",
+					"disabled",
+					"blob",
+					"type",
+					"nodownload",
+				]);
 				const metadata = {};
 				Array.from(style.attributes).forEach((attr) => {
 					if (!known_attrs.has(attr.name)) {
@@ -1351,7 +1517,16 @@ window.BlobLoader = {
 				const src = link.getAttribute("source") || null; // data URL
 
 				// Extract metadata
-				const known_attrs = new Set(["name", "remote", "disabled", "blob", "href", "type", "source", "nodownload"]);
+				const known_attrs = new Set([
+					"name",
+					"remote",
+					"disabled",
+					"blob",
+					"href",
+					"type",
+					"source",
+					"nodownload",
+				]);
 				const metadata = {};
 				Array.from(link.attributes).forEach((attr) => {
 					if (!known_attrs.has(attr.name)) {
@@ -1410,7 +1585,10 @@ window.BlobLoader = {
 						console.log("Save operation was cancelled by user");
 						return;
 					} else {
-						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+						console.warn(
+							"Failed to save file using File System Access API, falling back to download:",
+							error,
+						);
 					}
 				}
 			}
@@ -1447,7 +1625,9 @@ window.BlobLoader = {
 					session_id = crypto.randomUUID();
 				} else {
 					// Fallback: timestamp + random string
-					const random_part = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+					const random_part =
+						Math.random().toString(36).substring(2, 15) +
+						Math.random().toString(36).substring(2, 15);
 					session_id = `${timestamp}_${random_part}`;
 				}
 
@@ -1467,7 +1647,9 @@ window.BlobLoader = {
 					const request = store.put(snapshot_entry);
 					request.onerror = () => reject(request.error);
 					request.onsuccess = () => {
-						console.log(`Clone snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`);
+						console.log(
+							`Clone snapshot saved with session_id: ${session_id}, tag: ${snapshot_entry.tag}`,
+						);
 						resolve(session_id);
 					};
 				});
@@ -1547,8 +1729,14 @@ window.BlobLoader = {
 			// Update the module in the map with provided data, keeping existing values for unspecified fields
 			clone.modules.set(module_name, {
 				src: module_data.src !== undefined ? module_data.src : current_module.src,
-				remote_url: module_data.remote_url !== undefined ? module_data.remote_url : current_module.remote_url,
-				is_disabled: module_data.is_disabled !== undefined ? module_data.is_disabled : current_module.is_disabled,
+				remote_url:
+					module_data.remote_url !== undefined
+						? module_data.remote_url
+						: current_module.remote_url,
+				is_disabled:
+					module_data.is_disabled !== undefined
+						? module_data.is_disabled
+						: current_module.is_disabled,
 				metadata:
 					module_data.metadata !== undefined
 						? { ...current_module.metadata, ...module_data.metadata }
@@ -1641,7 +1829,7 @@ window.BlobLoader = {
 			});
 
 			const style = clone.doc.createElement("style");
-			style.setAttribute("type", "blob-module");
+			style.setAttribute("blob-module", "");
 			style.setAttribute("name", style_name);
 			style.textContent = style_data.src || "";
 
@@ -1692,8 +1880,14 @@ window.BlobLoader = {
 			// Update the style in the map with provided data, keeping existing values for unspecified fields
 			clone.styles.set(style_name, {
 				src: style_data.src !== undefined ? style_data.src : current_style.src,
-				remote_url: style_data.remote_url !== undefined ? style_data.remote_url : current_style.remote_url,
-				is_disabled: style_data.is_disabled !== undefined ? style_data.is_disabled : current_style.is_disabled,
+				remote_url:
+					style_data.remote_url !== undefined
+						? style_data.remote_url
+						: current_style.remote_url,
+				is_disabled:
+					style_data.is_disabled !== undefined
+						? style_data.is_disabled
+						: current_style.is_disabled,
 				metadata:
 					style_data.metadata !== undefined
 						? { ...current_style.metadata, ...style_data.metadata }
@@ -1701,7 +1895,7 @@ window.BlobLoader = {
 			});
 
 			// Find and update the corresponding style tag in the cloned document
-			const style_tags = clone.doc.querySelectorAll('style[type="blob-module"]');
+			const style_tags = clone.doc.querySelectorAll("style[blob-module]");
 			for (const style of style_tags) {
 				if (style.getAttribute("name") === style_name) {
 					// Update textContent if src was provided
@@ -1744,7 +1938,9 @@ window.BlobLoader = {
 			}
 
 			// This shouldn't happen if the clone is properly synchronized
-			console.warn(`Style module "${style_name}" was in map but style tag not found in clone DOM`);
+			console.warn(
+				`Style module "${style_name}" was in map but style tag not found in clone DOM`,
+			);
 			return false;
 		}
 
@@ -1758,7 +1954,7 @@ window.BlobLoader = {
 			clone.styles.delete(style_name);
 
 			// Find and remove the corresponding style tag from the cloned document
-			const style_tags = clone.doc.querySelectorAll('style[type="blob-module"]');
+			const style_tags = clone.doc.querySelectorAll("style[blob-module]");
 			for (const style of style_tags) {
 				if (style.getAttribute("name") === style_name) {
 					style.remove();
@@ -1768,7 +1964,9 @@ window.BlobLoader = {
 			}
 
 			// This shouldn't happen if the clone is properly synchronized
-			console.warn(`Style module "${style_name}" was in map but style tag not found in clone DOM`);
+			console.warn(
+				`Style module "${style_name}" was in map but style tag not found in clone DOM`,
+			);
 			return false;
 		}
 
@@ -1840,8 +2038,14 @@ window.BlobLoader = {
 			// Update the media in the map with provided data, keeping existing values for unspecified fields
 			clone.media.set(media_name, {
 				src: media_data.src !== undefined ? media_data.src : current_media.src,
-				remote_url: media_data.remote_url !== undefined ? media_data.remote_url : current_media.remote_url,
-				is_disabled: media_data.is_disabled !== undefined ? media_data.is_disabled : current_media.is_disabled,
+				remote_url:
+					media_data.remote_url !== undefined
+						? media_data.remote_url
+						: current_media.remote_url,
+				is_disabled:
+					media_data.is_disabled !== undefined
+						? media_data.is_disabled
+						: current_media.is_disabled,
 				metadata:
 					media_data.metadata !== undefined
 						? { ...current_media.metadata, ...media_data.metadata }
@@ -1896,7 +2100,9 @@ window.BlobLoader = {
 			}
 
 			// This shouldn't happen if the clone is properly synchronized
-			console.warn(`Media module "${media_name}" was in map but link tag not found in clone DOM`);
+			console.warn(
+				`Media module "${media_name}" was in map but link tag not found in clone DOM`,
+			);
 			return false;
 		}
 
@@ -1920,7 +2126,9 @@ window.BlobLoader = {
 			}
 
 			// This shouldn't happen if the clone is properly synchronized
-			console.warn(`Media module "${media_name}" was in map but link tag not found in clone DOM`);
+			console.warn(
+				`Media module "${media_name}" was in map but link tag not found in clone DOM`,
+			);
 			return false;
 		}
 	}
@@ -2041,10 +2249,11 @@ window.BlobLoader = {
 			}
 
 			const html_content = snapshot.html_content;
-			const suggested_filename = `${snapshot.document_title || snapshot.tag || "snapshot"}.html`.replace(
-				/[^a-z0-9_\-\.]/gi,
-				"_",
-			);
+			const suggested_filename =
+				`${snapshot.document_title || snapshot.tag || "snapshot"}.html`.replace(
+					/[^a-z0-9_\-\.]/gi,
+					"_",
+				);
 
 			// Check if File System Access API is available
 			if (window.showSaveFilePicker) {
@@ -2074,7 +2283,10 @@ window.BlobLoader = {
 						console.log("Save operation was cancelled by user");
 						return;
 					} else {
-						console.warn("Failed to save file using File System Access API, falling back to download:", error);
+						console.warn(
+							"Failed to save file using File System Access API, falling back to download:",
+							error,
+						);
 					}
 				}
 			}
@@ -2122,7 +2334,9 @@ window.BlobLoader = {
 
 			// snapshots are already sorted by timestamp descending (newest first)
 			target_session_id = snapshots[0].session_id;
-			console.log(`No session_id provided, using most recent snapshot: "${snapshots[0].tag}" (${target_session_id})`);
+			console.log(
+				`No session_id provided, using most recent snapshot: "${snapshots[0].tag}" (${target_session_id})`,
+			);
 		}
 
 		// Verify the snapshot exists before setting it for boot

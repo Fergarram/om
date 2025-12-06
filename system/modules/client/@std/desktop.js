@@ -1,10 +1,10 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
 import { isScrollable, finish, css, uniqueId, useGlobalStyles } from "utils";
-import { initializeBackgroundCanvas } from "wallpaper";
+// import { initializeBackgroundCanvas } from "wallpaper";
 
 //
-// Config
+// Constants
 //
 
 const LEFT_BUTTON = 0;
@@ -13,11 +13,13 @@ const RIGHT_BUTTON = 2;
 const BACK_BUTTON = 3;
 const FORWARD_BUTTON = 4;
 
-const HANDLE_CONFIG = {
-	EDGE_SIZE: 12,
-	CORNER_SIZE: 12,
-	OFFSET: -6,
-};
+const MOTION_IDLE = "idle";
+const MOTION_LIFT = "lift";
+const MOTION_RESIZE = "resize";
+
+//
+// Config
+//
 
 const ZOOM_EVENT_DELAY = 150;
 const SCROLL_EVENT_DELAY = 150;
@@ -52,29 +54,24 @@ let scroll_thumb_y = 0;
 const { div, main, canvas } = useTags();
 
 export const Desktop = registerCustomTag("desktop-view", {
-	setup() {
-		this.shadow_map = null;
-	},
-
 	//
 	// Hydration for desktop
 	//
 	async onconnected() {
-		// Setting up the root element styles.
+		// By default the desktop element places itself as follows:
 		this.style.display = "flex";
-		this.style.position = "absolute";
-		this.style.top = "0";
-		this.style.left = "0";
-		this.style.width = "100%";
-		this.style.height = "100%";
+		// this.style.position = "relative";
+		// this.style.top = "0";
+		// this.style.left = "0";
+		this.style.width = "100vw";
+		this.style.height = "100vh";
 
 		const canvas_el =
-			this.querySelector("#desktop-canvas") ||
+			this.querySelector("canvas") ||
 			this.appendChild(
 				// @TODO: This canvas needs a fallback image for when not available.
 				// The wallpaper should deal with this fallback somehow.
 				canvas({
-					id: "desktop-canvas",
 					style: `
 						position: absolute;
 						width: 100%;
@@ -86,22 +83,22 @@ export const Desktop = registerCustomTag("desktop-view", {
 			);
 
 		const desktop_el =
-			this.querySelector("#desktop") ||
+			this.querySelector("main") ||
 			this.appendChild(
 				main(
 					{
-						id: "desktop",
 						style: css`
 							position: relative;
 							width: 100%;
 							height: auto;
 							flex-grow: 1;
 							/* @TODO: overflow scroll is NO JS fallback, we need a fallback */
+							/*        Maybe via a CSS var that is inlined via module and */
+							/*        overwritten at runtime? */
 							overflow: hidden;
 						`,
 					},
 					div({
-						id: "desktop-surface",
 						// still not sure if I need to set this
 						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 						style: `
@@ -110,6 +107,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 							transform: scale(1);
 							width: ${SURFACE_WIDTH}px;
 							height: ${SURFACE_HEIGHT}px;
+							background-image: url('https://d2w9rnfcy7mm78.cloudfront.net/41584958/original_1c6c86d6b39276ab6ffe0c736c99b8f9.jpg?1764893177?bc=0');
 						`,
 					}),
 				),
@@ -117,30 +115,14 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		const surface_el = desktop_el.firstElementChild;
 
-		const shadow_map_el =
-			this.querySelector("#applet-shadow-map") ||
-			this.appendChild(
-				div({
-					id: "applet-shadow-map",
-					style: `
-						width: 0;
-						height: 0;
-						pointer-events: none;
-						opacity: 0;
-					`,
-				}),
-			);
-
-		this.shadow_map = shadow_map_el.attachShadow({ mode: "open" });
-
 		// Let's wait for the browser to finish the current queue of actions.
 		await finish();
 
 		// Here we would deal with the WebGL wallpaper.
-		const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(
-			desktop_el,
-			canvas_el,
-		);
+		// const { drawWallpaper, resizeCanvas } = await initializeBackgroundCanvas(
+		// 	desktop_el,
+		// 	canvas_el,
+		// );
 
 		handleResize();
 
@@ -165,8 +147,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 		window.addEventListener("mousemove", windowMouseMove);
 
 		function handleResize() {
-			resizeCanvas();
-			drawWallpaper(camera_x, camera_y, current_scale);
+			// resizeCanvas();
+			// drawWallpaper(camera_x, camera_y, current_scale);
 		}
 
 		async function handleGlobalKeydown(e) {
@@ -408,7 +390,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 			updateSurfaceScale();
 
 			// Draw the wallpaper with the current scroll and zoom
-			drawWallpaper(camera_x, camera_y, current_scale);
+			// drawWallpaper(camera_x, camera_y, current_scale);
 
 			requestAnimationFrame(step);
 		}
@@ -443,15 +425,10 @@ let delta_y = 0;
 let dragged_applet = null;
 let dragging_x = 0;
 let dragging_y = 0;
-let last_width = 0;
-let last_height = 0;
-let last_left = 0;
-let last_top = 0;
 let current_mouse_button = null;
 let min_width = 10;
 let min_height = 10;
 let is_resizing = false;
-let resize_edge = null;
 let is_right_resize = false;
 let resize_start_width = 0;
 let resize_start_height = 0;
@@ -461,15 +438,7 @@ let resize_quadrant = null;
 let resize_start_left = 0;
 let resize_start_top = 0;
 
-export function registerAppletTag(name, config, ...children) {
-	function preventContextMenu(e) {
-		if ((e.metaKey || e.ctrlKey) && e.button === 2) {
-			e.preventDefault();
-			return false;
-		}
-		return true;
-	}
-
+export function registerAppletTag(name, config) {
 	async function handleAppletMouseDown(e) {
 		if (!e.target || dragged_applet !== null || is_panning) return;
 
@@ -478,12 +447,11 @@ export function registerAppletTag(name, config, ...children) {
 		const target = e.target;
 		const is_contenteditable =
 			target.isContentEditable || target.closest('[contenteditable="true"]');
-		// const is_drag_handle = target.hasAttribute("drag-handle"); // Don't know if I still want this
 
 		const is_super_down = e.metaKey || e.ctrlKey;
 
 		if (
-			this.getAttribute("motion") !== "idle" ||
+			this.getAttribute("motion") !== MOTION_IDLE ||
 			target.tagName === "A" ||
 			target.tagName === "BUTTON" ||
 			target.tagName === "INPUT" ||
@@ -557,7 +525,7 @@ export function registerAppletTag(name, config, ...children) {
 
 			this.style.left = "0";
 			this.style.top = "0";
-			this.setAttribute("motion", "elevated");
+			this.setAttribute("motion", MOTION_LIFT);
 			// I should take more care of the transform, rotate, scale values here...
 			// Z and scale are currently arbitrary and rotation is simply not there.
 			this.style.transform = `translate(${x}px, ${y}px) translateZ(0) scale(1.01)`;
@@ -587,7 +555,7 @@ export function registerAppletTag(name, config, ...children) {
 				await finish();
 				dragged_applet.style.removeProperty("transition");
 				await finish();
-				dragged_applet.setAttribute("motion", "idle");
+				dragged_applet.setAttribute("motion", MOTION_IDLE);
 			} else {
 				dragged_applet.style.removeProperty("will-change");
 			}
@@ -601,7 +569,7 @@ export function registerAppletTag(name, config, ...children) {
 			window.dispatchEvent(ev);
 			resize_quadrant = null;
 			dragged_applet.style.removeProperty("will-change");
-			dragged_applet.setAttribute("motion", "idle");
+			dragged_applet.setAttribute("motion", MOTION_IDLE);
 			document.body.classList.remove("is-resizing");
 		}
 
@@ -691,13 +659,29 @@ export function registerAppletTag(name, config, ...children) {
 				});
 				window.dispatchEvent(ev);
 				document.body.classList.add("is-resizing");
-				dragged_applet.setAttribute("motion", "resizing");
+				dragged_applet.setAttribute("motion", MOTION_RESIZE);
 			}
 		}
 	}
 
+	function preventContextMenu(e) {
+		if ((e.metaKey || e.ctrlKey) && e.button === 2) {
+			e.preventDefault();
+			return false;
+		}
+		return true;
+	}
+
 	return registerCustomTag(`applet-${name}`, {
 		setup() {
+			// Default starting dimensions and position
+			this.start_x = 0;
+			this.start_y = 0;
+			this.start_z = 0;
+			this.start_w = 0;
+			this.start_h = 0;
+
+			// Starting values could be overwritten here
 			config.setup?.call(this);
 
 			this.resize_observer = null;
@@ -705,34 +689,29 @@ export function registerAppletTag(name, config, ...children) {
 			this.$on("mousedown", handleAppletMouseDown);
 		},
 		onconnected() {
+			// Configure applet element attributes
 			const attrs = {
 				instance: uniqueId(),
-				motion: "idle", // idle, elevated, resizing
-				// I think I need to change my approach to elevation because
-				// for multiplayer this wont work
-				//
-				// I think an approach where we just keep adding to the z-index
-				// and then eventually we clean up by moving it back to the smallest
-				// is probably the way to go since that shouldn't cause issues with
-				// keeping track of all the z-index values
+				motion: MOTION_IDLE,
 				style: `
-					position: absolute;
-					left: ${50000 /* get from "this" */}px;
-					top: ${50000 /* get from "this" */}px;
-					z-index: ${1 /* get from "this" */};
-					width: ${400 /* get from "this" */}px;
-					height: ${400 /* get from "this" */}px;
 					display: block;
+					position: absolute;
+					left: ${this.style.left || this.start_x + "px"};
+					top: ${this.style.top || this.start_y + "px"};
+					z-index: ${this.style.zIndex || this.start_z};
+					width: ${this.style.width || this.start_w + "px"};
+					height: ${this.style.height || this.start_h + "px"};
 				`,
 			};
 
 			for (const [attr, value] of Object.entries(attrs)) {
-				// Resets existing attributes
 				this.setAttribute(attr, value);
 			}
 
+			// Run hydration code
 			config.hydrate?.call(this);
 
+			// Setup applet resize observer
 			if (config.onresize) {
 				this.resize_observer = new ResizeObserver((entries) => {
 					for (const entry of entries) {
@@ -742,6 +721,18 @@ export function registerAppletTag(name, config, ...children) {
 
 				this.resize_observer.observe(this);
 			}
+		},
+		attrs: ["motion"],
+		onattributechanged(name, old_value, new_value) {
+			if (name === "motion") {
+				if (new_value === MOTION_LIFT && old_value !== MOTION_LIFT) {
+					config.onlift?.call(this);
+				} else if (new_value === MOTION_IDLE && old_value !== MOTION_IDLE) {
+					config.onplace?.call(this);
+				}
+			}
+
+			config.onattributechanged?.call(this, name, old_value, new_value);
 		},
 		ondisconnected() {
 			if (this.resize_observer) {
@@ -754,6 +745,10 @@ export function registerAppletTag(name, config, ...children) {
 	});
 }
 
+//
+// Global styles to prevent unwanted selection
+//
+
 useGlobalStyles(`
 	body.is-panning,
 	body.is-dragging,
@@ -761,3 +756,12 @@ useGlobalStyles(`
 		user-select: none;
 	}
 `);
+
+//
+// Utilities
+//
+
+export function mountApplet(applet_el) {
+	const surface_el = document.querySelector("desktop-view > main > div");
+	surface_el.appendChild(applet_el);
+}

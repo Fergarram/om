@@ -1,4 +1,4 @@
-import { Desktop } from "desktop";
+import { Desktop, mountApplet } from "desktop";
 import { CalculatorApplet } from "calculator";
 
 //
@@ -6,10 +6,9 @@ import { CalculatorApplet } from "calculator";
 //
 
 if (!document.querySelector("desktop-view")) {
-	const root_el = Desktop();
-	document.body.appendChild(root_el);
+	document.body.appendChild(Desktop());
 	await finish();
-	root_el.querySelector("#desktop-surface").appendChild(CalculatorApplet());
+	mountApplet(CalculatorApplet());
 }
 
 // this is the main entry point module. this is where we load all the wanted applet modules and everything else.
