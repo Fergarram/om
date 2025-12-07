@@ -101,6 +101,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 						`,
 					},
 					div({
+						id: "surface",
 						// still not sure if I need to set this
 						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 						style: `
@@ -109,7 +110,6 @@ export const Desktop = registerCustomTag("desktop-view", {
 							transform: scale(1);
 							width: ${SURFACE_WIDTH}px;
 							height: ${SURFACE_HEIGHT}px;
-							background-image: url('https://d2w9rnfcy7mm78.cloudfront.net/39159719/original_0c8869bdf8199507f764e8bde2492f8b.jpg?1756494517?bc=0');
 						`,
 					}),
 				),
@@ -841,6 +841,16 @@ BlobLoader.addStyleModule(
 			box-shadow:
 				0 19px 38px rgba(0, 0, 0, 0.3),
 				0 15px 12px rgba(0, 0, 0, 0.22);
+		}
+
+		#surface {
+			background-image: var(--BM-grid-svg-light);
+		}
+
+		@media (prefers-color-scheme: dark) {
+			#surface {
+				background-image: var(--BM-grid-svg-dark);
+			}
 		}
 	`,
 	{},

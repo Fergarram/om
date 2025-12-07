@@ -22,9 +22,9 @@ export const Ticket = registerAppletTag(APPLET_NAME, {
 		this.start_x = 50_000;
 		this.start_y = 50_000;
 		this.start_w = 300;
-		this.start_h = 80;
 	},
 	hydrate() {
+		this.style.height = "fit-content";
 		const applet_el = $.div({
 			contenteditable: true,
 			innerHTML: this.querySelector("[contenteditable]")?.innerHTML || "start typing here",
@@ -53,7 +53,7 @@ BlobLoader.addStyleModule(
 	"applet-" + APPLET_NAME,
 	css`
 		applet-${APPLET_NAME} > div {
-			position: absolute;
+			position: relative;
 			width: 100%;
 			height: 100%;
 			background: white;
