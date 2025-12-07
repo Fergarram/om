@@ -27,8 +27,8 @@ const SCROLL_EVENT_DELAY = 150;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 
-const SURFACE_WIDTH = 3484;
-const SURFACE_HEIGHT = 4772;
+const SURFACE_WIDTH = 100_000;
+const SURFACE_HEIGHT = 100_000;
 
 //
 // Desktop View (ustom element setup)
@@ -51,6 +51,7 @@ let is_zooming = false;
 let scroll_thumb_x = 0;
 let scroll_thumb_y = 0;
 let last_z_index = 0;
+let frame_count = 0;
 
 const { div, main, canvas } = useTags();
 
@@ -67,18 +68,18 @@ export const Desktop = registerCustomTag("desktop-view", {
 		this.style.width = "100vw";
 		this.style.height = "100vh";
 
-		const canvas_el =
-			this.querySelector("canvas") ||
+		const back_canvas_el =
+			this.querySelector("canvas[layer='back']") ||
 			this.appendChild(
-				// @TODO: This canvas needs a fallback image for when not available.
-				// The wallpaper should deal with this fallback somehow.
 				canvas({
+					layer: "back",
 					style: `
 						position: absolute;
 						width: 100%;
 						height: 100%;
 						flex-grow: 1;
 						overflow: hidden;
+						pointer-events: none;
 					`,
 				}),
 			);
@@ -115,6 +116,22 @@ export const Desktop = registerCustomTag("desktop-view", {
 			);
 
 		const surface_el = desktop_el.firstElementChild;
+
+		const front_canvas_el =
+			this.querySelector("canvas[layer='front']") ||
+			this.appendChild(
+				canvas({
+					layer: "front",
+					style: `
+						position: absolute;
+						width: 100%;
+						height: 100%;
+						flex-grow: 1;
+						overflow: hidden;
+						pointer-events: none;
+					`,
+				}),
+			);
 
 		// Let's wait for the browser to finish the current queue of actions.
 		await finish();
@@ -393,6 +410,14 @@ export const Desktop = registerCustomTag("desktop-view", {
 			// Draw the wallpaper with the current scroll and zoom
 			// drawWallpaper(camera_x, camera_y, current_scale);
 
+			// Check periodically if we should normalize
+			if (frame_count === undefined) frame_count = 0;
+			// Every 10 seconds
+			if (++frame_count >= 60 * 10) {
+				frame_count = 0;
+				normalizeZIndexes();
+			}
+
 			requestAnimationFrame(step);
 		}
 
@@ -411,6 +436,41 @@ export const Desktop = registerCustomTag("desktop-view", {
 		function updateSurfaceScale() {
 			surface_el.style.transform = `scale(${current_scale})`;
 			zoom_level = current_scale;
+		}
+
+		function normalizeZIndexes() {
+			const all_applets = document.querySelectorAll("[motion]");
+
+			if (all_applets.length === 0) return;
+
+			// Check if all applets are idle
+			const all_idle = Array.from(all_applets).every(
+				(applet) => applet.getAttribute("motion") === MOTION_IDLE,
+			);
+
+			if (!all_idle) return;
+
+			// Find minimum z-index
+			let min_z = Infinity;
+			all_applets.forEach((applet) => {
+				const z = parseInt(applet.style.zIndex) || 0;
+				if (z < min_z) {
+					min_z = z;
+				}
+			});
+
+			// If minimum is already low enough, no need to normalize
+			if (min_z <= 1) return;
+
+			// Subtract minimum from all z-indexes
+			all_applets.forEach((applet) => {
+				const current_z = parseInt(applet.style.zIndex) || 0;
+				applet.style.zIndex = current_z - min_z + 1;
+			});
+
+			// Update last_z_index to reflect the new maximum
+			last_z_index =
+				Math.max(...Array.from(all_applets).map((a) => parseInt(a.style.zIndex) || 0)) + 1;
 		}
 	},
 });
@@ -767,7 +827,7 @@ BlobLoader.addStyleModule(
 		}
 
 		desktop-view [motion] > :first-child {
-			transition: box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+			transition: box-shadow 120ms cubic-bezier(0.25, 0.8, 0.25, 1);
 		}
 
 		desktop-view [motion="${MOTION_IDLE}"] > :first-child,
