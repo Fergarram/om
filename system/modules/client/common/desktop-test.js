@@ -1,5 +1,6 @@
-import { Desktop, mountApplet } from "desktop";
+import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
 import { Ticket } from "ticket";
+import { isUserTyping } from "utils";
 
 //
 // Mount new destkop element if not found
@@ -9,10 +10,17 @@ if (!document.querySelector("desktop-view")) {
 	document.body.appendChild(Desktop());
 	await finish();
 	mountApplet(Ticket());
+
 	// mountApplet(Ticket());
 	// mountApplet(Ticket());
 	// mountApplet(Ticket());
 }
+
+window.addEventListener("keydown", (e) => {
+	if (e.key === " " && !isUserTyping()) {
+		translateCameraCenterSmooth(50000, 50000, 1, 1000);
+	}
+});
 
 // this is the main entry point module. this is where we load all the wanted applet modules and everything else.
 //

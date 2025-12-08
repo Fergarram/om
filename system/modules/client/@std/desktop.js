@@ -52,6 +52,21 @@ let scroll_thumb_x = 0;
 let scroll_thumb_y = 0;
 let last_z_index = 0;
 let frame_count = 0;
+let desktop_el = null;
+let viewport_el = null;
+let surface_el = null;
+let front_canvas_el = null;
+let back_canvas_el = null;
+let camera_animation_start_time = null;
+let camera_animation_start_scale = null;
+let camera_animation_target_scale = null;
+let camera_animation_duration = null;
+let camera_animation_ease_callback = null;
+let camera_animation_start_world_x = null;
+let camera_animation_start_world_y = null;
+let camera_animation_target_world_x = null;
+let camera_animation_target_world_y = null;
+let is_animating_camera = false;
 
 const { div, main, canvas } = useTags();
 
@@ -60,6 +75,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 	// Hydration for desktop
 	//
 	async onconnected() {
+		desktop_el = this;
+
 		// By default the desktop element places itself as follows:
 		this.style.display = "flex";
 		// this.style.position = "relative";
@@ -68,7 +85,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 		this.style.width = "100vw";
 		this.style.height = "100vh";
 
-		const back_canvas_el =
+		back_canvas_el =
 			this.querySelector("canvas[layer='back']") ||
 			this.appendChild(
 				canvas({
@@ -84,7 +101,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 				}),
 			);
 
-		const desktop_el =
+		viewport_el =
 			this.querySelector("main") ||
 			this.appendChild(
 				main(
@@ -115,9 +132,9 @@ export const Desktop = registerCustomTag("desktop-view", {
 				),
 			);
 
-		const surface_el = desktop_el.firstElementChild;
+		surface_el = viewport_el.firstElementChild;
 
-		const front_canvas_el =
+		front_canvas_el =
 			this.querySelector("canvas[layer='front']") ||
 			this.appendChild(
 				canvas({
@@ -141,29 +158,29 @@ export const Desktop = registerCustomTag("desktop-view", {
 		// 	desktop_el,
 		// 	canvas_el,
 		// );
+		// Once JS is loaded, disable native scrolling
+		viewport_el.style.overflow = "hidden";
 
 		handleResize();
 
-		// Scroll to the center of the canvas. This may cause a jumping
-		// effect with async events so we might remove this.
-		const current_camera_x = this.getAttribute("camera-x");
-		const current_camera_y = this.getAttribute("camera-y");
-		const current_camera_scale = this.getAttribute("camera-scale");
+		// Initialize camera position
+		const current_camera_x = viewport_el.getAttribute("camera-x");
+		const current_camera_y = viewport_el.getAttribute("camera-y");
+		const current_camera_scale = viewport_el.getAttribute("camera-scale");
 
 		if (current_camera_x === null || current_camera_y === null || current_camera_scale === null) {
 			scrollToCenter();
 		} else {
-			desktop_el.scrollTo(current_camera_x, current_camera_y);
+			camera_x = parseFloat(current_camera_x);
+			camera_y = parseFloat(current_camera_y);
+			current_scale = parseFloat(current_camera_scale) || 1;
 		}
 
 		//
 		// Setup event listeners
 		//
 
-		desktop_el.addEventListener("wheel", desktopWheel, { passive: false });
-		desktop_el.addEventListener("scroll", desktopScroll);
-		surface_el.addEventListener("mousedown", surfaceMouseDown);
-
+		viewport_el.addEventListener("wheel", desktopWheel, { passive: false });
 		window.addEventListener("resize", handleResize);
 		window.addEventListener("keydown", handleGlobalKeydown);
 		window.addEventListener("mouseleave", windowMouseOut);
@@ -172,6 +189,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 		window.addEventListener("mouseup", windowMouseUp);
 		window.addEventListener("mousemove", windowMouseMove);
 
+		surface_el.addEventListener("mousedown", surfaceMouseDown);
+
 		function handleResize() {
 			// resizeCanvas();
 			// drawWallpaper(camera_x, camera_y, current_scale);
@@ -179,15 +198,13 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		async function handleGlobalKeydown(e) {
 			if (e.ctrlKey || e.metaKey) {
-				// Store current scroll position and viewport dimensions
-				const prev_scroll_x = desktop_el.scrollLeft;
-				const prev_scroll_y = desktop_el.scrollTop;
-				const viewport_width = desktop_el.offsetWidth;
-				const viewport_height = desktop_el.offsetHeight;
+				// Get viewport dimensions
+				const viewport_width = viewport_el.offsetWidth;
+				const viewport_height = viewport_el.offsetHeight;
 
-				// Calculate center point before scale change
-				const center_x = (prev_scroll_x + viewport_width / 2) / current_scale;
-				const center_y = (prev_scroll_y + viewport_height / 2) / current_scale;
+				// Calculate center point in world coordinates before scale change
+				const center_world_x = (camera_x + viewport_width / 2) / current_scale;
+				const center_world_y = (camera_y + viewport_height / 2) / current_scale;
 
 				if (e.key === "=") {
 					e.preventDefault();
@@ -205,19 +222,11 @@ export const Desktop = registerCustomTag("desktop-view", {
 					return;
 				}
 
-				// Update the scale immediately
-				updateSurfaceScale();
-				await finish();
+				// Calculate new camera position to maintain center point
+				const new_camera_x = center_world_x * current_scale - viewport_width / 2;
+				const new_camera_y = center_world_y * current_scale - viewport_height / 2;
 
-				// Calculate new scroll position to maintain center point
-				const new_scroll_x = center_x * current_scale - viewport_width / 2;
-				const new_scroll_y = center_y * current_scale - viewport_height / 2;
-
-				// Apply new scroll position
-				desktop_el.scrollTo({
-					left: new_scroll_x,
-					top: new_scroll_y,
-				});
+				translateCamera(new_camera_x, new_camera_y);
 
 				// Reset is_zooming after a short delay
 				clearTimeout(zoom_timeout);
@@ -238,34 +247,23 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 			if (!e.ctrlKey && !e.metaKey) {
 				e.preventDefault();
-				desktop_el.scrollTo({
-					left: camera_x + e.deltaX * 1.2,
-					top: camera_y + e.deltaY * 1.2,
-				});
+				// Pan the camera
+				translateCamera(camera_x + e.deltaX * 1.2, camera_y + e.deltaY * 1.2);
 			} else if ((e.metaKey || e.ctrlKey) && !is_panning) {
 				e.preventDefault();
 
-				// Store current scroll position and viewport dimensions
-				const prev_scroll_x = desktop_el.scrollLeft;
-				const prev_scroll_y = desktop_el.scrollTop;
-
 				// Get cursor position relative to the viewport
-				const rect = desktop_el.getBoundingClientRect();
+				const rect = viewport_el.getBoundingClientRect();
 				const cursor_x = e.clientX - rect.left;
 				const cursor_y = e.clientY - rect.top;
 
-				// Calculate origin point before scale change
-				const point_x = (prev_scroll_x + cursor_x) / current_scale;
-				const point_y = (prev_scroll_y + cursor_y) / current_scale;
+				// Calculate point in world coordinates before scale change
+				const point_world_x = (camera_x + cursor_x) / current_scale;
+				const point_world_y = (camera_y + cursor_y) / current_scale;
 
-				// Calculate a scale factor that's smaller at low zoom levels
-				// The 0.05 at scale 1.0 will reduce to 0.005 at scale 0.1
+				// Calculate scale change
 				const base_scale_factor = Math.max(0.005, current_scale * 0.05);
-
-				// Make mouse wheel zoom faster than trackpad
 				const scale_factor = base_scale_factor;
-
-				// Calculate new scale with variable increment based on current scale
 				const delta = e.deltaY > 0 ? -scale_factor : scale_factor;
 				let new_scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current_scale + delta));
 
@@ -274,18 +272,11 @@ export const Desktop = registerCustomTag("desktop-view", {
 					is_zooming = true;
 					current_scale = new_scale;
 
-					// Update the scale immediately
-					updateSurfaceScale();
+					// Calculate new camera position to maintain cursor point
+					const new_camera_x = point_world_x * current_scale - cursor_x;
+					const new_camera_y = point_world_y * current_scale - cursor_y;
 
-					// Calculate new scroll position to maintain cursor point
-					const new_scroll_x = point_x * current_scale - cursor_x;
-					const new_scroll_y = point_y * current_scale - cursor_y;
-
-					// Apply new scroll position
-					desktop_el.scrollTo({
-						left: new_scroll_x,
-						top: new_scroll_y,
-					});
+					translateCamera(new_camera_x, new_camera_y);
 
 					// Reset is_zooming after a short delay
 					clearTimeout(zoom_timeout);
@@ -294,36 +285,6 @@ export const Desktop = registerCustomTag("desktop-view", {
 					}, ZOOM_EVENT_DELAY);
 				}
 			}
-		}
-
-		function desktopScroll(e) {
-			is_scrolling = true;
-
-			clearTimeout(scrolling_timeout);
-			scrolling_timeout = setTimeout(() => {
-				is_scrolling = false;
-			}, SCROLL_EVENT_DELAY);
-
-			const rect = surface_el.getBoundingClientRect();
-			const max_x = rect.width - desktop_el.offsetWidth;
-			const max_y = rect.height - desktop_el.offsetHeight;
-
-			let new_x = desktop_el.scrollLeft;
-			let new_y = desktop_el.scrollTop;
-
-			if (new_x >= max_x) {
-				new_x = max_x;
-			}
-
-			if (new_y >= max_y) {
-				new_y = max_y;
-			}
-
-			camera_x = desktop_el.scrollLeft;
-			camera_y = desktop_el.scrollTop;
-
-			scroll_thumb_x = (desktop_el.scrollLeft / rect.width) * 100;
-			scroll_thumb_y = (desktop_el.scrollTop / rect.height) * 100;
 		}
 
 		function surfaceMouseDown(e) {
@@ -374,9 +335,50 @@ export const Desktop = registerCustomTag("desktop-view", {
 		requestAnimationFrame(step);
 
 		function step() {
+			// Handle smooth camera animation
+			if (is_animating_camera) {
+				const current_time = performance.now();
+				const elapsed = current_time - camera_animation_start_time;
+				const progress = Math.min(elapsed / camera_animation_duration, 1);
+
+				// Apply easing function
+				const eased_progress = camera_animation_ease_callback(progress);
+
+				// Interpolate scale
+				current_scale =
+					camera_animation_start_scale +
+					(camera_animation_target_scale - camera_animation_start_scale) * eased_progress;
+
+				// Interpolate world position
+				const world_x =
+					camera_animation_start_world_x +
+					(camera_animation_target_world_x - camera_animation_start_world_x) * eased_progress;
+				const world_y =
+					camera_animation_start_world_y +
+					(camera_animation_target_world_y - camera_animation_start_world_y) * eased_progress;
+
+				// Convert world position to camera position (scaled space)
+				camera_x = world_x * current_scale;
+				camera_y = world_y * current_scale;
+
+				// If animation is complete, clean up
+				if (progress >= 1) {
+					is_animating_camera = false;
+					camera_animation_start_time = null;
+					camera_animation_start_world_x = null;
+					camera_animation_start_world_y = null;
+					camera_animation_target_world_x = null;
+					camera_animation_target_world_y = null;
+					camera_animation_start_scale = null;
+					camera_animation_target_scale = null;
+					camera_animation_duration = null;
+					camera_animation_ease_callback = null;
+				}
+			}
+
 			// Process any pending mouse movements in the animation frame
 			if (has_pending_mouse_movement && is_panning) {
-				// Apply the delta, adjusted for scale
+				// Apply the delta to camera position
 				camera_x -= pending_mouse_dx;
 				camera_y -= pending_mouse_dy;
 				pending_mouse_dx = 0;
@@ -384,52 +386,44 @@ export const Desktop = registerCustomTag("desktop-view", {
 				has_pending_mouse_movement = false;
 			}
 
-			if (camera_x <= 0) {
-				camera_x = 0;
+			// Clamp camera to bounds (only if not animating)
+			if (!is_animating_camera) {
+				clampCamera();
 			}
 
-			if (camera_y <= 0) {
-				camera_y = 0;
-			}
+			// Apply camera position via scrollTo (instant, no smooth behavior)
+			// This updates scrollLeft/scrollTop which maintains scroll compatibility
+			viewport_el.scrollTo({
+				left: camera_x,
+				top: camera_y,
+			});
 
-			const rect = surface_el.getBoundingClientRect();
-			const max_x = rect.width - desktop_el.offsetWidth;
-			const max_y = rect.height - desktop_el.offsetHeight;
-
-			if (camera_x >= max_x) {
-				camera_x = max_x;
-			}
-
-			if (camera_y >= max_y) {
-				camera_y = max_y;
-			}
-
-			if (is_panning) {
-				desktop_el.scroll({
-					left: camera_x,
-					top: camera_y,
-					behavior: "instant",
-				});
-			}
-
-			// Update the scale consistently in the animation loop
+			// Apply scale transform separately
 			updateSurfaceScale();
 
-			// Draw the wallpaper with the current scroll and zoom
+			// Update scroll thumb positions (for potential scroll indicators)
+			const viewport_width = viewport_el.offsetWidth;
+			const viewport_height = viewport_el.offsetHeight;
+			const surface_width = SURFACE_WIDTH * current_scale;
+			const surface_height = SURFACE_HEIGHT * current_scale;
+
+			scroll_thumb_x = (camera_x / surface_width) * 100;
+			scroll_thumb_y = (camera_y / surface_height) * 100;
+
+			// Draw the wallpaper with the current camera position
 			// drawWallpaper(camera_x, camera_y, current_scale);
 
 			// Check periodically if we should normalize
 			if (frame_count === undefined) frame_count = 0;
-			// Every 10 seconds
 			if (++frame_count >= 60 * 10) {
 				frame_count = 0;
 				normalizeZIndexes();
 			}
 
 			// Save state in DOM
-			desktop_el.setAttribute("camera-x", camera_x);
-			desktop_el.setAttribute("camera-y", camera_y);
-			desktop_el.setAttribute("camera-scale", current_scale);
+			viewport_el.setAttribute("camera-x", camera_x);
+			viewport_el.setAttribute("camera-y", camera_y);
+			viewport_el.setAttribute("camera-scale", current_scale);
 
 			requestAnimationFrame(step);
 		}
@@ -438,17 +432,90 @@ export const Desktop = registerCustomTag("desktop-view", {
 		// Desktop utilities
 		//
 
-		function scrollToCenter() {
-			const rect = surface_el.getBoundingClientRect();
-			desktop_el.scroll({
-				left: rect.width / 2 - desktop_el.offsetWidth / 2,
-				top: rect.height / 2 - desktop_el.offsetHeight / 2,
-			});
-		}
+		// Store the smooth camera function on the desktop element
+		this.translateCameraSmooth = function (
+			target_world_x,
+			target_world_y,
+			target_scale,
+			duration,
+			ease_callback,
+		) {
+			// Cancel any existing animation by resetting the flag
+			is_animating_camera = false;
+
+			// Convert current camera position to world coordinates
+			const current_world_x = camera_x / current_scale;
+			const current_world_y = camera_y / current_scale;
+
+			// Store animation parameters in world space
+			camera_animation_start_time = performance.now();
+			camera_animation_start_world_x = current_world_x;
+			camera_animation_start_world_y = current_world_y;
+			camera_animation_target_world_x = target_world_x;
+			camera_animation_target_world_y = target_world_y;
+			camera_animation_start_scale = current_scale;
+			camera_animation_target_scale = target_scale;
+			camera_animation_duration = duration;
+			camera_animation_ease_callback = ease_callback || defaultEase;
+
+			// Start animation
+			is_animating_camera = true;
+		};
+
+		// Store the smooth camera center function on the desktop element
+		this.translateCameraCenterSmooth = function (
+			target_world_x,
+			target_world_y,
+			target_scale,
+			duration,
+			ease_callback,
+		) {
+			// Cancel any existing animation by resetting the flag
+			is_animating_camera = false;
+
+			const viewport_width = viewport_el.offsetWidth;
+			const viewport_height = viewport_el.offsetHeight;
+
+			// Convert current camera position to world coordinates
+			const current_world_x = camera_x / current_scale;
+			const current_world_y = camera_y / current_scale;
+
+			// Calculate the world position that would center the target point
+			// At the target scale, we want target_world_x/y to be at the center
+			const target_world_centered_x = target_world_x - viewport_width / 2 / target_scale;
+			const target_world_centered_y = target_world_y - viewport_height / 2 / target_scale;
+
+			// Store animation parameters in world space
+			camera_animation_start_time = performance.now();
+			camera_animation_start_world_x = current_world_x;
+			camera_animation_start_world_y = current_world_y;
+			camera_animation_target_world_x = target_world_centered_x;
+			camera_animation_target_world_y = target_world_centered_y;
+			camera_animation_start_scale = current_scale;
+			camera_animation_target_scale = target_scale;
+			camera_animation_duration = duration;
+			camera_animation_ease_callback = ease_callback || defaultEase;
+
+			// Start animation
+			is_animating_camera = true;
+		};
 
 		function updateSurfaceScale() {
+			if (!surface_el) return;
 			surface_el.style.transform = `scale(${current_scale})`;
 			zoom_level = current_scale;
+		}
+
+		function scrollToCenter() {
+			const viewport_width = viewport_el.offsetWidth;
+			const viewport_height = viewport_el.offsetHeight;
+			const surface_width = SURFACE_WIDTH * current_scale;
+			const surface_height = SURFACE_HEIGHT * current_scale;
+
+			translateCamera(
+				surface_width / 2 - viewport_width / 2,
+				surface_height / 2 - viewport_height / 2,
+			);
 		}
 
 		function normalizeZIndexes() {
@@ -487,6 +554,75 @@ export const Desktop = registerCustomTag("desktop-view", {
 		}
 	},
 });
+
+//
+// Camera control functions
+//
+
+export function translateCamera(x, y) {
+	camera_x = x;
+	camera_y = y;
+}
+
+export function translateCameraSmooth(target_x, target_y, target_scale, duration, ease_callback) {
+	if (desktop_el && desktop_el.translateCameraSmooth) {
+		desktop_el.translateCameraSmooth(target_x, target_y, target_scale, duration, ease_callback);
+	}
+}
+
+export function translateCameraCenterSmooth(
+	target_x,
+	target_y,
+	target_scale,
+	duration,
+	ease_callback,
+) {
+	if (desktop_el && desktop_el.translateCameraCenterSmooth) {
+		desktop_el.translateCameraCenterSmooth(
+			target_x,
+			target_y,
+			target_scale,
+			duration,
+			ease_callback,
+		);
+	}
+}
+
+export function defaultEase(t) {
+	// Ease in-out cubic
+	return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+export function getCameraBounds() {
+	const viewport_width = viewport_el.offsetWidth;
+	const viewport_height = viewport_el.offsetHeight;
+	const surface_width = SURFACE_WIDTH * current_scale;
+	const surface_height = SURFACE_HEIGHT * current_scale;
+
+	return {
+		min_x: 0,
+		max_x: Math.max(0, surface_width - viewport_width),
+		min_y: 0,
+		max_y: Math.max(0, surface_height - viewport_height),
+	};
+}
+
+export function clampCamera() {
+	const bounds = getCameraBounds();
+
+	if (camera_x < bounds.min_x) {
+		camera_x = bounds.min_x;
+	}
+	if (camera_x > bounds.max_x) {
+		camera_x = bounds.max_x;
+	}
+	if (camera_y < bounds.min_y) {
+		camera_y = bounds.min_y;
+	}
+	if (camera_y > bounds.max_y) {
+		camera_y = bounds.max_y;
+	}
+}
 
 //
 // Applets (custom element setup)
