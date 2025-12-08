@@ -25,10 +25,13 @@ export const Ticket = registerAppletTag(APPLET_NAME, {
 	},
 	hydrate() {
 		this.style.height = "fit-content";
+
+		const previous_html = this.querySelector("[contenteditable]")?.innerHTML;
 		const applet_el = $.div({
 			contenteditable: true,
-			innerHTML: this.querySelector("[contenteditable]")?.innerHTML || "start typing here",
+			innerHTML: previous_html || "start typing here",
 		});
+
 		this.replaceChildren(applet_el);
 	},
 	onlift() {

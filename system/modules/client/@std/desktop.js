@@ -146,7 +146,15 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		// Scroll to the center of the canvas. This may cause a jumping
 		// effect with async events so we might remove this.
-		scrollToCenter();
+		const current_camera_x = this.getAttribute("camera-x");
+		const current_camera_y = this.getAttribute("camera-y");
+		const current_camera_scale = this.getAttribute("camera-scale");
+
+		if (current_camera_x === null || current_camera_y === null || current_camera_scale === null) {
+			scrollToCenter();
+		} else {
+			desktop_el.scrollTo(current_camera_x, current_camera_y);
+		}
 
 		//
 		// Setup event listeners
@@ -417,6 +425,11 @@ export const Desktop = registerCustomTag("desktop-view", {
 				frame_count = 0;
 				normalizeZIndexes();
 			}
+
+			// Save state in DOM
+			desktop_el.setAttribute("camera-x", camera_x);
+			desktop_el.setAttribute("camera-y", camera_y);
+			desktop_el.setAttribute("camera-scale", current_scale);
 
 			requestAnimationFrame(step);
 		}
