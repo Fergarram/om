@@ -1,6 +1,6 @@
 import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
 import { Ticket } from "ticket";
-import { isUserTyping } from "utils";
+import { isUserTyping, finish } from "utils";
 
 //
 // Mount new destkop element if not found

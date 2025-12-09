@@ -11,27 +11,24 @@
 // - API for editable exports and self-rewriting
 //
 
+// INDEX:
+// ======
 //
-// EXPERIMENTS TODO
+// LOADING
+// --> Transpilation steps
+// --> Processing, creating import map, etc
+// --> Managing module cache
+// --> Runtime changes (just adding modules)
 //
-// So we can use blobs to add new modules but we don't want to update running ones because we can't as such.
-// This means that we could have an API specifically for applets that essentially allows HOT RELOADING themselves.
-// Importing the same modified module each time, making sure we first clean up the previous running code and then
-// we start running the new code.
+// CLONES
+// --> Process blob modules found
+// --> Generates exports (string, download)
 //
-// Rehydration essentially. We hydrate an element that had already been hydrated.
-//
-// But this falls on the next library I'll write, which is for canvas related stuff.
-//
-// I think I need to enter a testing stage again where I try to build a canvas thing to work with the modules.
-//
+// SNAPSHOTS
+// --> Booting from snapshot
+// --> CRUD for snapshots
 
 // TODO
-//
-// v1.0 === === === === === === === === === === === === === === === === === === === === ===
-//
-// [ ] Rename everything so that it's consistent: Media module, script module, style module. All are blob modules of different kinds.
-// [ ] Remove duplicated code into helper functions like the fns that download html files, etc.
 //
 // v1.5 === === === === === === === === === === === === === === === === === === === === ===
 //
@@ -43,40 +40,40 @@
 //     - It would be cool to stream into local files so you can open with the browser automatically
 //     - use fflate
 
-//
-// Settings
-//
-
-window.BlobLoader = {
-	settings: {
-		prefers_remote_modules: location.hostname === "localhost" ? true : false,
-		always_boot_from_petition: false,
-		autosave_snapshot_on_load_when_different_from_last: false,
-	},
-	lib: {}, // We can add external non-module libraries that need to be IIFEs and attach themselves to the
-	// transformers: {}, // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
-};
-
-//
-// Booting up the page
-// Before we add the page load event, we want to check if we're loading a cached "image" of the site.
-//
-
 (async () => {
-	let petition_to_restore = localStorage.getItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+	//
+	// Settings
+	//
 
-	if (petition_to_restore) {
+	window.BlobLoader = {
+		notifications: [], // array of strings
+		settings: {
+			prefers_remote_modules: location.hostname === "localhost" ? true : false,
+			force_boot_from_snapshot: false,
+			autosave_snapshot_on_load_when_different_from_last: false,
+		},
+		lib: {}, // The place for IIFEs to self attach before running the loader.
+		transformers: [], // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
+	};
+
+	//
+	// Boot from snapshot (if requested)
+	//
+
+	let boot_snapshot_id = localStorage.getItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+
+	if (boot_snapshot_id) {
 		// Check if snapshot exists before showing confirmation
-		const snapshot = await getSnapshotFromCache(petition_to_restore);
+		const snapshot = await getSnapshotFromCache(boot_snapshot_id);
 
 		if (
-			(snapshot && always_boot_from_petition) ||
+			(snapshot && force_boot_from_snapshot) ||
 			(snapshot &&
 				confirm(
 					"A snapshot will be loaded instead of main document.\n\nDo you want to continue?",
 				))
 		) {
-			console.log(`Restoring snapshot: ${snapshot.tag} (${petition_to_restore})`);
+			console.log(`Restoring snapshot: ${snapshot.tag} (${boot_snapshot_id})`);
 
 			const parser = new DOMParser();
 			const snapshot_doc = parser.parseFromString(snapshot.html_content, "text/html");
@@ -88,17 +85,19 @@ window.BlobLoader = {
 				document.body.setAttribute(attr.name, attr.value);
 			});
 
-			await finish(); // Wait for next cycle to make sure DOM finished with previuous tasks
-
-			await loadAllBlobModules();
+			// Wait for next cycle to make sure DOM finished with previuous tasks
+			await finish();
+			await startBlobLoader();
 
 			console.log("Snapshot restored, continuing with normal load process...");
 		} else if (!snapshot) {
-			console.log(`Snapshot with session_id "${petition_to_restore}" not found`);
+			console.log(`Snapshot with session_id "${boot_snapshot_id}" not found`);
 			removeSnapshotBootPetition();
-			window.location.reload(); // Reloading because for some reason it wouldn't work otherwise...
+
+			// Force reload to see changes
+			window.location.reload();
 		} else {
-			petition_to_restore = false;
+			boot_snapshot_id = false;
 		}
 	}
 
@@ -106,15 +105,11 @@ window.BlobLoader = {
 	// Module Loader Setup
 	//
 
-	if (!petition_to_restore) {
-		window.addEventListener("load", loadAllBlobModules);
+	if (!boot_snapshot_id) {
+		window.addEventListener("load", startBlobLoader);
 	}
 
-	//
-	// Boot time functions
-	//
-
-	async function loadAllBlobModules() {
+	async function startBlobLoader() {
 		const load_start_time = performance.now();
 
 		//
@@ -157,8 +152,8 @@ window.BlobLoader = {
 			// Initial settings
 			...window.BlobLoader,
 
-			// Runtime functions (module/media/style management)
-			getMediaUrl: (name) => blob_media_urls.get(name) || null,
+			// Module management
+			getMediaUrl,
 			getCachedModule,
 			setCachedModule,
 			deleteCachedModule,
@@ -167,7 +162,10 @@ window.BlobLoader = {
 			deleteCachedMedia,
 			addStyleModule,
 			runNonExportingModuleScript,
-			clearBlobLoaderCache,
+			clearModuleCache,
+			updateCachedModuleFromRemote,
+			updateCachedStyleFromRemote,
+			updateCachedMediaFromRemote,
 			getDocumentOuterHtml,
 			saveAsHtmlFile,
 			saveAsZipFile,
@@ -194,7 +192,7 @@ window.BlobLoader = {
 			updateCloneMediaModule,
 			removeCloneMediaModule,
 
-			// Boot time functions (snapshot/cache management)
+			// Snapshot management
 			openCache,
 			saveSnapshotToCache,
 			getSnapshotFromCache,
@@ -315,20 +313,22 @@ window.BlobLoader = {
 							console.log(
 								`Remote and local content differ for media "${media_name}". Using remote content (auto-update mode).`,
 							);
-							blob_media_blobs.set(media_name, media_blob); // Use remote blob
-							blob_media_sources.set(media_name, remote_data_url); // Update source for saving
+							blob_media_blobs.set(media_name, media_blob);
+							blob_media_sources.set(media_name, remote_data_url);
 						} else {
+							const timestamp = new Date().toISOString();
+							const notification = `${timestamp} ::: ${media_name} (media) can be updated from remote. To update, run BlobLoader.updateCachedMediaFromRemote("${media_name}").`;
+							window.BlobLoader.notifications.push(notification);
 							console.warn(
 								`Remote and local content are different for media "${media_name}". Using local content.`,
 							);
-							// Convert local data URL to blob for consistency
+							console.warn(
+								`To update, run BlobLoader.updateCachedMediaFromRemote("${media_name}")`,
+							);
 							const local_response = await fetch(local_data_url);
 							const local_blob = await local_response.blob();
 							blob_media_blobs.set(media_name, local_blob);
 						}
-					} else {
-						// Content is the same, use the blob we have
-						blob_media_blobs.set(media_name, media_blob);
 					}
 				} else {
 					// No local content, use fetched remote blob
@@ -565,12 +565,17 @@ window.BlobLoader = {
 							console.log(
 								`Remote and local content differ for style "${remote_url}". Using remote content (auto-update mode).`,
 							);
-							blob_style_sources.set(style_name, remote_content); // Use remote content
+							blob_style_sources.set(style_name, remote_content);
 						} else {
+							const timestamp = new Date().toISOString();
+							const notification = `${timestamp} ::: ${style_name} (style) can be updated from remote. To update, run BlobLoader.updateCachedStyleFromRemote("${style_name}").`;
+							window.BlobLoader.notifications.push(notification);
 							console.warn(
 								`Remote and local content are different for style "${remote_url}". Using local content.`,
 							);
-							// Keep local content (no change needed)
+							console.warn(
+								`To update, run BlobLoader.updateCachedStyleFromRemote("${style_name}")`,
+							);
 						}
 					}
 					// If content is the same, keep existing (local) content
@@ -780,12 +785,17 @@ window.BlobLoader = {
 							console.log(
 								`Remote and local content differ for module "${module_name}". Using remote content (auto-update mode).`,
 							);
-							blob_modules_sources.set(module_name, remote_content); // Use remote content
+							blob_modules_sources.set(module_name, remote_content);
 						} else {
+							const timestamp = new Date().toISOString();
+							const notification = `${timestamp} ::: ${module_name} can be updated from remote. To update, run BlobLoader.updateCachedModuleFromRemote("${module_name}").`;
+							window.BlobLoader.notifications.push(notification);
 							console.warn(
 								`Remote and local content are different for module "${module_name}". Using local content.`,
 							);
-							// Keep local content (no change needed)
+							console.warn(
+								`To update, run BlobLoader.updateCachedModuleFromRemote("${module_name}")`,
+							);
 						}
 					}
 					// If content is the same, keep existing (local) content
@@ -891,8 +901,12 @@ window.BlobLoader = {
 		});
 
 		//
-		// Runtime functions
+		// Module cache management
 		//
+
+		function getMediaUrl(name) {
+			return blob_media_urls.get(name) || null;
+		}
 
 		async function getCachedMedia(url) {
 			try {
@@ -972,7 +986,7 @@ window.BlobLoader = {
 			}
 		}
 
-		async function clearBlobLoaderCache(url = null) {
+		async function clearModuleCache(url = null) {
 			try {
 				const db = await openCache();
 				const transaction = db.transaction(["modules"], "readwrite");
@@ -1003,6 +1017,200 @@ window.BlobLoader = {
 				console.warn("Failed to clear cache:", error);
 			}
 		}
+
+		async function updateCachedModuleFromRemote(module_name) {
+			const module_info = blob_module_map.get(module_name);
+
+			if (!module_info) {
+				console.error(`Module "${module_name}" not found`);
+				return false;
+			}
+
+			const remote_url = module_info.remote_url;
+
+			if (!remote_url) {
+				console.error(`Module "${module_name}" has no remote URL`);
+				return false;
+			}
+
+			try {
+				console.log(`Fetching remote module "${module_name}" from ${remote_url}...`);
+				const response = await fetch(remote_url);
+				const remote_content = await response.text();
+
+				// Update the sources map
+				blob_modules_sources.set(module_name, remote_content);
+
+				// Update cache
+				await setCachedModule(remote_url, remote_content);
+
+				// Update blob URL
+				const module_blob = new Blob([remote_content], { type: "text/javascript" });
+				const old_blob_url = blob_module_urls.get(module_name);
+				if (old_blob_url) {
+					URL.revokeObjectURL(old_blob_url);
+				}
+				const new_blob_url = URL.createObjectURL(module_blob);
+				blob_module_urls.set(module_name, new_blob_url);
+
+				// Update script tag
+				const script_tag = Array.from(blob_script_tags).find(
+					(tag) => tag.getAttribute("name") === module_name,
+				);
+				if (script_tag) {
+					script_tag.textContent = remote_content;
+					script_tag.setAttribute("blob", new_blob_url);
+				}
+
+				console.log(`Successfully updated module "${module_name}" from remote`);
+				console.warn("Reload the page for changes to take effect");
+				return true;
+			} catch (error) {
+				console.error(`Failed to update module "${module_name}" from remote:`, error);
+				return false;
+			}
+		}
+
+		async function updateCachedStyleFromRemote(style_name) {
+			const style_info = blob_style_map.get(style_name);
+
+			if (!style_info) {
+				console.error(`Style "${style_name}" not found`);
+				return false;
+			}
+
+			const remote_url = style_info.remote_url;
+
+			if (!remote_url) {
+				console.error(`Style "${style_name}" has no remote URL`);
+				return false;
+			}
+
+			try {
+				console.log(`Fetching remote style "${style_name}" from ${remote_url}...`);
+				const response = await fetch(remote_url);
+				const remote_content = await response.text();
+
+				// Update the sources map
+				blob_style_sources.set(style_name, remote_content);
+
+				// Update cache
+				await setCachedModule(remote_url, remote_content);
+
+				// Update blob URL
+				const style_blob = new Blob([remote_content], { type: "text/css" });
+				const old_blob_url = blob_style_urls.get(style_name);
+				if (old_blob_url) {
+					URL.revokeObjectURL(old_blob_url);
+				}
+				const new_blob_url = URL.createObjectURL(style_blob);
+				blob_style_urls.set(style_name, new_blob_url);
+
+				// Update style tag or adopted stylesheet
+				const style_tag = Array.from(blob_style_tags).find(
+					(tag) => tag.getAttribute("name") === style_name,
+				);
+				if (style_tag) {
+					style_tag.textContent = remote_content;
+					style_tag.setAttribute("blob", new_blob_url);
+				}
+
+				// Update adopted stylesheet if it exists
+				if (blob_adopted_sheets.has(style_name)) {
+					const sheet = blob_adopted_sheets.get(style_name);
+					sheet.replaceSync(remote_content);
+				}
+
+				console.log(`Successfully updated style "${style_name}" from remote`);
+				return true;
+			} catch (error) {
+				console.error(`Failed to update style "${style_name}" from remote:`, error);
+				return false;
+			}
+		}
+
+		async function updateCachedMediaFromRemote(media_name) {
+			const media_info = blob_media_map.get(media_name);
+
+			if (!media_info) {
+				console.error(`Media "${media_name}" not found`);
+				return false;
+			}
+
+			const remote_url = media_info.remote_url;
+
+			if (!remote_url) {
+				console.error(`Media "${media_name}" has no remote URL`);
+				return false;
+			}
+
+			try {
+				console.log(`Fetching remote media "${media_name}" from ${remote_url}...`);
+				const response = await fetch(remote_url);
+				const media_blob = await response.blob();
+
+				// Convert to data URL
+				const reader = new FileReader();
+				const data_url = await new Promise((resolve) => {
+					reader.onloadend = () => resolve(reader.result);
+					reader.readAsDataURL(media_blob);
+				});
+
+				// Update the sources map
+				blob_media_sources.set(media_name, data_url);
+				blob_media_blobs.set(media_name, media_blob);
+
+				// Update cache
+				await setCachedMedia(remote_url, media_blob);
+
+				// Update blob URL
+				const old_blob_url = blob_media_urls.get(media_name);
+				if (old_blob_url) {
+					URL.revokeObjectURL(old_blob_url);
+				}
+				const new_blob_url = URL.createObjectURL(media_blob);
+				blob_media_urls.set(media_name, new_blob_url);
+
+				// Update link tag
+				const link_tag = Array.from(blob_media_tags).find(
+					(tag) => tag.getAttribute("name") === media_name,
+				);
+				if (link_tag) {
+					link_tag.setAttribute("source", data_url);
+					link_tag.setAttribute("href", new_blob_url);
+					link_tag.setAttribute("blob", new_blob_url);
+				}
+
+				// Update CSS variable if it's an image
+				if (media_blob.type.startsWith("image/")) {
+					// Regenerate all media CSS variables
+					const media_vars_sheet = blob_adopted_sheets.get("__media_vars__");
+					if (media_vars_sheet) {
+						const all_media_css_vars = [];
+						blob_media_blobs.forEach((blob, name) => {
+							if (blob.type.startsWith("image/")) {
+								const url = blob_media_urls.get(name);
+								all_media_css_vars.push(
+									`--BM-${name.replaceAll(" ", "-")}: url('${url}');`,
+								);
+							}
+						});
+						const new_css = `:root {\n\t${all_media_css_vars.join("\n\t")}\n}`;
+						media_vars_sheet.replaceSync(new_css);
+					}
+				}
+
+				console.log(`Successfully updated media "${media_name}" from remote`);
+				return true;
+			} catch (error) {
+				console.error(`Failed to update media "${media_name}" from remote:`, error);
+				return false;
+			}
+		}
+
+		//
+		// Snapshot management
+		//
 
 		async function getDocumentOuterHtml(force_inline = false) {
 			// Clone the current document
@@ -1225,6 +1433,207 @@ window.BlobLoader = {
 			console.log("HTML file download initiated");
 		}
 
+		async function getSnapshotFromCache(session_id) {
+			const db = await openCache();
+			const transaction = db.transaction(["snapshots"], "readonly");
+			const store = transaction.objectStore("snapshots");
+
+			return new Promise((resolve, reject) => {
+				const request = store.get(session_id);
+				request.onerror = () => reject(request.error);
+				request.onsuccess = () => resolve(request.result);
+			});
+		}
+
+		async function listSnapshotsInCache() {
+			const db = await openCache();
+			const transaction = db.transaction(["snapshots"], "readonly");
+			const store = transaction.objectStore("snapshots");
+
+			return new Promise((resolve, reject) => {
+				const request = store.getAll();
+				request.onerror = () => reject(request.error);
+				request.onsuccess = () => {
+					// Sort by timestamp descending (newest first)
+					const snapshots = request.result.sort((a, b) => b.timestamp - a.timestamp);
+					// Return only metadata, not full html_content
+					const snapshot_list = snapshots.map((s) => ({
+						session_id: s.session_id,
+						tag: s.tag,
+						timestamp: s.timestamp,
+						document_title: s.document_title,
+						size_bytes: new Blob([s.html_content]).size,
+					}));
+					resolve(snapshot_list);
+				};
+			});
+		}
+
+		async function deleteSnapshotFromCache(session_id) {
+			try {
+				const db = await openCache();
+				const transaction = db.transaction(["snapshots"], "readwrite");
+				const store = transaction.objectStore("snapshots");
+
+				return new Promise((resolve, reject) => {
+					const request = store.delete(session_id);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Deleted snapshot with session_id: ${session_id}`);
+						resolve();
+					};
+				});
+			} catch (error) {
+				console.warn("Failed to delete snapshot:", error);
+				throw error;
+			}
+		}
+
+		async function saveSnapshotAsHtmlFile(session_id) {
+			try {
+				// Get the snapshot from cache
+				const snapshot = await getSnapshotFromCache(session_id);
+
+				if (!snapshot) {
+					console.warn(`Snapshot with session_id "${session_id}" not found`);
+					return;
+				}
+
+				const html_content = snapshot.html_content;
+				const suggested_filename =
+					`${snapshot.document_title || snapshot.tag || "snapshot"}.html`.replace(
+						/[^a-z0-9_\-\.]/gi,
+						"_",
+					);
+
+				// Check if File System Access API is available
+				if (window.showSaveFilePicker) {
+					try {
+						// Show save file picker
+						const file_handle = await window.showSaveFilePicker({
+							suggestedName: suggested_filename,
+							types: [
+								{
+									description: "HTML files",
+									accept: {
+										"text/html": [".html", ".htm"],
+									},
+								},
+							],
+						});
+
+						// Get html and create writable
+						const writable = await file_handle.createWritable();
+						await writable.write(html_content);
+						await writable.close();
+
+						console.log(`Snapshot "${snapshot.tag}" saved successfully`);
+						return;
+					} catch (error) {
+						if (error.name === "AbortError") {
+							console.log("Save operation was cancelled by user");
+							return;
+						} else {
+							console.warn(
+								"Failed to save file using File System Access API, falling back to download:",
+								error,
+							);
+						}
+					}
+				}
+
+				// Fallback to download method
+				alert("File System Access API not available, falling back to download");
+				console.log("File System Access API not available, falling back to download");
+
+				// Create and trigger download
+				const blob = new Blob([html_content], {
+					type: "text/html",
+				});
+				const url = URL.createObjectURL(blob);
+
+				const download_link = document.createElement("a");
+				download_link.href = url;
+				download_link.download = suggested_filename;
+				download_link.click();
+
+				// Clean up the blob URL
+				URL.revokeObjectURL(url);
+
+				console.log(`Snapshot "${snapshot.tag}" download initiated`);
+			} catch (error) {
+				console.error("Failed to save snapshot as HTML file:", error);
+				throw error;
+			}
+		}
+
+		function removeSnapshotBootPetition() {
+			localStorage.removeItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
+		}
+
+		async function setSnapshotForBoot(session_id = null) {
+			let target_session_id = session_id;
+
+			// If no session_id provided, get the most recent snapshot
+			if (!target_session_id) {
+				const snapshots = await listSnapshotsInCache();
+
+				if (snapshots.length === 0) {
+					console.log("No snapshots available in cache");
+					return;
+				}
+
+				// snapshots are already sorted by timestamp descending (newest first)
+				target_session_id = snapshots[0].session_id;
+				console.log(
+					`No session_id provided, using most recent snapshot: "${snapshots[0].tag}" (${target_session_id})`,
+				);
+			}
+
+			// Verify the snapshot exists before setting it for boot
+			const snapshot = await getSnapshotFromCache(target_session_id);
+
+			if (!snapshot) {
+				console.log(`Snapshot with session_id "${target_session_id}" not found in cache`);
+				return;
+			}
+
+			// Set the localStorage flag that will be read on next boot
+			localStorage.setItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT", target_session_id);
+
+			console.log(`Set snapshot "${snapshot.tag}" (${target_session_id}) to load on next boot`);
+			return target_session_id;
+		}
+
+		async function createBackupSnapshot() {
+			const current_html = await BlobLoader.getDocumentOuterHtml(true);
+			const snapshots = await listSnapshotsInCache();
+
+			if (snapshots.length > 0) {
+				// Get the most recent snapshot
+				const last_snapshot = await BlobLoader.getSnapshotFromCache(snapshots[0].session_id);
+
+				if (last_snapshot) {
+					// Parse both HTMLs and compare only the head contents
+					const parser = new DOMParser();
+
+					const current_doc = parser.parseFromString(current_html, "text/html");
+					const last_doc = parser.parseFromString(last_snapshot.html_content, "text/html");
+
+					const current_head = current_doc.head.innerHTML;
+					const last_head = last_doc.head.innerHTML;
+
+					if (current_head === last_head) {
+						console.log("Head contents unchanged from last backup, skipping save");
+						return;
+					}
+				}
+			}
+
+			console.log("Saving backup");
+			return await BlobLoader.saveSnapshotToCache("Automatic backup");
+		}
+
 		async function saveSnapshotToCache(tag = "") {
 			const snapshot_start = performance.now();
 
@@ -1433,6 +1842,10 @@ window.BlobLoader = {
 				URL.revokeObjectURL(blob_url);
 			}
 		}
+
+		//
+		// Clone management
+		//
 
 		async function cloneDocument() {
 			const current_html = await BlobLoader.getDocumentOuterHtml(true);
@@ -2133,6 +2546,10 @@ window.BlobLoader = {
 		}
 	}
 
+	//
+	// Utils
+	//
+
 	function openCache() {
 		return new Promise((resolve, reject) => {
 			const request = indexedDB.open(
@@ -2182,213 +2599,8 @@ window.BlobLoader = {
 		});
 	}
 
-	async function getSnapshotFromCache(session_id) {
-		const db = await openCache();
-		const transaction = db.transaction(["snapshots"], "readonly");
-		const store = transaction.objectStore("snapshots");
-
-		return new Promise((resolve, reject) => {
-			const request = store.get(session_id);
-			request.onerror = () => reject(request.error);
-			request.onsuccess = () => resolve(request.result);
-		});
-	}
-
-	async function listSnapshotsInCache() {
-		const db = await openCache();
-		const transaction = db.transaction(["snapshots"], "readonly");
-		const store = transaction.objectStore("snapshots");
-
-		return new Promise((resolve, reject) => {
-			const request = store.getAll();
-			request.onerror = () => reject(request.error);
-			request.onsuccess = () => {
-				// Sort by timestamp descending (newest first)
-				const snapshots = request.result.sort((a, b) => b.timestamp - a.timestamp);
-				// Return only metadata, not full html_content
-				const snapshot_list = snapshots.map((s) => ({
-					session_id: s.session_id,
-					tag: s.tag,
-					timestamp: s.timestamp,
-					document_title: s.document_title,
-					size_bytes: new Blob([s.html_content]).size,
-				}));
-				resolve(snapshot_list);
-			};
-		});
-	}
-
-	async function deleteSnapshotFromCache(session_id) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["snapshots"], "readwrite");
-			const store = transaction.objectStore("snapshots");
-
-			return new Promise((resolve, reject) => {
-				const request = store.delete(session_id);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => {
-					console.log(`Deleted snapshot with session_id: ${session_id}`);
-					resolve();
-				};
-			});
-		} catch (error) {
-			console.warn("Failed to delete snapshot:", error);
-			throw error;
-		}
-	}
-
-	async function saveSnapshotAsHtmlFile(session_id) {
-		try {
-			// Get the snapshot from cache
-			const snapshot = await getSnapshotFromCache(session_id);
-
-			if (!snapshot) {
-				console.warn(`Snapshot with session_id "${session_id}" not found`);
-				return;
-			}
-
-			const html_content = snapshot.html_content;
-			const suggested_filename =
-				`${snapshot.document_title || snapshot.tag || "snapshot"}.html`.replace(
-					/[^a-z0-9_\-\.]/gi,
-					"_",
-				);
-
-			// Check if File System Access API is available
-			if (window.showSaveFilePicker) {
-				try {
-					// Show save file picker
-					const file_handle = await window.showSaveFilePicker({
-						suggestedName: suggested_filename,
-						types: [
-							{
-								description: "HTML files",
-								accept: {
-									"text/html": [".html", ".htm"],
-								},
-							},
-						],
-					});
-
-					// Get html and create writable
-					const writable = await file_handle.createWritable();
-					await writable.write(html_content);
-					await writable.close();
-
-					console.log(`Snapshot "${snapshot.tag}" saved successfully`);
-					return;
-				} catch (error) {
-					if (error.name === "AbortError") {
-						console.log("Save operation was cancelled by user");
-						return;
-					} else {
-						console.warn(
-							"Failed to save file using File System Access API, falling back to download:",
-							error,
-						);
-					}
-				}
-			}
-
-			// Fallback to download method
-			alert("File System Access API not available, falling back to download");
-			console.log("File System Access API not available, falling back to download");
-
-			// Create and trigger download
-			const blob = new Blob([html_content], {
-				type: "text/html",
-			});
-			const url = URL.createObjectURL(blob);
-
-			const download_link = document.createElement("a");
-			download_link.href = url;
-			download_link.download = suggested_filename;
-			download_link.click();
-
-			// Clean up the blob URL
-			URL.revokeObjectURL(url);
-
-			console.log(`Snapshot "${snapshot.tag}" download initiated`);
-		} catch (error) {
-			console.error("Failed to save snapshot as HTML file:", error);
-			throw error;
-		}
-	}
-
-	function removeSnapshotBootPetition() {
-		localStorage.removeItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT");
-	}
-
-	async function setSnapshotForBoot(session_id = null) {
-		let target_session_id = session_id;
-
-		// If no session_id provided, get the most recent snapshot
-		if (!target_session_id) {
-			const snapshots = await listSnapshotsInCache();
-
-			if (snapshots.length === 0) {
-				console.log("No snapshots available in cache");
-				return;
-			}
-
-			// snapshots are already sorted by timestamp descending (newest first)
-			target_session_id = snapshots[0].session_id;
-			console.log(
-				`No session_id provided, using most recent snapshot: "${snapshots[0].tag}" (${target_session_id})`,
-			);
-		}
-
-		// Verify the snapshot exists before setting it for boot
-		const snapshot = await getSnapshotFromCache(target_session_id);
-
-		if (!snapshot) {
-			console.log(`Snapshot with session_id "${target_session_id}" not found in cache`);
-			return;
-		}
-
-		// Set the localStorage flag that will be read on next boot
-		localStorage.setItem("BLOB_LOADER_WILL_LOAD_SNAPSHOT", target_session_id);
-
-		console.log(`Set snapshot "${snapshot.tag}" (${target_session_id}) to load on next boot`);
-		return target_session_id;
-	}
-
-	async function createBackupSnapshot() {
-		const current_html = await BlobLoader.getDocumentOuterHtml(true);
-		const snapshots = await listSnapshotsInCache();
-
-		if (snapshots.length > 0) {
-			// Get the most recent snapshot
-			const last_snapshot = await BlobLoader.getSnapshotFromCache(snapshots[0].session_id);
-
-			if (last_snapshot) {
-				// Parse both HTMLs and compare only the head contents
-				const parser = new DOMParser();
-
-				const current_doc = parser.parseFromString(current_html, "text/html");
-				const last_doc = parser.parseFromString(last_snapshot.html_content, "text/html");
-
-				const current_head = current_doc.head.innerHTML;
-				const last_head = last_doc.head.innerHTML;
-
-				if (current_head === last_head) {
-					console.log("Head contents unchanged from last backup, skipping save");
-					return;
-				}
-			}
-		}
-
-		console.log("Saving backup");
-		return await BlobLoader.saveSnapshotToCache("Automatic backup");
+	function finish(t = 0) {
+		// Wait for next cycle to make sure DOM finished with previuous tasks or other related goals
+		return new Promise((resolve) => setTimeout(resolve, t));
 	}
 })();
-
-//
-// Global Utils
-//
-
-function finish(t = 0) {
-	// Wait for next cycle to make sure DOM finished with previuous tasks or other related goals
-	return new Promise((resolve) => setTimeout(resolve, 0));
-}
