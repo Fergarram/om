@@ -35,14 +35,14 @@ export const Ticket = registerAppletTag(APPLET_NAME, {
 		this.replaceChildren(applet_el);
 	},
 	onlift() {
-		// console.log("lifted");
+		console.log("lifted");
 	},
 	onplace() {
-		// console.log("placed");
+		console.log("placed");
 	},
 	onresize(entry) {
 		// We get the entry, but we also get "this"
-		// console.log(entry);
+		console.log(entry);
 	},
 	onremove() {
 		// clean up or whatever
