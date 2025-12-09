@@ -11,33 +11,21 @@
 // - API for editable exports and self-rewriting
 //
 
-// INDEX:
-// ======
-//
-// LOADING
-// --> Transpilation steps
-// --> Processing, creating import map, etc
-// --> Managing module cache
-// --> Runtime changes (just adding modules)
-//
-// CLONES
-// --> Process blob modules found
-// --> Generates exports (string, download)
-//
-// SNAPSHOTS
-// --> Booting from snapshot
-// --> CRUD for snapshots
-
 // TODO
+//
+// v1.0 === === === === === === === === === === === === === === === === === === === === ===
+//
+// [ ] Fix the TODOs regarding prefers_remote_modules
 //
 // v1.5 === === === === === === === === === === === === === === === === === === === === ===
 //
-// This version might require some internal refactorings, this is why a CRUD interface is important over just exposing internals directly.
+//      This version might require some internal refactorings, this is why a CRUD interface is
+//      important over just exposing internals directly.
+//
 // [ ] Hooks for minification and formatting (we already have the lib thing)
 //     - TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
-// [ ] Implement saveAsZipFile() which instead of inlined modules and assets it saves everything separately
+// [ ] Implement saveAsZipFile() and saveCloneAsZipFile()
 //     - This is useful for debugging purposes or when using an external IDE
-//     - It would be cool to stream into local files so you can open with the browser automatically
 //     - use fflate
 
 (async () => {
@@ -46,11 +34,14 @@
 	//
 
 	window.BlobLoader = {
-		notifications: [], // array of strings
+		notifications: [], // @TODO: Remove this. I don't think it's good.
 		settings: {
 			prefers_remote_modules: location.hostname === "localhost" ? true : false,
+			// @TODO: prefers_remote_modules should not exist.
+			//        it should be: 1. inline, 2. cache, 3. remote
+			//        if remote is different from used module source (inline or cache)
+			//        	then we add a notification saying there is a mismatch and we can update.
 			force_boot_from_snapshot: false,
-			autosave_snapshot_on_load_when_different_from_last: false,
 		},
 		lib: {}, // The place for IIFEs to self attach before running the loader.
 		transformers: [], // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
@@ -143,66 +134,6 @@
 		const media_css_vars = [];
 		const blob_media_blobs = new Map();
 		const blob_adopted_sheets = new Map();
-
-		//
-		// Global API export
-		//
-
-		window.BlobLoader = {
-			// Initial settings
-			...window.BlobLoader,
-
-			// Module management
-			getMediaUrl,
-			getCachedModule,
-			setCachedModule,
-			deleteCachedModule,
-			getCachedMedia,
-			setCachedMedia,
-			deleteCachedMedia,
-			addStyleModule,
-			runNonExportingModuleScript,
-			clearModuleCache,
-			updateCachedModuleFromRemote,
-			updateCachedStyleFromRemote,
-			updateCachedMediaFromRemote,
-			getDocumentOuterHtml,
-			saveAsHtmlFile,
-			saveAsZipFile,
-
-			// Clones
-			cloneDocument,
-			getCloneOuterHtmlFile,
-			saveCloneAsHtmlFile,
-			saveCloneAsZipFile,
-			saveCloneAsSnapshot,
-
-			addCloneScriptModule,
-			getCloneScriptModule,
-			updateCloneScriptModule,
-			removeCloneScriptModule,
-
-			addCloneStyleModule,
-			getCloneStyleModule,
-			updateCloneStyleModule,
-			removeCloneStyleModule,
-
-			addCloneMediaModule,
-			getCloneMediaModule,
-			updateCloneMediaModule,
-			removeCloneMediaModule,
-
-			// Snapshot management
-			openCache,
-			saveSnapshotToCache,
-			getSnapshotFromCache,
-			listSnapshotsInCache,
-			deleteSnapshotFromCache,
-			saveSnapshotAsHtmlFile,
-			setSnapshotForBoot,
-			removeSnapshotBootPetition,
-			createBackupSnapshot,
-		};
 
 		//
 		// Process blob media tags
@@ -862,11 +793,6 @@
 				console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
 
 				import("main");
-
-				// Make backup (if settings allow it)
-				if (BlobLoader.settings.autosave_snapshot_on_load_when_different_from_last) {
-					BlobLoader.createBackupSnapshot();
-				}
 			`;
 			document.head.appendChild(main_script);
 		}
@@ -1603,35 +1529,6 @@
 
 			console.log(`Set snapshot "${snapshot.tag}" (${target_session_id}) to load on next boot`);
 			return target_session_id;
-		}
-
-		async function createBackupSnapshot() {
-			const current_html = await BlobLoader.getDocumentOuterHtml(true);
-			const snapshots = await listSnapshotsInCache();
-
-			if (snapshots.length > 0) {
-				// Get the most recent snapshot
-				const last_snapshot = await BlobLoader.getSnapshotFromCache(snapshots[0].session_id);
-
-				if (last_snapshot) {
-					// Parse both HTMLs and compare only the head contents
-					const parser = new DOMParser();
-
-					const current_doc = parser.parseFromString(current_html, "text/html");
-					const last_doc = parser.parseFromString(last_snapshot.html_content, "text/html");
-
-					const current_head = current_doc.head.innerHTML;
-					const last_head = last_doc.head.innerHTML;
-
-					if (current_head === last_head) {
-						console.log("Head contents unchanged from last backup, skipping save");
-						return;
-					}
-				}
-			}
-
-			console.log("Saving backup");
-			return await BlobLoader.saveSnapshotToCache("Automatic backup");
 		}
 
 		async function saveSnapshotToCache(tag = "") {
@@ -2544,6 +2441,65 @@
 			);
 			return false;
 		}
+
+		//
+		// Global API export
+		//
+
+		window.BlobLoader = {
+			// Initial settings
+			...window.BlobLoader,
+
+			// Module management
+			getMediaUrl,
+			getCachedModule,
+			setCachedModule,
+			deleteCachedModule,
+			getCachedMedia,
+			setCachedMedia,
+			deleteCachedMedia,
+			addStyleModule,
+			runNonExportingModuleScript,
+			clearModuleCache,
+			updateCachedModuleFromRemote,
+			updateCachedStyleFromRemote,
+			updateCachedMediaFromRemote,
+			getDocumentOuterHtml,
+			saveAsHtmlFile,
+			saveAsZipFile,
+
+			// Clones
+			cloneDocument,
+			getCloneOuterHtmlFile,
+			saveCloneAsHtmlFile,
+			saveCloneAsZipFile,
+			saveCloneAsSnapshot,
+
+			addCloneScriptModule,
+			getCloneScriptModule,
+			updateCloneScriptModule,
+			removeCloneScriptModule,
+
+			addCloneStyleModule,
+			getCloneStyleModule,
+			updateCloneStyleModule,
+			removeCloneStyleModule,
+
+			addCloneMediaModule,
+			getCloneMediaModule,
+			updateCloneMediaModule,
+			removeCloneMediaModule,
+
+			// Snapshot management
+			openCache,
+			saveSnapshotToCache,
+			getSnapshotFromCache,
+			listSnapshotsInCache,
+			deleteSnapshotFromCache,
+			saveSnapshotAsHtmlFile,
+			setSnapshotForBoot,
+			removeSnapshotBootPetition,
+		};
 	}
 
 	//
