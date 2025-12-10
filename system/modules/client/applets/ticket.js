@@ -24,15 +24,21 @@ export const Ticket = registerAppletTag(APPLET_NAME, {
 		this.start_w = 300;
 	},
 	hydrate() {
-		this.style.height = "fit-content";
 
-		const previous_html = this.querySelector("[contenteditable]")?.innerHTML;
-		const applet_el = $.div({
-			contenteditable: true,
-			innerHTML: previous_html || "start typing here",
-		});
+		const previous_content_el = this.querySelector("[contenteditable]");
 
-		this.replaceChildren(applet_el);
+		if (previous_content_el) {
+			// we could attach some event listeners here if needed.
+		} else {
+			this.style.height = "fit-content"; // only initialize height if new
+			this.replaceChildren(
+				$.div({
+					// same event listeners here
+					contenteditable: true,
+					innerHTML: "blank content editable",
+				}),
+			);
+		}
 	},
 	onlift() {
 		console.log("lifted");

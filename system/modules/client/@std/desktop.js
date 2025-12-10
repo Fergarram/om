@@ -1,6 +1,6 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
-import { isScrollable, finish, css, uniqueId } from "utils";
+import { isScrollable, finish, css } from "utils";
 // import { initializeBackgroundCanvas } from "wallpaper";
 
 //
@@ -68,7 +68,7 @@ let camera_animation_target_world_x = null;
 let camera_animation_target_world_y = null;
 let is_animating_camera = false;
 
-const { div, main, canvas } = useTags();
+const $ = useTags();
 
 export const Desktop = registerCustomTag("desktop-view", {
 	//
@@ -88,7 +88,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 		back_canvas_el =
 			this.querySelector("canvas[layer='back']") ||
 			this.appendChild(
-				canvas({
+				$.canvas({
 					layer: "back",
 					style: `
 						position: absolute;
@@ -102,9 +102,9 @@ export const Desktop = registerCustomTag("desktop-view", {
 			);
 
 		viewport_el =
-			this.querySelector("main") ||
+			this.querySelector("viewport") ||
 			this.appendChild(
-				main(
+				$.viewport(
 					{
 						style: css`
 							position: relative;
@@ -117,8 +117,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 							overflow: hidden;
 						`,
 					},
-					div({
-						id: "surface",
+					$.surface({
 						// still not sure if I need to set this
 						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
 						style: `
@@ -137,7 +136,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 		front_canvas_el =
 			this.querySelector("canvas[layer='front']") ||
 			this.appendChild(
-				canvas({
+				$.canvas({
 					layer: "front",
 					style: `
 						position: absolute;
@@ -908,7 +907,6 @@ export function registerAppletTag(name, config) {
 		onconnected() {
 			// Configure applet element attributes
 			const attrs = {
-				instance: uniqueId(),
 				motion: MOTION_IDLE,
 				style: `
 					display: block;
@@ -992,12 +990,12 @@ BlobLoader.addStyleModule(
 				0 15px 12px rgba(0, 0, 0, 0.22);
 		}
 
-		#surface {
+		surface {
 			background-image: var(--BM-grid-svg-light);
 		}
 
 		@media (prefers-color-scheme: dark) {
-			#surface {
+			surface {
 				background-image: var(--BM-grid-svg-dark);
 			}
 		}
@@ -1011,6 +1009,45 @@ BlobLoader.addStyleModule(
 //
 
 export function mountApplet(applet_el) {
-	const surface_el = document.querySelector("desktop-view > main > div");
+	if (!surface_el) {
+		console.warn("No surface element found");
+		return;
+	}
+
 	surface_el.appendChild(applet_el);
 }
+
+/*
+
+controls.js
+
+plugs into the desktop.js file.
+
+controls.js is a config js file
+
+so controls.config.js
+
+if you want.
+
+so we do:
+
+// controls.config.js
+// This is HMR-compatible
+// because it will simply call the replace function again.
+//
+
+import {
+  replaceDesktopControls
+} from "desktop";
+
+const controls = {
+  onKeyDown() {
+    // we're already avoiding stuff like we're not focusing on a textfield, etc.
+  },
+};
+
+
+// just replaces the callbacks
+replaceDesktopControls(controls);
+
+*/

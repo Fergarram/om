@@ -1,5 +1,5 @@
 //
-// BLOB LOADER 0.9.0
+// BLOB LOADER | [56/100] to v1.0
 // by fergarram
 //
 
@@ -16,6 +16,12 @@
 // v1.0 === === === === === === === === === === === === === === === === === === === === ===
 //
 // [ ] Fix the TODOs regarding prefers_remote_modules
+//     The main idea is that we do: inline > cache > remote > stub
+//     This means we don't have a setting. It's just the default.
+// [ ] BUG: Remote is null for addStyleModule() if loaded from snapshot
+//          but funny enough boot still works. So this is good news because we run under
+//          assumption that things will break at some point.
+//          but it does break normal boot, sadly :(
 //
 // v1.5 === === === === === === === === === === === === === === === === === === === === ===
 //
@@ -58,7 +64,7 @@
 		const snapshot = await getSnapshotFromCache(boot_snapshot_id);
 
 		if (
-			(snapshot && force_boot_from_snapshot) ||
+			(snapshot && BlobLoader.settings.force_boot_from_snapshot) ||
 			(snapshot &&
 				confirm(
 					"A snapshot will be loaded instead of main document.\n\nDo you want to continue?",
@@ -1359,18 +1365,6 @@
 			console.log("HTML file download initiated");
 		}
 
-		async function getSnapshotFromCache(session_id) {
-			const db = await openCache();
-			const transaction = db.transaction(["snapshots"], "readonly");
-			const store = transaction.objectStore("snapshots");
-
-			return new Promise((resolve, reject) => {
-				const request = store.get(session_id);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve(request.result);
-			});
-		}
-
 		async function listSnapshotsInCache() {
 			const db = await openCache();
 			const transaction = db.transaction(["snapshots"], "readonly");
@@ -2503,7 +2497,7 @@
 	}
 
 	//
-	// Utils
+	// Boot-time utils
 	//
 
 	function openCache() {
@@ -2552,6 +2546,18 @@
 					});
 				}
 			};
+		});
+	}
+
+	async function getSnapshotFromCache(session_id) {
+		const db = await openCache();
+		const transaction = db.transaction(["snapshots"], "readonly");
+		const store = transaction.objectStore("snapshots");
+
+		return new Promise((resolve, reject) => {
+			const request = store.get(session_id);
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => resolve(request.result);
 		});
 	}
 
