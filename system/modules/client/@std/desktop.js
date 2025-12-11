@@ -729,7 +729,7 @@ export function registerAppletTag(name, config) {
 			last_mouse_x = e.clientX;
 			last_mouse_y = e.clientY;
 
-			this.style.willChange = "filter, transform, left, top";
+			this.style.willChange = "transform, left, top";
 
 			await finish();
 
@@ -980,14 +980,14 @@ BlobLoader.addStyleModule(
 		desktop-view [motion="${MOTION_IDLE}"] > :first-child,
 		desktop-view [motion="${MOTION_RESIZE}"] > :first-child {
 			box-shadow:
-				0 1px 3px rgba(0, 0, 0, 0.12),
-				0 1px 2px rgba(0, 0, 0, 0.24);
+				0 1px 0.5px rgba(0, 0, 0, 0.01),
+				0 1px 1.5px rgba(0, 0, 0, 0.1);
 		}
 
 		desktop-view [motion="${MOTION_LIFT}"] > :first-child {
 			box-shadow:
-				0 19px 38px rgba(0, 0, 0, 0.3),
-				0 15px 12px rgba(0, 0, 0, 0.22);
+				0 19px 38px rgba(0, 0, 0, 0.075),
+				0 15px 12px rgba(0, 0, 0, 0.05);
 		}
 
 		surface {

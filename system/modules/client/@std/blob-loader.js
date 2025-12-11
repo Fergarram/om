@@ -338,6 +338,8 @@
 
 			// Add CSS variable definition only for images
 			if (blob.type.startsWith("image/")) {
+				// @TODO: We need to add this to an inline style tag dedicated to assets in order
+				// to support NO-JS image assets
 				media_css_vars.push(`--BM-${media_name.replaceAll(" ", "-")}: url('${blob_url}');`);
 			}
 

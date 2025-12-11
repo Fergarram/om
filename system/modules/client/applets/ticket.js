@@ -24,7 +24,6 @@ export const Ticket = registerAppletTag(APPLET_NAME, {
 		this.start_w = 300;
 	},
 	hydrate() {
-
 		const previous_content_el = this.querySelector("[contenteditable]");
 
 		if (previous_content_el) {
@@ -65,12 +64,26 @@ BlobLoader.addStyleModule(
 			position: relative;
 			width: 100%;
 			height: 100%;
-			background: white;
+			/*background: rgb(255 255 255 / 25%);*/
+			background: rgb(255 255 255);
+			/*backdrop-filter: blur(0.5px);*/
 			border-radius: 0px;
 			padding: 1rem;
 			font-family: var(--font-monospace);
 			font-size: 11px;
 			overflow: scroll;
+			transition: backdrop-filter 150ms ease-in-out;
+		}
+
+		applet-${APPLET_NAME}[motion="lift"] {
+			/*backdrop-filter: blur(2.5px);*/
+		}
+
+		@media (prefers-color-scheme: dark) {
+			applet-${APPLET_NAME} > div {
+				color: #EAEAEA;
+				background: #303030;
+			}
 		}
 	`,
 	{},
@@ -93,5 +106,10 @@ with just having a single html file.
 Currently, I have two files: shell and export.
 
 I need it to always be an export.
+
+
+
+Also, we need the <header></header> banner and skip to main content links.
+Essentially for pure non-js renders we want to be able to navigate the site reliably.
 
 */
