@@ -266,16 +266,20 @@ function getContentType(file_path) {
 }
 
 function serveFile(res, file_path, no_cache = false) {
-	fs.readFile(file_path, (err, data) => {
+	// First check if file exists and get its stats
+	fs.stat(file_path, (err, stats) => {
 		if (err) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
-			console.error("Failed to serve file:", err);
+			console.error("Failed to stat file:", err);
 			return;
 		}
 
 		const content_type = getContentType(file_path);
-		const headers = { "Content-Type": content_type };
+		const headers = {
+			"Content-Type": content_type,
+			"Content-Length": stats.size,
+		};
 
 		if (no_cache && !IS_PROD) {
 			headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
@@ -284,7 +288,21 @@ function serveFile(res, file_path, no_cache = false) {
 		}
 
 		res.writeHead(200, headers);
-		res.end(data);
+
+		// Stream the file instead of reading it all at once
+		const read_stream = fs.createReadStream(file_path);
+
+		read_stream.on("error", (err) => {
+			console.error("Failed to stream file:", err);
+			if (!res.headersSent) {
+				res.writeHead(500, { "Content-Type": "text/plain" });
+				res.end("500 Internal Server Error");
+			} else {
+				res.end();
+			}
+		});
+
+		read_stream.pipe(res);
 	});
 }
 
