@@ -19,10 +19,6 @@
 	// [ ] Fix the TODOs regarding prefers_remote_modules
 	//     The main idea is that we do: inline > cache > remote > stub
 	//     This means we don't have a setting. It's just the default.
-	// [ ] BUG: Remote is null for addStyleModule() if loaded from snapshot
-	//          but funny enough boot still works. So this is good news because we run under
-	//          assumption that things will break at some point.
-	//          but it does break normal boot, sadly :(
 	//
 	// v1.5 === === === === === === === === === === === === === === === === === === === === ===
 	//
@@ -961,14 +957,14 @@
 		const module_info = blob_module_map.get(module_name);
 
 		if (!module_info) {
-			console.error(`Module "${module_name}" not found`);
+			console.warn(`Module "${module_name}" not found`);
 			return false;
 		}
 
 		const remote_url = module_info.remote_url;
 
 		if (!remote_url) {
-			console.error(`Module "${module_name}" has no remote URL`);
+			console.warn(`Module "${module_name}" has no remote URL`);
 			return false;
 		}
 
@@ -1005,7 +1001,7 @@
 			console.warn("Reload the page for changes to take effect");
 			return true;
 		} catch (error) {
-			console.error(`Failed to update module "${module_name}" from remote:`, error);
+			console.warn(`Failed to update module "${module_name}" from remote:`, error);
 			return false;
 		}
 	}
@@ -1014,14 +1010,14 @@
 		const style_info = blob_style_map.get(style_name);
 
 		if (!style_info) {
-			console.error(`Style "${style_name}" not found`);
+			console.warn(`Style "${style_name}" not found`);
 			return false;
 		}
 
 		const remote_url = style_info.remote_url;
 
 		if (!remote_url) {
-			console.error(`Style "${style_name}" has no remote URL`);
+			console.warn(`Style "${style_name}" has no remote URL`);
 			return false;
 		}
 
@@ -1063,7 +1059,7 @@
 			console.log(`Successfully updated style "${style_name}" from remote`);
 			return true;
 		} catch (error) {
-			console.error(`Failed to update style "${style_name}" from remote:`, error);
+			console.warn(`Failed to update style "${style_name}" from remote:`, error);
 			return false;
 		}
 	}
@@ -1072,14 +1068,14 @@
 		const media_info = blob_media_map.get(media_name);
 
 		if (!media_info) {
-			console.error(`Media "${media_name}" not found`);
+			console.warn(`Media "${media_name}" not found`);
 			return false;
 		}
 
 		const remote_url = media_info.remote_url;
 
 		if (!remote_url) {
-			console.error(`Media "${media_name}" has no remote URL`);
+			console.warn(`Media "${media_name}" has no remote URL`);
 			return false;
 		}
 
@@ -1140,7 +1136,7 @@
 			console.log(`Successfully updated media "${media_name}" from remote`);
 			return true;
 		} catch (error) {
-			console.error(`Failed to update media "${media_name}" from remote:`, error);
+			console.warn(`Failed to update media "${media_name}" from remote:`, error);
 			return false;
 		}
 	}
@@ -1487,7 +1483,7 @@
 
 			console.log(`Snapshot "${snapshot.tag}" download initiated`);
 		} catch (error) {
-			console.error("Failed to save snapshot as HTML file:", error);
+			console.warn("Failed to save snapshot as HTML file:", error);
 			throw error;
 		}
 	}
@@ -1693,7 +1689,7 @@
 			await import(blob_url);
 			console.log("Non-exporting module script executed successfully");
 		} catch (error) {
-			console.error("Failed to execute non-exporting module script:", error);
+			console.warn("Failed to execute non-exporting module script:", error);
 			throw error;
 		} finally {
 			// Clean up the blob URL after import
