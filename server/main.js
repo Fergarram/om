@@ -266,7 +266,6 @@ function getContentType(file_path) {
 }
 
 function serveFile(res, file_path, no_cache = false) {
-	// First check if file exists and get its stats
 	fs.stat(file_path, (err, stats) => {
 		if (err) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
@@ -281,15 +280,18 @@ function serveFile(res, file_path, no_cache = false) {
 			"Content-Length": stats.size,
 		};
 
-		if (no_cache && !IS_PROD) {
+		if (no_cache || !IS_PROD) {
 			headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
 			headers["Pragma"] = "no-cache";
 			headers["Expires"] = "0";
+		} else {
+			const etag = `"${stats.mtime.getTime()}-${stats.size}"`;
+			headers["ETag"] = etag;
+			headers["Cache-Control"] = "public, max-age=3600";
 		}
 
 		res.writeHead(200, headers);
 
-		// Stream the file instead of reading it all at once
 		const read_stream = fs.createReadStream(file_path);
 
 		read_stream.on("error", (err) => {
