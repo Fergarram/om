@@ -210,13 +210,10 @@ function handleStaticRoute(req, res, base_dir, url_path) {
 }
 
 function handleSpaceRoute(req, res, space_slug) {
-	function resolveSpacePath(space_slug) {
-		const safe_slug = path.basename(space_slug);
-		const space_path = path.join(SPACES_DIR, `${safe_slug}.html`);
-		return space_path;
-	}
+	const safe_slug = path.basename(space_slug);
+	const space_path = path.join(SPACES_DIR, `${safe_slug}.html`);
 
-	const space_path = resolveSpacePath(space_slug);
+	console.log("Serving space", space_path);
 
 	fs.stat(space_path, (err, stats) => {
 		if (err) {
