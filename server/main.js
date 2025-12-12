@@ -158,7 +158,7 @@ function runHttpServer() {
 			}
 		})
 		.listen(HTTP_PORT, () => {
-			console.log(`HTTP server running at http://localhost:${HTTP_PORT}/`);
+			console.log(`HTTP server running locally at http://localhost:${HTTP_PORT}/`);
 		});
 }
 
