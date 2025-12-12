@@ -1,5 +1,5 @@
 //
-// BLOB LOADER | [56/100] to v1.0
+// BLOB LOADER | [80/100] to v1.0
 // by fergarram
 //
 
