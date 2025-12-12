@@ -270,6 +270,7 @@ function serveFile(res, file_path, no_cache = false) {
 		if (err) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
+			console.error("Failed to serve file:", err);
 			return;
 		}
 
