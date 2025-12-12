@@ -1,6 +1,6 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
-import { isScrollable, finish, css } from "utils";
+import { isScrollable, finish, useGlobalStyles, css } from "utils";
 // import { initializeBackgroundCanvas } from "wallpaper";
 
 //
@@ -87,36 +87,12 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		back_canvas_el =
 			this.querySelector("canvas[layer='back']") ||
-			this.appendChild(
-				$.canvas({
-					layer: "back",
-					style: `
-						position: absolute;
-						width: 100%;
-						height: 100%;
-						flex-grow: 1;
-						overflow: hidden;
-						pointer-events: none;
-					`,
-				}),
-			);
+			this.appendChild($.canvas({ layer: "back" }));
 
 		viewport_el =
 			this.querySelector("viewport") ||
 			this.appendChild(
 				$.viewport(
-					{
-						style: css`
-							position: relative;
-							width: 100%;
-							height: auto;
-							flex-grow: 1;
-							/* @TODO: overflow scroll is NO JS fallback, we need a fallback */
-							/*        Maybe via a CSS var that is inlined via module and */
-							/*        overwritten at runtime? */
-							overflow: hidden;
-						`,
-					},
 					$.surface({
 						// still not sure if I need to set this
 						// style: () => (is_zooming ? `will-change: transform, width, height;` : ``),
@@ -135,19 +111,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		front_canvas_el =
 			this.querySelector("canvas[layer='front']") ||
-			this.appendChild(
-				$.canvas({
-					layer: "front",
-					style: `
-						position: absolute;
-						width: 100%;
-						height: 100%;
-						flex-grow: 1;
-						overflow: hidden;
-						pointer-events: none;
-					`,
-				}),
-			);
+			this.appendChild($.canvas({ layer: "front" }));
 
 		// Let's wait for the browser to finish the current queue of actions.
 		await finish();
@@ -157,8 +121,6 @@ export const Desktop = registerCustomTag("desktop-view", {
 		// 	desktop_el,
 		// 	canvas_el,
 		// );
-		// Once JS is loaded, disable native scrolling
-		viewport_el.style.overflow = "hidden";
 
 		handleResize();
 
@@ -973,6 +935,23 @@ BlobLoader.addStyleModule(
 			background-color: black;
 		}
 
+		desktop-view viewport {
+			position: relative;
+			width: 100%;
+			height: auto;
+			flex-grow: 1;
+			overflow: scroll;
+		}
+
+		desktop-view canvas {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			flex-grow: 1;
+			overflow: hidden;
+			pointer-events: none;
+		}
+
 		desktop-view [motion] > :first-child {
 			transition: box-shadow 120ms cubic-bezier(0.25, 0.8, 0.25, 1);
 		}
@@ -1003,6 +982,13 @@ BlobLoader.addStyleModule(
 	{},
 	{ override: true },
 );
+
+// Override inline CSS with JS only CSS props
+useGlobalStyles(css`
+	desktop-view viewport {
+		overflow: hidden !important;
+	}
+`);
 
 //
 // Utilities
