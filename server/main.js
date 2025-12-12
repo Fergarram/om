@@ -111,10 +111,10 @@ function handleRequest(req, res) {
 			serveFile(res, home_path);
 		});
 		return;
-}
+	}
 
 	//
-	// Space rote
+	// Space route
 	//
 
 	const space_slug = url_path.slice(1);
@@ -193,6 +193,7 @@ function handleStaticRoute(req, res, base_dir, url_path) {
 		if (err) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Not Found");
+			console.log(err);
 			return;
 		}
 
@@ -202,7 +203,7 @@ function handleStaticRoute(req, res, base_dir, url_path) {
 		} else {
 			// Check if this is the modules directory
 			const is_modules = base_dir === MODULES_DIR;
-			console.log("Serving module", url_path, is_modules)
+			console.log("Serving module", url_path, is_modules);
 			serveFile(res, file_path, is_modules);
 		}
 	});
@@ -240,17 +241,20 @@ function handleSpaceRoute(req, res, space_slug) {
 
 function API_pullFromGit(req, res) {
 	console.log("Pulling latest changes in om...");
-	exec(`cd ${OM_DIR} && git fetch origin main && git reset --hard origin/main`, (err, stdout, stderr) => {
-		if (err) {
-			console.error("Pull failed:", err);
-			res.writeHead(500, { "Content-Type": "text/plain" });
-			res.end("Pull failed");
-			return;
-		}
-		console.log(stdout || stderr);
-		res.writeHead(200, { "Content-Type": "text/plain" });
-		res.end("OK");
-	});
+	exec(
+		`cd ${OM_DIR} && git fetch origin main && git reset --hard origin/main`,
+		(err, stdout, stderr) => {
+			if (err) {
+				console.error("Pull failed:", err);
+				res.writeHead(500, { "Content-Type": "text/plain" });
+				res.end("Pull failed");
+				return;
+			}
+			console.log(stdout || stderr);
+			res.writeHead(200, { "Content-Type": "text/plain" });
+			res.end("OK");
+		},
+	);
 }
 
 //
