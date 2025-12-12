@@ -274,21 +274,13 @@ function serveFile(res, file_path, no_cache = false) {
 			return;
 		}
 
-		const content_type = getContentType(file_path);
 		const headers = {
-			"Content-Type": content_type,
+			"Content-Type": getContentType(file_path),
 			"Content-Length": stats.size,
+			"Cache-Control": "no-cache, no-store, must-revalidate",
+			Pragma: "no-cache",
+			Expires: "0",
 		};
-
-		if (no_cache || !IS_PROD) {
-			headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-			headers["Pragma"] = "no-cache";
-			headers["Expires"] = "0";
-		} else {
-			const etag = `"${stats.mtime.getTime()}-${stats.size}"`;
-			headers["ETag"] = etag;
-			headers["Cache-Control"] = "public, max-age=3600";
-		}
 
 		res.writeHead(200, headers);
 
