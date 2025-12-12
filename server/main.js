@@ -229,6 +229,7 @@ function handleSpaceRoute(req, res, space_slug) {
 		if (!stats.isFile()) {
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("404 Space not found");
+			console.log("Not a file", err);
 			return;
 		}
 
