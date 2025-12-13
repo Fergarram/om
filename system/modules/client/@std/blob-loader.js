@@ -120,7 +120,8 @@
 			let blob = null;
 
 			if (inline_src) {
-				// Store inline data URL
+				// Has inline source
+				console.log(`Using inline source for media "${media_name}"`);
 				blob_media_sources.set(media_name, inline_src);
 				if (remote_url) {
 					remote_media_hrefs.set(media_name, remote_url);
@@ -129,11 +130,8 @@
 				// Convert data URL to blob
 				const res = await fetch(inline_src);
 				blob = await res.blob();
-			} else if (remote_url) {
-				// Need to fetch from remote
-				remote_media_hrefs.set(media_name, remote_url);
-
-				// Try cache first
+			} else {
+				// Try cache
 				const cached_media = await getCachedMedia(media_name);
 				if (cached_media) {
 					console.log(`Using cached media "${media_name}"`);
@@ -146,7 +144,11 @@
 						reader.readAsDataURL(cached_media.blob);
 					});
 					blob_media_sources.set(media_name, data_url);
-				} else {
+
+					if (remote_url) {
+						remote_media_hrefs.set(media_name, remote_url);
+					}
+				} else if (remote_url) {
 					// Fetch from remote
 					console.log(
 						`Fetching remote media "${media_name}" from ${remote_url} (no local/cached version)`,
@@ -172,6 +174,7 @@
 						reader.readAsDataURL(blob);
 					});
 					blob_media_sources.set(media_name, data_url);
+					remote_media_hrefs.set(media_name, remote_url);
 				}
 			}
 
@@ -281,28 +284,30 @@
 			}
 
 			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
-			const had_initial_content = style.textContent.trim().length > 0;
 			const content = style.textContent.trim();
 
 			let final_content = null;
 
 			if (content) {
 				// Has inline content
+				console.log(`Using inline content for style "${style_module_name}"`);
 				blob_style_sources.set(style_module_name, content);
 				if (remote_url) {
 					remote_styles_hrefs.set(style_module_name, remote_url);
 				}
 				final_content = content;
-			} else if (remote_url) {
-				// Needs fetching
-				remote_styles_hrefs.set(style_module_name, remote_url);
-
-				// Try cache first
+			} else {
+				// Try cache
 				const cached_style = await getCachedModule(style_module_name);
 				if (cached_style) {
 					console.log(`Using cached style "${style_module_name}"`);
 					final_content = cached_style.content;
-				} else {
+					blob_style_sources.set(style_module_name, final_content);
+
+					if (remote_url) {
+						remote_styles_hrefs.set(style_module_name, remote_url);
+					}
+				} else if (remote_url) {
 					// Fetch from remote
 					console.log(
 						`Fetching remote style "${style_module_name}" from ${remote_url} (no local/cached version)`,
@@ -322,9 +327,10 @@
 					// Cache it
 					await setCachedModule(style_module_name, final_content);
 					console.log(`Cached remote style "${style_module_name}"`);
-				}
 
-				blob_style_sources.set(style_module_name, final_content);
+					blob_style_sources.set(style_module_name, final_content);
+					remote_styles_hrefs.set(style_module_name, remote_url);
+				}
 			}
 
 			if (!final_content) {
@@ -339,10 +345,10 @@
 			blob_style_urls.set(style_module_name, blob_url);
 
 			// Update style tag
-			const had_remote = remote_styles_hrefs.has(style_module_name);
+			const had_inline_content = content.length > 0;
 
-			if (had_remote && !had_initial_content && !blob_adopted_sheets.has(style_module_name)) {
-				// This was fetched from remote, use adopted stylesheet
+			if (!had_inline_content && !blob_adopted_sheets.has(style_module_name)) {
+				// This was fetched from cache or remote, use adopted stylesheet
 				const sheet = new CSSStyleSheet();
 				sheet.replaceSync(final_content);
 				document.adoptedStyleSheets.push(sheet);
@@ -351,7 +357,7 @@
 				style.textContent = "";
 				style.setAttribute("blob", blob_url);
 
-				console.log(`Adopted stylesheet for ${style_module_name} (fetched from remote)`);
+				console.log(`Adopted stylesheet for ${style_module_name} (fetched from cache/remote)`);
 			} else {
 				// Keep inline content in the style tag
 				style.textContent = final_content;
@@ -414,21 +420,24 @@
 
 			if (content) {
 				// Has inline content
+				console.log(`Using inline content for module "${module_name}"`);
 				blob_modules_sources.set(module_name, content);
 				if (remote_url) {
 					remote_modules_hrefs.set(module_name, remote_url);
 				}
 				final_content = content;
-			} else if (remote_url) {
-				// Needs fetching
-				remote_modules_hrefs.set(module_name, remote_url);
-
-				// Try cache first
+			} else {
+				// Try cache
 				const cached_module = await getCachedModule(module_name);
 				if (cached_module) {
 					console.log(`Using cached module "${module_name}"`);
 					final_content = cached_module.content;
-				} else {
+					blob_modules_sources.set(module_name, final_content);
+
+					if (remote_url) {
+						remote_modules_hrefs.set(module_name, remote_url);
+					}
+				} else if (remote_url) {
 					// Fetch from remote
 					console.log(
 						`Fetching remote module "${module_name}" from ${remote_url} (no local/cached version)`,
@@ -477,9 +486,10 @@
 					// Cache it
 					await setCachedModule(module_name, final_content);
 					console.log(`Cached remote module "${module_name}"`);
-				}
 
-				blob_modules_sources.set(module_name, final_content);
+					blob_modules_sources.set(module_name, final_content);
+					remote_modules_hrefs.set(module_name, remote_url);
+				}
 			}
 
 			if (!final_content) {
