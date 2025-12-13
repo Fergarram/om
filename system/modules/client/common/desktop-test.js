@@ -7,6 +7,9 @@ import { isUserTyping, finish } from "utils";
 //
 
 if (!document.querySelector("desktop-view")) {
+	// DEV: Clear module cache
+	await BlobLoader.clearAllCache();
+
 	document.body.appendChild(Desktop());
 	await finish();
 	mountApplet(Ticket());

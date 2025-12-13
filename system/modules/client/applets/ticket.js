@@ -81,7 +81,7 @@ BlobLoader.addStyleModule(
 
 		@media (prefers-color-scheme: dark) {
 			applet-${APPLET_NAME} > div {
-				color: #EAEAEA;
+				color: #eaeaea;
 				background: #303030;
 			}
 		}

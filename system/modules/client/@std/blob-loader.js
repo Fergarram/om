@@ -33,15 +33,15 @@
 		// Module cache management
 		getCachedModule,
 		setCachedModule,
-		getCachedMedia,
-		setCachedMedia,
 		addStyleModule,
 		runNonExportingModuleScript,
+		updateCachedModuleFromRemote,
+		clearAllCache,
+		openCache,
 
 		// Utils
 		saveAsHtmlFile,
 		getDocumentOuterHtml,
-		openCache,
 	};
 
 	//
@@ -132,7 +132,7 @@
 				blob = await res.blob();
 			} else {
 				// Try cache
-				const cached_media = await getCachedMedia(media_name);
+				const cached_media = await getCachedModule(media_name, "media");
 				if (cached_media) {
 					console.log(`Using cached media "${media_name}"`);
 					blob = cached_media.blob;
@@ -164,7 +164,7 @@
 					blob = await response.blob();
 
 					// Cache it for next time
-					await setCachedMedia(media_name, blob);
+					await setCachedModule(media_name, blob, "media");
 					console.log(`Cached remote media "${media_name}"`);
 
 					// Convert to data URL
@@ -246,7 +246,6 @@
 			console.log(`Created blob URL for media "${media_name}"`);
 		}
 
-		// TODO:
 		// Create and adopt stylesheet with media CSS variables
 		if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
 			const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
@@ -298,7 +297,7 @@
 				final_content = content;
 			} else {
 				// Try cache
-				const cached_style = await getCachedModule(style_module_name);
+				const cached_style = await getCachedModule(style_module_name, "styles");
 				if (cached_style) {
 					console.log(`Using cached style "${style_module_name}"`);
 					final_content = cached_style.content;
@@ -325,7 +324,7 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(style_module_name, final_content);
+					await setCachedModule(style_module_name, final_content, "styles");
 					console.log(`Cached remote style "${style_module_name}"`);
 
 					blob_style_sources.set(style_module_name, final_content);
@@ -428,7 +427,7 @@
 				final_content = content;
 			} else {
 				// Try cache
-				const cached_module = await getCachedModule(module_name);
+				const cached_module = await getCachedModule(module_name, "modules");
 				if (cached_module) {
 					console.log(`Using cached module "${module_name}"`);
 					final_content = cached_module.content;
@@ -484,7 +483,7 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(module_name, final_content);
+					await setCachedModule(module_name, final_content, "modules");
 					console.log(`Cached remote module "${module_name}"`);
 
 					blob_modules_sources.set(module_name, final_content);
@@ -556,11 +555,19 @@
 	// Module cache management
 	//
 
-	async function getCachedMedia(name) {
+	async function getCachedModule(name, module_type) {
 		try {
 			const db = await openCache();
-			const transaction = db.transaction(["media"], "readonly");
-			const store = transaction.objectStore("media");
+
+			// Validate module type
+			const valid_types = ["modules", "styles", "media"];
+			if (!valid_types.includes(module_type)) {
+				console.warn(`Invalid module type: ${module_type}`);
+				return null;
+			}
+
+			const transaction = db.transaction([module_type], "readonly");
+			const store = transaction.objectStore(module_type);
 
 			return new Promise((resolve, reject) => {
 				const request = store.get(name);
@@ -568,22 +575,36 @@
 				request.onsuccess = () => resolve(request.result);
 			});
 		} catch (error) {
-			console.warn("Failed to get cached media:", error);
+			console.warn(`Failed to get cached ${module_type} module:`, error);
 			return null;
 		}
 	}
 
-	async function setCachedMedia(name, blob) {
+	async function setCachedModule(name, content, module_type) {
 		try {
 			const db = await openCache();
-			const transaction = db.transaction(["media"], "readwrite");
-			const store = transaction.objectStore("media");
+
+			// Validate module type
+			const valid_types = ["modules", "styles", "media"];
+			if (!valid_types.includes(module_type)) {
+				console.warn(`Invalid module type: ${module_type}`);
+				return;
+			}
+
+			const transaction = db.transaction([module_type], "readwrite");
+			const store = transaction.objectStore(module_type);
 
 			const cache_entry = {
 				name: name,
-				blob: blob,
 				timestamp: Date.now(),
 			};
+
+			// Store content differently based on type
+			if (module_type === "media") {
+				cache_entry.blob = content;
+			} else {
+				cache_entry.content = content;
+			}
 
 			return new Promise((resolve, reject) => {
 				const request = store.put(cache_entry);
@@ -591,46 +612,7 @@
 				request.onsuccess = () => resolve();
 			});
 		} catch (error) {
-			console.warn("Failed to cache media:", error);
-		}
-	}
-
-	async function getCachedModule(name) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["modules"], "readonly");
-			const store = transaction.objectStore("modules");
-
-			return new Promise((resolve, reject) => {
-				const request = store.get(name);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve(request.result);
-			});
-		} catch (error) {
-			console.warn("Failed to get cached module:", error);
-			return null;
-		}
-	}
-
-	async function setCachedModule(name, content) {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(["modules"], "readwrite");
-			const store = transaction.objectStore("modules");
-
-			const cache_entry = {
-				name: name,
-				content: content,
-				timestamp: Date.now(),
-			};
-
-			return new Promise((resolve, reject) => {
-				const request = store.put(cache_entry);
-				request.onerror = () => reject(request.error);
-				request.onsuccess = () => resolve();
-			});
-		} catch (error) {
-			console.warn("Failed to cache module:", error);
+			console.warn(`Failed to cache ${module_type} module:`, error);
 		}
 	}
 
@@ -733,15 +715,83 @@
 		}
 	}
 
-	//
-	// Utils
-	//
+	async function updateCachedModuleFromRemote(name, remote_url, module_type) {
+		try {
+			// Validate module type
+			const valid_types = ["modules", "styles", "media"];
+			if (!valid_types.includes(module_type)) {
+				console.warn(`Invalid module type: ${module_type}`);
+				return false;
+			}
+
+			console.log(`Fetching ${module_type} module "${name}" from ${remote_url}...`);
+
+			// Fetch from remote
+			const response = await fetch(remote_url);
+
+			if (!response.ok) {
+				console.warn(
+					`Failed to fetch remote ${module_type} module "${name}" from "${remote_url}": ${response.status}`,
+				);
+				return false;
+			}
+
+			let content;
+
+			// Handle different content types
+			if (module_type === "media") {
+				content = await response.blob();
+			} else {
+				content = await response.text();
+			}
+
+			// Cache the updated content
+			await setCachedModule(name, content, module_type);
+			console.log(`Successfully updated cached ${module_type} module "${name}" from remote`);
+
+			return true;
+		} catch (error) {
+			console.warn(
+				`Failed to update cached ${module_type} module "${name}" from remote:`,
+				error,
+			);
+			return false;
+		}
+	}
+
+	async function clearAllCache() {
+		try {
+			const db = await openCache();
+
+			const store_names = ["modules", "styles", "media"];
+			const transaction = db.transaction(store_names, "readwrite");
+
+			const clear_promises = store_names.map((store_name) => {
+				return new Promise((resolve, reject) => {
+					const store = transaction.objectStore(store_name);
+					const request = store.clear();
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Cleared ${store_name} cache`);
+						resolve();
+					};
+				});
+			});
+
+			await Promise.all(clear_promises);
+			console.log("All caches cleared successfully");
+			return true;
+		} catch (error) {
+			console.warn("Failed to clear caches:", error);
+			return false;
+		}
+	}
 
 	function openCache() {
 		return new Promise((resolve, reject) => {
 			const request = indexedDB.open(
 				"blob_module_cache",
-				6, // bumped version to force upgrade
+				7, // version
 			);
 
 			request.onerror = () => reject(request.error);
@@ -750,18 +800,29 @@
 			request.onupgradeneeded = (event) => {
 				const db = event.target.result;
 
-				// Modules store - recreate with name as keyPath
+				// Modules store
 				if (db.objectStoreNames.contains("modules")) {
 					db.deleteObjectStore("modules");
 				}
-				const store = db.createObjectStore("modules", {
+				const modules_store = db.createObjectStore("modules", {
 					keyPath: "name",
 				});
-				store.createIndex("timestamp", "timestamp", {
+				modules_store.createIndex("timestamp", "timestamp", {
 					unique: false,
 				});
 
-				// Media store - recreate with name as keyPath
+				// Styles store
+				if (db.objectStoreNames.contains("styles")) {
+					db.deleteObjectStore("styles");
+				}
+				const styles_store = db.createObjectStore("styles", {
+					keyPath: "name",
+				});
+				styles_store.createIndex("timestamp", "timestamp", {
+					unique: false,
+				});
+
+				// Media store
 				if (db.objectStoreNames.contains("media")) {
 					db.deleteObjectStore("media");
 				}
@@ -774,6 +835,10 @@
 			};
 		});
 	}
+
+	//
+	// Utils
+	//
 
 	async function getDocumentOuterHtml(force_inline = false) {
 		// Clone the current document
@@ -917,13 +982,10 @@
 			const style_content = blob_style_sources.get(style_name);
 
 			if (no_download && !force_inline) {
-				// Keep empty with just the remote attribute
 				style.textContent = "";
 			} else if (style_content) {
-				// Inline the content
 				style.textContent = style_content;
 			} else if (remote_url) {
-				// Fallback: keep remote reference if no local content
 				style.textContent = "";
 			}
 		});
@@ -932,17 +994,14 @@
 		const blob_links = doc_clone.querySelectorAll('link[href^="blob:"]');
 		blob_links.forEach((link) => link.remove());
 
-		// Get the full HTML
 		return `<!DOCTYPE html>\n${doc_clone.documentElement.outerHTML}`;
 	}
 
 	async function saveAsHtmlFile(force_inline = false) {
 		const html_content = await getDocumentOuterHtml(force_inline);
 
-		// Check if File System Access API is available
 		if (window.showSaveFilePicker) {
 			try {
-				// Show save file picker
 				const file_handle = await window.showSaveFilePicker({
 					suggestedName: `${document.title || Date.now()}.html`,
 					types: [
@@ -955,7 +1014,6 @@
 					],
 				});
 
-				// Get html and create writable
 				const writable = await file_handle.createWritable();
 				await writable.write(html_content);
 				await writable.close();
@@ -975,11 +1033,9 @@
 			}
 		}
 
-		// Fallback to download method
 		alert("File System Access API not available, falling back to download");
 		console.log("File System Access API not available, falling back to download");
 
-		// Create and trigger download
 		const blob = new Blob([html_content], {
 			type: "text/html",
 		});
@@ -990,14 +1046,12 @@
 		download_link.download = "index.html";
 		download_link.click();
 
-		// Clean up the blob URL
 		URL.revokeObjectURL(url);
 
 		console.log("HTML file download initiated");
 	}
 
 	function finish(t = 0) {
-		// Wait for next cycle to make sure DOM finished with previuous tasks or other related goals
 		return new Promise((resolve) => setTimeout(resolve, t));
 	}
 })();
