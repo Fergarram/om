@@ -124,8 +124,7 @@
 		// Process blob media tags
 		//
 
-		// First pass: collect all media contents and remote URLs
-		blob_media_tags.forEach((link) => {
+		for (const link of blob_media_tags) {
 			const media_name = link.getAttribute("name");
 			const remote_url = link.getAttribute("remote");
 			const inline_src = link.getAttribute("source");
@@ -133,13 +132,13 @@
 
 			if (!media_name) {
 				console.warn("blob-module link missing name attribute");
-				return;
+				continue;
 			}
 
 			// Skip disabled media
 			if (is_disabled) {
 				console.log(`Skipping disabled media: "${media_name}"`);
-				return;
+				continue;
 			}
 
 			// Check for name collisions
@@ -147,8 +146,10 @@
 				console.warn(
 					`Media name collision detected: "${media_name}" already exists. Skipping duplicate.`,
 				);
-				return;
+				continue;
 			}
+
+			let blob = null;
 
 			if (inline_src) {
 				// Store inline data URL
@@ -156,109 +157,71 @@
 				if (remote_url) {
 					remote_media_hrefs.set(media_name, remote_url);
 				}
+
+				// Convert data URL to blob
+				const res = await fetch(inline_src);
+				blob = await res.blob();
 			} else if (remote_url) {
-				// Just remote URL
+				// Need to fetch from remote
 				remote_media_hrefs.set(media_name, remote_url);
-			}
-		});
 
-		// Fetch remote media (with caching)
-		for (const [media_name, remote_url] of remote_media_hrefs) {
-			// Skip if we already have inline content
-			if (blob_media_sources.has(media_name)) {
-				console.log(`Using inline media for "${media_name}"`);
-				continue;
-			}
+				// Try cache first
+				const cached_media = await getCachedMedia(remote_url);
+				if (cached_media) {
+					console.log(`Using cached media "${media_name}" from ${remote_url}`);
+					blob = cached_media.blob;
 
-			// Try cache first
-			const cached_media = await getCachedMedia(remote_url);
-			if (cached_media) {
-				console.log(`Using cached media "${media_name}" from ${remote_url}`);
-				blob_media_blobs.set(media_name, cached_media.blob);
+					// Convert to data URL for storage
+					const reader = new FileReader();
+					const data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(cached_media.blob);
+					});
+					blob_media_sources.set(media_name, data_url);
+				} else {
+					// Fetch from remote
+					console.log(
+						`Fetching remote media "${media_name}" from ${remote_url} (no local/cached version)`,
+					);
+					const response = await fetch(remote_url);
 
-				// Convert to data URL for storage
-				const reader = new FileReader();
-				const data_url = await new Promise((resolve) => {
-					reader.onloadend = () => resolve(reader.result);
-					reader.readAsDataURL(cached_media.blob);
-				});
-				blob_media_sources.set(media_name, data_url);
-				continue;
-			}
+					if (!response.ok) {
+						console.warn(`Failed to fetch remote media "${media_name}": ${response.status}`);
+						link.setAttribute("disabled", "");
+						continue;
+					}
 
-			// Last resort: fetch from remote
-			console.log(
-				`Fetching remote media "${media_name}" from ${remote_url} (no local/cached version)`,
-			);
-			const response = await fetch(remote_url);
+					blob = await response.blob();
 
-			if (!response.ok) {
-				console.warn(`Failed to fetch remote media "${media_name}": ${response.status}`);
-				// Mark as disabled
-				const link_tag = Array.from(blob_media_tags).find(
-					(tag) => tag.getAttribute("name") === media_name,
-				);
-				if (link_tag) {
-					link_tag.setAttribute("disabled", "");
+					// Cache it for next time
+					await setCachedMedia(remote_url, blob);
+					console.log(`Cached remote media "${media_name}"`);
+
+					// Convert to data URL
+					const reader = new FileReader();
+					const data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(blob);
+					});
+					blob_media_sources.set(media_name, data_url);
 				}
+			}
+
+			if (!blob) {
 				continue;
 			}
 
-			const media_blob = await response.blob();
-
-			// Cache it for next time
-			await setCachedMedia(remote_url, media_blob);
-			console.log(`Cached remote media "${media_name}"`);
-
-			blob_media_blobs.set(media_name, media_blob);
-
-			// Convert to data URL
-			const reader = new FileReader();
-			const data_url = await new Promise((resolve) => {
-				reader.onloadend = () => resolve(reader.result);
-				reader.readAsDataURL(media_blob);
-			});
-			blob_media_sources.set(media_name, data_url);
-		}
-
-		// Process local media sources (those without remote URLs or already in blob_media_blobs)
-		for (const [media_name, data_url] of blob_media_sources) {
-			// Skip if we already have a blob from remote fetching
-			if (blob_media_blobs.has(media_name)) {
-				continue;
-			}
-
-			// Find the corresponding link tag
-			const link_tag = Array.from(blob_media_tags).find(
-				(tag) => tag.getAttribute("name") === media_name,
-			);
-
-			// Skip if disabled
-			if (link_tag && link_tag.hasAttribute("disabled")) {
-				console.log(`Skipping disabled media: "${media_name}"`);
-				continue;
-			}
-
-			// Convert data URL to blob
-			const res = await fetch(data_url);
-			const blob = await res.blob();
+			// Store blob
 			blob_media_blobs.set(media_name, blob);
-		}
 
-		// Create blob URLs from all blobs
-		for (const [media_name, blob] of blob_media_blobs) {
+			// Create blob URL
 			const blob_url = URL.createObjectURL(blob);
 			blob_media_urls.set(media_name, blob_url);
 
 			// Update link tag
-			const link_tag = Array.from(blob_media_tags).find(
-				(tag) => tag.getAttribute("name") === media_name,
-			);
-			if (link_tag) {
-				link_tag.removeAttribute("src");
-				link_tag.setAttribute("href", blob_url);
-				link_tag.setAttribute("blob", blob_url);
-			}
+			link.removeAttribute("src");
+			link.setAttribute("href", blob_url);
+			link.setAttribute("blob", blob_url);
 
 			// Add CSS variable definition only for images
 			if (blob.type.startsWith("image/")) {
@@ -279,35 +242,10 @@
 				const font = new FontFace(media_name, `url('${blob_url}')`, {
 					weight: "100 700",
 				});
-				// await font.load(); // We don't really need to block
 				document.fonts.add(font);
 			}
 
-			console.log(`Created blob URL for media "${media_name}"`);
-		}
-
-		// Create and adopt stylesheet with media CSS variables
-		if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
-			const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
-			const sheet = new CSSStyleSheet();
-			sheet.replaceSync(media_vars_css);
-			document.adoptedStyleSheets.push(sheet);
-			blob_adopted_sheets.set("__media_vars__", sheet);
-			console.log(`Adopted stylesheet for media variables (${media_css_vars.length} variables)`);
-		}
-
-		// Populate the media metadata map
-		blob_media_blobs.forEach((blob, media_name) => {
-			const blob_url = blob_media_urls.get(media_name);
-			const remote_url = remote_media_hrefs.get(media_name) || null;
-			const size_bytes = blob.size;
-
-			// Find the corresponding link tag to extract metadata
-			const link_tag = Array.from(blob_media_tags).find(
-				(tag) => tag.getAttribute("name") === media_name,
-			);
-
-			// Extract all additional attributes as metadata
+			// Populate metadata map
 			const known_attrs = new Set([
 				"name",
 				"remote",
@@ -320,31 +258,48 @@
 			]);
 			const metadata = {};
 
-			if (link_tag) {
-				Array.from(link_tag.attributes).forEach((attr) => {
-					if (!known_attrs.has(attr.name)) {
-						metadata[attr.name] = attr.value;
-					}
-				});
-			}
+			Array.from(link.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
 
 			blob_media_map.set(media_name, {
 				name: media_name,
-				remote_url,
-				size_bytes,
+				remote_url: remote_url || null,
+				size_bytes: blob.size,
 				blob_url,
 				metadata,
 			});
-		});
+
+			console.log(`Created blob URL for media "${media_name}"`);
+		}
+
+		// TODO:
+		// Create and adopt stylesheet with media CSS variables
+		if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
+			const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
+			const sheet = new CSSStyleSheet();
+			sheet.replaceSync(media_vars_css);
+			document.adoptedStyleSheets.push(sheet);
+			blob_adopted_sheets.set("__media_vars__", sheet);
+			console.log(`Adopted sheet for media variables (${media_css_vars.length} variables)`);
+		}
 
 		//
 		// Process blob style tags
 		//
 
-		// First pass: collect all style contents and remote URLs
-		blob_style_tags.forEach((style) => {
+		for (const style of blob_style_tags) {
 			const remote_url = style.getAttribute("remote");
 			const style_module_name = style.getAttribute("name");
+			const is_disabled = style.hasAttribute("disabled");
+
+			// Skip disabled styles
+			if (is_disabled) {
+				console.log(`Skipping disabled style: "${style_module_name}"`);
+				continue;
+			}
 
 			// Check for name collisions
 			if (
@@ -354,161 +309,124 @@
 				console.warn(
 					`Style URL collision detected: "${style_module_name}" already exists. Skipping duplicate.`,
 				);
-				return;
+				continue;
 			}
 
 			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
+			const had_initial_content = style.textContent.trim().length > 0;
 			const content = style.textContent.trim();
 
-			if (!content) {
-				// Empty content with remote URL - fetch remote
-				remote_styles_hrefs.set(style_module_name, remote_url);
-				return;
-			} else {
-				// Both remote and content exist - store local, compare later
+			let final_content = null;
+
+			if (content) {
+				// Has inline content
 				blob_style_sources.set(style_module_name, content);
-				remote_styles_hrefs.set(style_module_name, remote_url);
-				return;
-			}
-		});
-
-		// Fetch remote styles (with caching)
-		for (const [style_name, remote_url] of remote_styles_hrefs) {
-			// Skip if we already have inline content
-			if (blob_style_sources.has(style_name)) {
-				console.log(`Using inline style for "${style_name}"`);
-				continue;
-			}
-
-			// Try cache first
-			const cached_style = await getCachedModule(remote_url);
-			if (cached_style) {
-				console.log(`Using cached style from ${remote_url}`);
-				blob_style_sources.set(style_name, cached_style.content);
-				continue;
-			}
-
-			// Last resort: fetch from remote
-			console.log(`Fetching remote style from ${remote_url} (no local/cached version)`);
-			const response = await fetch(remote_url);
-
-			if (!response.ok) {
-				console.warn(`Failed to fetch remote style from "${remote_url}": ${response.status}`);
-				// Mark as disabled
-				const style_tag = Array.from(blob_style_tags).find(
-					(tag) => tag.getAttribute("name") === style_name,
-				);
-				if (style_tag) {
-					style_tag.setAttribute("disabled", "");
+				if (remote_url) {
+					remote_styles_hrefs.set(style_module_name, remote_url);
 				}
+				final_content = content;
+			} else if (remote_url) {
+				// Needs fetching
+				remote_styles_hrefs.set(style_module_name, remote_url);
+
+				// Try cache first
+				const cached_style = await getCachedModule(remote_url);
+				if (cached_style) {
+					console.log(`Using cached style from ${remote_url}`);
+					final_content = cached_style.content;
+				} else {
+					// Fetch from remote
+					console.log(`Fetching remote style from ${remote_url} (no local/cached version)`);
+					const response = await fetch(remote_url);
+
+					if (!response.ok) {
+						console.warn(
+							`Failed to fetch remote style from "${remote_url}": ${response.status}`,
+						);
+						style.setAttribute("disabled", "");
+						continue;
+					}
+
+					final_content = await response.text();
+
+					// Cache it
+					await setCachedModule(remote_url, final_content);
+					console.log(`Cached remote style from ${remote_url}`);
+				}
+
+				blob_style_sources.set(style_module_name, final_content);
+			}
+
+			if (!final_content) {
 				continue;
 			}
 
-			const remote_content = await response.text();
-
-			// Cache it
-			await setCachedModule(remote_url, remote_content);
-			console.log(`Cached remote style from ${remote_url}`);
-
-			blob_style_sources.set(style_name, remote_content);
-		}
-
-		// Create blob URLs for all styles and update style tags
-		blob_style_sources.forEach((content, style_name) => {
-			// Find the corresponding style tag
-			const style_tag = Array.from(blob_style_tags).find(
-				(tag) => tag.getAttribute("name") === style_name,
-			);
-
-			// Skip if disabled
-			if (style_tag && style_tag.hasAttribute("disabled")) {
-				console.log(`Skipping disabled style: "${style_name}"`);
-				return;
-			}
-
-			const style_blob = new Blob([content], {
+			// Create blob URL
+			const style_blob = new Blob([final_content], {
 				type: "text/css",
 			});
 			const blob_url = URL.createObjectURL(style_blob);
-			blob_style_urls.set(style_name, blob_url);
+			blob_style_urls.set(style_module_name, blob_url);
 
-			if (style_tag) {
-				// Only create adopted stylesheet if there was a remote URL but no initial inline content
-				const had_remote = remote_styles_hrefs.has(style_name);
-				const had_initial_content = style_tag.textContent.trim().length > 0;
+			// Update style tag
+			const had_remote = remote_styles_hrefs.has(style_module_name);
 
-				if (had_remote && !had_initial_content && !blob_adopted_sheets.has(style_name)) {
-					// This was fetched from remote, use adopted stylesheet
-					const sheet = new CSSStyleSheet();
-					sheet.replaceSync(content);
-					document.adoptedStyleSheets.push(sheet);
-					blob_adopted_sheets.set(style_name, sheet);
+			if (had_remote && !had_initial_content && !blob_adopted_sheets.has(style_module_name)) {
+				// This was fetched from remote, use adopted stylesheet
+				const sheet = new CSSStyleSheet();
+				sheet.replaceSync(final_content);
+				document.adoptedStyleSheets.push(sheet);
+				blob_adopted_sheets.set(style_module_name, sheet);
 
-					style_tag.textContent = "";
-					style_tag.setAttribute("blob", blob_url);
+				style.textContent = "";
+				style.setAttribute("blob", blob_url);
 
-					console.log(`Adopted stylesheet for ${style_name} (fetched from remote)`);
-				} else {
-					// Keep inline content in the style tag
-					style_tag.textContent = content;
-					style_tag.setAttribute("blob", blob_url);
+				console.log(`Adopted stylesheet for ${style_module_name} (fetched from remote)`);
+			} else {
+				// Keep inline content in the style tag
+				style.textContent = final_content;
+				style.setAttribute("blob", blob_url);
 
-					console.log(`Kept inline stylesheet for ${style_name}`);
-				}
+				console.log(`Kept inline stylesheet for ${style_module_name}`);
 			}
-		});
 
-		// Populate the style metadata map
-		blob_style_sources.forEach((content, style_name) => {
-			const blob_url = blob_style_urls.get(style_name);
-			const src_bytes = new Blob([content]).size;
-			const remote_url = remote_styles_hrefs.get(style_name) || null;
-
-			// Find the corresponding style tag to extract metadata
-			const style_tag = Array.from(blob_style_tags).find(
-				(tag) => tag.getAttribute("name") === style_name,
-			);
-
-			// Extract all additional attributes as metadata
+			// Populate metadata map
 			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
 			const metadata = {};
 
-			if (style_tag) {
-				Array.from(style_tag.attributes).forEach((attr) => {
-					if (!known_attrs.has(attr.name)) {
-						metadata[attr.name] = attr.value;
-					}
-				});
-			}
+			Array.from(style.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
 
-			blob_style_map.set(style_name, {
-				name: style_name,
-				remote_url,
-				src_bytes,
+			blob_style_map.set(style_module_name, {
+				name: style_module_name,
+				remote_url: remote_url || null,
+				src_bytes: style_blob.size,
 				blob_url,
 				metadata,
 			});
-		});
+		}
 
 		//
 		// Process blob script tags
 		//
 
-		// First pass: collect all module contents and remote URLs, skip disabled modules
-		blob_script_tags.forEach((script) => {
+		for (const script of blob_script_tags) {
 			const module_name = script.getAttribute("name");
 			const remote_url = script.getAttribute("remote");
 			const is_disabled = script.hasAttribute("disabled");
 
 			if (!module_name) {
 				console.warn("blob-module script missing name attribute");
-				return;
+				continue;
 			}
 
 			// Skip disabled modules
 			if (is_disabled) {
 				console.log(`Skipping disabled module: "${module_name}"`);
-				return;
+				continue;
 			}
 
 			// Check for name collisions
@@ -516,93 +434,118 @@
 				console.warn(
 					`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`,
 				);
-				return;
+				continue;
 			}
 
 			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 			const content = script.textContent.trim();
 
-			if (remote_url) {
-				if (!content) {
-					// Empty content with remote URL - fetch remote
+			let final_content = null;
+
+			if (content) {
+				// Has inline content
+				blob_modules_sources.set(module_name, content);
+				if (remote_url) {
 					remote_modules_hrefs.set(module_name, remote_url);
-					return;
-				} else {
-					// Both remote and content exist - store local, compare later
-					blob_modules_sources.set(module_name, content);
-					remote_modules_hrefs.set(module_name, remote_url);
-					return;
 				}
+				final_content = content;
+			} else if (remote_url) {
+				// Needs fetching
+				remote_modules_hrefs.set(module_name, remote_url);
+
+				// Try cache first
+				const cached_module = await getCachedModule(remote_url);
+				if (cached_module) {
+					console.log(`Using cached module "${module_name}" from ${remote_url}`);
+					final_content = cached_module.content;
+				} else {
+					// Fetch from remote
+					console.log(
+						`Fetching remote module "${module_name}" from ${remote_url} (no local/cached version)`,
+					);
+					const response = await fetch(remote_url);
+
+					if (!response.ok) {
+						console.warn(
+							`Failed to fetch remote module "${module_name}": ${response.status}`,
+						);
+						// Use remote URL directly in importmap as last fallback
+						blob_module_urls.set(module_name, remote_url);
+						console.log(`Will use remote URL directly for module "${module_name}"`);
+
+						// Still populate metadata for disabled/failed modules
+						const known_attrs = new Set([
+							"name",
+							"remote",
+							"disabled",
+							"blob",
+							"type",
+							"nodownload",
+						]);
+						const metadata = {};
+
+						Array.from(script.attributes).forEach((attr) => {
+							if (!known_attrs.has(attr.name)) {
+								metadata[attr.name] = attr.value;
+							}
+						});
+
+						blob_module_map.set(module_name, {
+							module_name,
+							src_bytes: 0,
+							remote_url: remote_url || null,
+							blob_url: remote_url,
+							is_disabled: false,
+							metadata,
+						});
+
+						continue;
+					}
+
+					final_content = await response.text();
+
+					// Cache it
+					await setCachedModule(remote_url, final_content);
+					console.log(`Cached remote module "${module_name}"`);
+				}
+
+				blob_modules_sources.set(module_name, final_content);
 			}
 
-			// No remote URL, just store content
-			blob_modules_sources.set(module_name, content);
-		});
-
-		// Fetch remote modules (with caching)
-		for (const [module_name, remote_url] of remote_modules_hrefs) {
-			// Skip if we already have inline content
-			if (blob_modules_sources.has(module_name)) {
-				console.log(`Using inline module for "${module_name}"`);
+			if (!final_content) {
 				continue;
 			}
 
-			// Try cache first
-			const cached_module = await getCachedModule(remote_url);
-			if (cached_module) {
-				console.log(`Using cached module "${module_name}" from ${remote_url}`);
-				blob_modules_sources.set(module_name, cached_module.content);
-				continue;
-			}
-
-			// Last resort: fetch from remote
-			console.log(
-				`Fetching remote module "${module_name}" from ${remote_url} (no local/cached version)`,
-			);
-			const response = await fetch(remote_url);
-
-			if (!response.ok) {
-				console.warn(`Failed to fetch remote module "${module_name}": ${response.status}`);
-				// Use remote URL directly in importmap as last fallback
-				blob_module_urls.set(module_name, remote_url);
-				console.log(`Will use remote URL directly for module "${module_name}"`);
-				continue;
-			}
-
-			const remote_content = await response.text();
-
-			// Cache it
-			await setCachedModule(remote_url, remote_content);
-			console.log(`Cached remote module "${module_name}"`);
-
-			blob_modules_sources.set(module_name, remote_content);
-		}
-
-		// Create blob URLs for all modules
-		blob_modules_sources.forEach((content, module_name) => {
-			const module_blob = new Blob([content], {
+			// Create blob URL
+			const module_blob = new Blob([final_content], {
 				type: "text/javascript",
 			});
 			const blob_url = URL.createObjectURL(module_blob);
 			blob_module_urls.set(module_name, blob_url);
-		});
 
-		// Clear script tag contents and add blob URL attributes (only for non-disabled modules)
-		blob_script_tags.forEach((script) => {
-			const module_name = script.getAttribute("name");
-			const is_disabled = script.hasAttribute("disabled");
+			// Clear script tag content and add blob URL attribute
+			script.textContent = "";
+			script.setAttribute("blob", blob_url);
 
-			if (is_disabled) {
-				return;
-			}
+			// Populate metadata map
+			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+			const metadata = {};
 
-			const blob_url = blob_module_urls.get(module_name);
+			Array.from(script.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
 
-			if (blob_url) {
-				script.textContent = "";
-				script.setAttribute("blob", blob_url);
-			}
-		});
+			blob_module_map.set(module_name, {
+				module_name,
+				src_bytes: module_blob.size,
+				remote_url: remote_url || null,
+				blob_url,
+				is_disabled: false,
+				metadata,
+			});
+		}
 
 		// Create import map with all blob URLs
 		blob_module_urls.forEach((url, name) => (importmap[name] = url));
@@ -627,35 +570,6 @@
 			`;
 			document.head.appendChild(main_script);
 		}
-
-		// Populate the metadata map (including disabled modules for reference)
-		blob_script_tags.forEach((script) => {
-			const module_name = script.getAttribute("name");
-			const remote_url = script.getAttribute("remote") || null;
-			const is_disabled = script.hasAttribute("disabled");
-			const blob_url = blob_module_urls.get(module_name) || null;
-			const content = blob_modules_sources.get(module_name) || "";
-			const src_bytes = new Blob([content]).size;
-
-			// Extract all additional attributes as metadata
-			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
-			const metadata = {};
-
-			Array.from(script.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
-				}
-			});
-
-			blob_module_map.set(module_name, {
-				module_name,
-				src_bytes,
-				remote_url,
-				blob_url,
-				is_disabled,
-				metadata,
-			});
-		});
 	});
 
 	//
@@ -1734,7 +1648,7 @@
 		return new Promise((resolve, reject) => {
 			const request = indexedDB.open(
 				"blob_module_cache",
-				4, // version
+				5, // version
 			);
 
 			request.onerror = () => reject(request.error);
