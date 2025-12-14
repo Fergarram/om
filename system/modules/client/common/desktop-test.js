@@ -1,5 +1,5 @@
 import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
-import { Ticket } from "ticket";
+import { EditableApplet } from "applets/isolate";
 import { isUserTyping, finish } from "utils";
 
 //
@@ -12,11 +12,11 @@ if (!document.querySelector("desktop-view")) {
 
 	document.body.appendChild(Desktop());
 	await finish();
-	mountApplet(Ticket());
+	mountApplet(EditableApplet());
 
-	// mountApplet(Ticket());
-	// mountApplet(Ticket());
-	// mountApplet(Ticket());
+	// mountApplet(EditableApplet());
+	// mountApplet(EditableApplet());
+	// mountApplet(EditableApplet());
 }
 
 window.addEventListener("keydown", (e) => {

@@ -1,10 +1,10 @@
 import { registerAppletTag } from "desktop";
 import { css } from "utils";
-import { useTags } from "ima";
+import { useStyledTags } from "ima-utils";
 
-const $ = useTags();
+const $ = useStyledTags();
 
-const APPLET_NAME = "ticket";
+const APPLET_NAME = "isolate";
 
 //
 // Shared state
@@ -17,37 +17,99 @@ const APPLET_NAME = "ticket";
 // Applet
 //
 
-export const Ticket = registerAppletTag(APPLET_NAME, {
+export const EditableApplet = registerAppletTag(APPLET_NAME, {
 	setup() {
 		this.start_x = 50_000;
 		this.start_y = 50_000;
 		this.start_w = 300;
+		this.start_h = 300;
 	},
 	hydrate() {
-		const previous_content_el = this.querySelector("[contenteditable]");
+		const previous_content_el = this.firstElementChild;
+		const source_ref = { current: null };
+		const preview_ref = { current: null };
+
+		let source = "";
+		let is_editing = true;
 
 		if (previous_content_el) {
 			// we could attach some event listeners here if needed.
 		} else {
-			this.style.height = "fit-content"; // only initialize height if new
 			this.replaceChildren(
-				$.div({
-					// same event listeners here
-					contenteditable: true,
-					innerHTML: "blank content editable",
-				}),
+				$.div(
+					$.textarea({
+						style: () => `display: ${!is_editing ? "none" : "block"};`,
+						oninput(e) {
+							if (!source_ref.current) return;
+							source = this.value;
+							source_ref.current.innerHTML = btoa(this.value);
+						},
+					}),
+					$.div({
+						ref: preview_ref,
+						style: () => `display: ${is_editing ? "none" : "block"};`,
+						styles: css`
+							& {
+								position: absolute;
+								left: 0;
+								top: 0;
+								width: 100%;
+								height: 100%;
+							}
+						`,
+					}),
+					$.div({
+						ref: source_ref,
+						style: `display: none;`,
+					}),
+					$.button(
+						{
+							async onclick() {
+								is_editing = !is_editing;
+
+								if (!is_editing) {
+									try {
+										const exports = await BlobLoader.runModuleScript(source);
+										preview_ref.current.replaceChildren(exports.layout());
+									} catch (e) {
+										console.log(e);
+									}
+								}
+							},
+							styles: css`
+								& {
+									position: absolute;
+									right: 0.5rem;
+									bottom: 0.5rem;
+									width: 1.5rem;
+									height: 1.5rem;
+									background: #505050;
+									border-radius: 8px;
+									display: flex;
+									align-items: center;
+									justify-content: center;
+								}
+
+								& icon {
+									font-size: 18px;
+								}
+							`,
+						},
+						$.icon({ name: () => (is_editing ? "toggle_off" : "toggle_on") }),
+					),
+				),
 			);
 		}
 	},
 	onlift() {
-		console.log("lifted");
+		// console.log("lifted");
 	},
 	onplace() {
-		console.log("placed");
+		// console.log("placed");
 	},
 	onresize(entry) {
 		// We get the entry, but we also get "this"
-		console.log(entry);
+		// console.log(entry);
 	},
 	onremove() {
 		// clean up or whatever
@@ -73,6 +135,16 @@ BlobLoader.addStyleModule(
 			font-size: 11px;
 			overflow: scroll;
 			transition: backdrop-filter 150ms ease-in-out;
+		}
+
+		applet-${APPLET_NAME} > div > textarea {
+			display: block;
+			position: absolute;
+			left: 0;
+			top: 0;
+			width: 100%;
+			height: 100%;
+			resize: none;
 		}
 
 		applet-${APPLET_NAME}[motion="lift"] {

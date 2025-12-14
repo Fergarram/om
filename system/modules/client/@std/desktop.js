@@ -206,11 +206,24 @@ export const Desktop = registerCustomTag("desktop-view", {
 				target = target.parentElement;
 			}
 
+			// Panning via scroll
 			if (!e.ctrlKey && !e.metaKey) {
 				e.preventDefault();
-				// Pan the camera
-				translateCamera(camera_x + e.deltaX * 1.2, camera_y + e.deltaY * 1.2);
-			} else if ((e.metaKey || e.ctrlKey) && !is_panning) {
+
+				const base_sensitivity = 1.5; // Overall speed
+
+				const baseline = 1.0; // Minimum multiplier (try 1.0 - 1.5)
+				const offset = 1; // Curve shift (try 0.5 - 2.0)
+				const strength = 0.3; // Scaling intensity (try 0.3 - 0.8)
+
+				const zoom_multiplier = baseline + Math.log(current_scale + offset) * strength;
+
+				const sensitivity = base_sensitivity * zoom_multiplier;
+
+				translateCamera(camera_x + e.deltaX * sensitivity, camera_y + e.deltaY * sensitivity);
+			}
+			// Panning via CMD+CLICK
+			else if ((e.metaKey || e.ctrlKey) && !is_panning) {
 				e.preventDefault();
 
 				// Get cursor position relative to the viewport
@@ -222,11 +235,17 @@ export const Desktop = registerCustomTag("desktop-view", {
 				const point_world_x = (camera_x + cursor_x) / current_scale;
 				const point_world_y = (camera_y + cursor_y) / current_scale;
 
-				// Calculate scale change
-				const base_scale_factor = Math.max(0.005, current_scale * 0.05);
-				const scale_factor = base_scale_factor;
-				const delta = e.deltaY > 0 ? -scale_factor : scale_factor;
-				let new_scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current_scale + delta));
+				// EXPONENTIAL SCALING
+				// Small base factor for smooth control
+				const zoom_sensitivity = 0.02;
+
+				// Calculate exponential scale change
+				// Negative deltaY means zoom in (scale up)
+				const zoom_delta = -e.deltaY * zoom_sensitivity;
+				let new_scale = current_scale * Math.exp(zoom_delta);
+
+				// Clamp to min/max bounds
+				new_scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, new_scale));
 
 				// Only proceed if the scale actually changed
 				if (new_scale !== current_scale) {
@@ -239,7 +258,6 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 					translateCamera(new_camera_x, new_camera_y);
 
-					// Reset is_zooming after a short delay
 					clearTimeout(zoom_timeout);
 					zoom_timeout = setTimeout(() => {
 						is_zooming = false;
