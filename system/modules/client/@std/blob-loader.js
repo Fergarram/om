@@ -33,11 +33,11 @@
 		// Module cache management
 		getCachedModule,
 		setCachedModule,
-		addStyleModule,
-		runNonExportingModuleScript,
-		updateCachedModuleFromRemote,
+		updateModule,
 		clearAllCache,
 		openCache,
+		addStyleModule,
+		runModuleScript,
 
 		// Utils
 		saveAsHtmlFile,
@@ -85,7 +85,7 @@
 
 		// Query head tags
 		blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
-		blob_style_tags = document.querySelectorAll(`style[blob-module]`);
+		blob_style_tags = document.querySelectorAll(`style[blob-module="css"]`);
 		blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
 
 		//
@@ -632,7 +632,7 @@
 
 			// Remove existing style tag
 			const existing_style_tag = document.querySelector(
-				`style[blob-module][name="${style_name}"]`,
+				`style[blob-module="css"][name="${style_name}"]`,
 			);
 			if (existing_style_tag) {
 				existing_style_tag.remove();
@@ -693,7 +693,7 @@
 		return true;
 	}
 
-	async function runNonExportingModuleScript(source) {
+	async function runModuleScript(source) {
 		// Create a blob from the source code
 		const module_blob = new Blob([source], {
 			type: "text/javascript",
@@ -702,20 +702,21 @@
 		// Create a blob URL
 		const blob_url = URL.createObjectURL(module_blob);
 
-		try {
-			// Import the module
-			await import(blob_url);
-			console.log("Non-exporting module script executed successfully");
-		} catch (error) {
-			console.warn("Failed to execute non-exporting module script:", error);
-			throw error;
-		} finally {
-			// Clean up the blob URL after import
-			URL.revokeObjectURL(blob_url);
-		}
+		return import(blob_url)
+			.then((exports) => {
+				console.log("Module script executed successfully");
+				return exports;
+			})
+			.catch((error) => {
+				console.warn("Failed to execute module script:", error);
+				throw error;
+			})
+			.finally(() => {
+				URL.revokeObjectURL(blob_url);
+			});
 	}
 
-	async function updateCachedModuleFromRemote(name, remote_url, module_type) {
+	async function updateModule(name, remote_url, module_type) {
 		try {
 			// Validate module type
 			const valid_types = ["modules", "styles", "media"];
@@ -963,7 +964,7 @@
 		});
 
 		// Process remote styles
-		const cloned_style_tags = doc_clone.querySelectorAll("style[blob-module]");
+		const cloned_style_tags = doc_clone.querySelectorAll(`style[blob-module="css"]`);
 		cloned_style_tags.forEach((style) => {
 			const style_name = style.getAttribute("name");
 			const remote_url = style.getAttribute("remote");
