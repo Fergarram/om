@@ -68,11 +68,12 @@
 	const blob_style_map = new Map();
 	const blob_module_map = new Map();
 
-	const media_css_vars = [];
 	const blob_media_blobs = new Map();
 	const blob_adopted_sheets = new Map();
 
 	let blob_media_tags = null;
+	let blob_image_tags = null;
+	let blob_font_tags = null;
 	let blob_style_tags = null;
 	let blob_script_tags = null;
 
@@ -85,11 +86,303 @@
 
 		// Query head tags
 		blob_media_tags = document.querySelectorAll(`link[type="blob-module"]`);
+		blob_image_tags = document.querySelectorAll(`style[blob-module="image"]`);
+		blob_font_tags = document.querySelectorAll(`style[blob-module="font"]`);
 		blob_style_tags = document.querySelectorAll(`style[blob-module="css"]`);
 		blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
 
 		//
-		// Process blob media tags
+		// Process blob image tags (CSS-based, no-JS compatible)
+		//
+
+		for (const style of blob_image_tags) {
+			const image_name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const is_disabled = style.hasAttribute("disabled");
+
+			if (!image_name) {
+				console.warn("blob-module image missing name attribute");
+				continue;
+			}
+
+			// Skip disabled images
+			if (is_disabled) {
+				console.log(`Skipping disabled image: "${image_name}"`);
+				continue;
+			}
+
+			// Check for name collisions
+			if (blob_style_sources.has(image_name) || remote_styles_hrefs.has(image_name)) {
+				console.warn(
+					`Image name collision detected: "${image_name}" already exists. Skipping duplicate.`,
+				);
+				continue;
+			}
+
+			const inline_css = style.textContent.trim();
+			let final_css = null;
+			let data_url = null;
+
+			if (inline_css) {
+				// Has inline CSS with data URL
+				console.log(`Using inline CSS for image "${image_name}"`);
+				blob_style_sources.set(image_name, inline_css);
+				if (remote_url) {
+					remote_styles_hrefs.set(image_name, remote_url);
+				}
+				final_css = inline_css;
+
+				// Extract data URL from CSS for blob creation
+				const data_url_match = inline_css.match(/url\(['"]?(data:[^'")]+)['"]?\)/);
+				if (data_url_match) {
+					data_url = data_url_match[1];
+				}
+			} else {
+				// Try cache
+				const cached_image = await getCachedModule(image_name, "media");
+				if (cached_image) {
+					console.log(`Using cached image "${image_name}"`);
+
+					// Convert blob to data URL
+					const reader = new FileReader();
+					data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(cached_image.blob);
+					});
+
+					// Create CSS with the data URL
+					final_css = `:root {\n\t--BM-${image_name.replaceAll(" ", "-")}: url('${data_url}');\n}`;
+					blob_style_sources.set(image_name, final_css);
+
+					if (remote_url) {
+						remote_styles_hrefs.set(image_name, remote_url);
+					}
+				} else if (remote_url) {
+					// Fetch from remote
+					console.log(
+						`Fetching remote image "${image_name}" from ${remote_url} (no local/cached version)`,
+					);
+					const response = await fetch(remote_url);
+
+					if (!response.ok) {
+						console.warn(`Failed to fetch remote image "${image_name}": ${response.status}`);
+						style.setAttribute("disabled", "");
+						continue;
+					}
+
+					const blob = await response.blob();
+
+					// Cache it
+					await setCachedModule(image_name, blob, "media");
+					console.log(`Cached remote image "${image_name}"`);
+
+					// Convert to data URL
+					const reader = new FileReader();
+					data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(blob);
+					});
+
+					// Create CSS
+					final_css = `:root {\n\t--BM-${image_name.replaceAll(" ", "-")}: url('${data_url}');\n}`;
+					blob_style_sources.set(image_name, final_css);
+					remote_styles_hrefs.set(image_name, remote_url);
+				}
+			}
+
+			if (!final_css) {
+				continue;
+			}
+
+			// Update style tag with CSS (for no-JS compatibility)
+			style.textContent = final_css;
+
+			// If we have a data URL, create blob for programmatic access
+			if (data_url) {
+				const res = await fetch(data_url);
+				const blob = await res.blob();
+				blob_media_blobs.set(image_name, blob);
+
+				const blob_url = URL.createObjectURL(blob);
+				blob_style_urls.set(image_name, blob_url);
+				style.setAttribute("blob", blob_url);
+			}
+
+			// Populate metadata map
+			const known_attrs = new Set([
+				"name",
+				"remote",
+				"disabled",
+				"blob",
+				"blob-module",
+				"nodownload",
+			]);
+			const metadata = {};
+
+			Array.from(style.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
+
+			blob_style_map.set(image_name, {
+				name: image_name,
+				remote_url: remote_url || null,
+				src_bytes: final_css.length,
+				blob_url: blob_style_urls.get(image_name) || null,
+				metadata,
+			});
+
+			console.log(`Processed image module "${image_name}" (no-JS compatible)`);
+		}
+
+		//
+		// Process blob font tags (CSS-based, no-JS compatible)
+		//
+
+		for (const style of blob_font_tags) {
+			const font_name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const is_disabled = style.hasAttribute("disabled");
+
+			if (!font_name) {
+				console.warn("blob-module font missing name attribute");
+				continue;
+			}
+
+			// Skip disabled fonts
+			if (is_disabled) {
+				console.log(`Skipping disabled font: "${font_name}"`);
+				continue;
+			}
+
+			// Check for name collisions
+			if (blob_style_sources.has(font_name) || remote_styles_hrefs.has(font_name)) {
+				console.warn(
+					`Font name collision detected: "${font_name}" already exists. Skipping duplicate.`,
+				);
+				continue;
+			}
+
+			const inline_css = style.textContent.trim();
+			let final_css = null;
+			let data_url = null;
+
+			if (inline_css) {
+				// Has inline CSS with data URL
+				console.log(`Using inline CSS for font "${font_name}"`);
+				blob_style_sources.set(font_name, inline_css);
+				if (remote_url) {
+					remote_styles_hrefs.set(font_name, remote_url);
+				}
+				final_css = inline_css;
+
+				// Extract data URL from CSS for blob creation
+				const data_url_match = inline_css.match(/url\(['"]?(data:[^'")]+)['"]?\)/);
+				if (data_url_match) {
+					data_url = data_url_match[1];
+				}
+			} else {
+				// Try cache
+				const cached_font = await getCachedModule(font_name, "media");
+				if (cached_font) {
+					console.log(`Using cached font "${font_name}"`);
+
+					// Convert blob to data URL
+					const reader = new FileReader();
+					data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(cached_font.blob);
+					});
+
+					// Create @font-face CSS with the data URL
+					final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+					blob_style_sources.set(font_name, final_css);
+
+					if (remote_url) {
+						remote_styles_hrefs.set(font_name, remote_url);
+					}
+				} else if (remote_url) {
+					// Fetch from remote
+					console.log(
+						`Fetching remote font "${font_name}" from ${remote_url} (no local/cached version)`,
+					);
+					const response = await fetch(remote_url);
+
+					if (!response.ok) {
+						console.warn(`Failed to fetch remote font "${font_name}": ${response.status}`);
+						style.setAttribute("disabled", "");
+						continue;
+					}
+
+					const blob = await response.blob();
+
+					// Cache it
+					await setCachedModule(font_name, blob, "media");
+					console.log(`Cached remote font "${font_name}"`);
+
+					// Convert to data URL
+					const reader = new FileReader();
+					data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(blob);
+					});
+
+					// Create @font-face CSS
+					final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+					blob_style_sources.set(font_name, final_css);
+					remote_styles_hrefs.set(font_name, remote_url);
+				}
+			}
+
+			if (!final_css) {
+				continue;
+			}
+
+			// Update style tag with CSS (for no-JS compatibility)
+			style.textContent = final_css;
+
+			// If we have a data URL, create blob for programmatic access
+			if (data_url) {
+				const res = await fetch(data_url);
+				const blob = await res.blob();
+				blob_media_blobs.set(font_name, blob);
+
+				const blob_url = URL.createObjectURL(blob);
+				blob_style_urls.set(font_name, blob_url);
+				style.setAttribute("blob", blob_url);
+			}
+
+			// Populate metadata map
+			const known_attrs = new Set([
+				"name",
+				"remote",
+				"disabled",
+				"blob",
+				"blob-module",
+				"nodownload",
+			]);
+			const metadata = {};
+
+			Array.from(style.attributes).forEach((attr) => {
+				if (!known_attrs.has(attr.name)) {
+					metadata[attr.name] = attr.value;
+				}
+			});
+
+			blob_style_map.set(font_name, {
+				name: font_name,
+				remote_url: remote_url || null,
+				src_bytes: final_css.length,
+				blob_url: blob_style_urls.get(font_name) || null,
+				metadata,
+			});
+
+			console.log(`Processed font module "${font_name}" (no-JS compatible)`);
+		}
+
+		//
+		// Process blob media tags (videos and other non-CSS media)
 		//
 
 		for (const link of blob_media_tags) {
@@ -194,28 +487,6 @@
 			link.setAttribute("href", blob_url);
 			link.setAttribute("blob", blob_url);
 
-			// Add CSS variable definition only for images
-			if (blob.type.startsWith("image/")) {
-				// @TODO: We need to add this to an inline style tag dedicated to assets in order
-				// to support NO-JS image assets
-				media_css_vars.push(`--BM-${media_name.replaceAll(" ", "-")}: url('${blob_url}');`);
-			}
-
-			// Load fonts using FontFace API
-			if (
-				blob.type.startsWith("font/") ||
-				blob.type === "application/font-woff" ||
-				blob.type === "application/font-woff2" ||
-				blob.type === "application/x-font-ttf" ||
-				blob.type === "application/x-font-truetype" ||
-				blob.type === "application/x-font-opentype"
-			) {
-				const font = new FontFace(media_name, `url('${blob_url}')`, {
-					weight: "100 700",
-				});
-				document.fonts.add(font);
-			}
-
 			// Populate metadata map
 			const known_attrs = new Set([
 				"name",
@@ -244,16 +515,6 @@
 			});
 
 			console.log(`Created blob URL for media "${media_name}"`);
-		}
-
-		// Create and adopt stylesheet with media CSS variables
-		if (media_css_vars.length > 0 && !blob_adopted_sheets.has("__media_vars__")) {
-			const media_vars_css = `:root {\n\t${media_css_vars.join("\n\t")}\n}`;
-			const sheet = new CSSStyleSheet();
-			sheet.replaceSync(media_vars_css);
-			document.adoptedStyleSheets.push(sheet);
-			blob_adopted_sheets.set("__media_vars__", sheet);
-			console.log(`Adopted sheet for media variables (${media_css_vars.length} variables)`);
 		}
 
 		//
@@ -366,7 +627,14 @@
 			}
 
 			// Populate metadata map
-			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+			const known_attrs = new Set([
+				"name",
+				"remote",
+				"disabled",
+				"blob",
+				"blob-module",
+				"nodownload",
+			]);
 			const metadata = {};
 
 			Array.from(style.attributes).forEach((attr) => {
@@ -667,7 +935,7 @@
 
 		// Create style tag
 		const style_tag = document.createElement("style");
-		style_tag.setAttribute("blob-module", "");
+		style_tag.setAttribute("blob-module", "css");
 		style_tag.setAttribute("name", style_name);
 		style_tag.setAttribute("blob", blob_url);
 		style_tag.textContent = style_content;
@@ -898,7 +1166,65 @@
 			}
 		}
 
-		// Process blob media links
+		// Process blob image style tags
+		const cloned_image_tags = doc_clone.querySelectorAll(`style[blob-module="image"]`);
+		cloned_image_tags.forEach((style) => {
+			const image_name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const no_download = style.hasAttribute("nodownload");
+			const is_disabled = style.hasAttribute("disabled");
+
+			// Remove blob attribute
+			if (style.hasAttribute("blob")) {
+				style.removeAttribute("blob");
+			}
+
+			// Skip processing for disabled images
+			if (is_disabled) {
+				return;
+			}
+
+			const image_css = blob_style_sources.get(image_name);
+
+			if (no_download && !force_inline) {
+				style.textContent = "";
+			} else if (image_css) {
+				style.textContent = image_css;
+			} else if (remote_url) {
+				style.textContent = "";
+			}
+		});
+
+		// Process blob font style tags
+		const cloned_font_tags = doc_clone.querySelectorAll(`style[blob-module="font"]`);
+		cloned_font_tags.forEach((style) => {
+			const font_name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const no_download = style.hasAttribute("nodownload");
+			const is_disabled = style.hasAttribute("disabled");
+
+			// Remove blob attribute
+			if (style.hasAttribute("blob")) {
+				style.removeAttribute("blob");
+			}
+
+			// Skip processing for disabled fonts
+			if (is_disabled) {
+				return;
+			}
+
+			const font_css = blob_style_sources.get(font_name);
+
+			if (no_download && !force_inline) {
+				style.textContent = "";
+			} else if (font_css) {
+				style.textContent = font_css;
+			} else if (remote_url) {
+				style.textContent = "";
+			}
+		});
+
+		// Process blob media links (videos, etc)
 		const cloned_media_links = doc_clone.querySelectorAll('link[type="blob-module"]');
 		cloned_media_links.forEach((link) => {
 			const media_name = link.getAttribute("name");
@@ -963,7 +1289,7 @@
 			}
 		});
 
-		// Process remote styles
+		// Process CSS style tags
 		const cloned_style_tags = doc_clone.querySelectorAll(`style[blob-module="css"]`);
 		cloned_style_tags.forEach((style) => {
 			const style_name = style.getAttribute("name");
