@@ -22,7 +22,8 @@ const MOTION_RESIZE = "resize";
 //
 
 const ZOOM_EVENT_DELAY = 150;
-const SCROLL_EVENT_DELAY = 150;
+const MOUSE_WHEEL_ZOOM_SENSITIVITY = 0.0015;
+const MOUSE_WHEEL_LOW_ZOOM_BOOST = 3.5;
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
@@ -222,7 +223,7 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 				translateCamera(camera_x + e.deltaX * sensitivity, camera_y + e.deltaY * sensitivity);
 			}
-			// Panning via CMD+CLICK
+			// Zooming via CMD+CLICK
 			else if ((e.metaKey || e.ctrlKey) && !is_panning) {
 				e.preventDefault();
 
@@ -235,9 +236,24 @@ export const Desktop = registerCustomTag("desktop-view", {
 				const point_world_x = (camera_x + cursor_x) / current_scale;
 				const point_world_y = (camera_y + cursor_y) / current_scale;
 
-				// EXPONENTIAL SCALING
-				// Small base factor for smooth control
-				const zoom_sensitivity = 0.02;
+				// Detect if this is a mouse wheel vs trackpad
+				// Mouse wheels produce integer values, trackpads produce floats
+				const is_mouse_wheel = e.deltaY === Math.floor(e.deltaY);
+
+				// Different zoom sensitivities for mouse vs trackpad
+				let zoom_sensitivity = is_mouse_wheel ? MOUSE_WHEEL_ZOOM_SENSITIVITY : 0.02;
+
+				// Apply boost for mouse wheel at lower zoom levels
+				if (is_mouse_wheel && current_scale < 1.0) {
+					// Interpolate boost from MOUSE_WHEEL_LOW_ZOOM_BOOST at 0.1x to 1.0x at 1.0x
+					// At scale 0.1: boost = MOUSE_WHEEL_LOW_ZOOM_BOOST
+					// At scale 1.0: boost = 1.0
+					const normalized_scale = (current_scale - MIN_ZOOM) / (1.0 - MIN_ZOOM);
+					const boost =
+						MOUSE_WHEEL_LOW_ZOOM_BOOST +
+						(1.0 - MOUSE_WHEEL_LOW_ZOOM_BOOST) * normalized_scale;
+					zoom_sensitivity *= boost;
+				}
 
 				// Calculate exponential scale change
 				// Negative deltaY means zoom in (scale up)
