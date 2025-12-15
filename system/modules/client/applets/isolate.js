@@ -25,81 +25,84 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 		this.start_h = 300;
 	},
 	hydrate() {
-		const previous_content_el = this.firstElementChild;
+		const prev_el = this.firstElementChild;
 		const source_ref = { current: null };
 		const preview_ref = { current: null };
 
-		let source = "";
-		let is_editing = true;
+		// TODO: Finish this example so that it can be rehydrated based on its different states
+		let source = prev_el ? prev_el.querySelector("source").innerHTML : "";
+		let is_editing = prev_el ? false : true;
+		let cleanup = null;
 
-		if (previous_content_el) {
-			// we could attach some event listeners here if needed.
-		} else {
-			this.replaceChildren(
-				$.div(
-					$.textarea({
-						style: () => `display: ${!is_editing ? "none" : "block"};`,
-						oninput(e) {
-							if (!source_ref.current) return;
-							source = this.value;
-							source_ref.current.innerHTML = btoa(this.value);
+		this.replaceChildren(
+			$.div(
+				$.textarea({
+					style: () => `display: ${!is_editing ? "none" : "block"};`,
+					oninput(e) {
+						if (!source_ref.current) return;
+						source = this.value;
+						source_ref.current.innerHTML = btoa(this.value);
+					},
+				}),
+				$.div({
+					ref: preview_ref,
+					style: () => `display: ${is_editing ? "none" : "block"};`,
+					styles: css`
+						& {
+							position: absolute;
+							left: 0;
+							top: 0;
+							width: 100%;
+							height: 100%;
+						}
+					`,
+				}),
+				$.source({
+					ref: source_ref,
+					style: `display: none;`,
+				}),
+				$.button(
+					{
+						async onclick() {
+							is_editing = !is_editing;
+
+							if (!is_editing) {
+								try {
+									const exports = await BlobLoader.runModuleScript(source);
+									preview_ref.current.replaceChildren(exports.default());
+									cleanup = exports.cleanup;
+								} catch (e) {
+									console.log(e);
+								}
+							} else if (is_editing && cleanup) {
+								cleanup();
+								preview_ref.current.innerHTML = "";
+								cleanup = null;
+							}
 						},
-					}),
-					$.div({
-						ref: preview_ref,
-						style: () => `display: ${is_editing ? "none" : "block"};`,
 						styles: css`
 							& {
 								position: absolute;
-								left: 0;
-								top: 0;
-								width: 100%;
-								height: 100%;
+								right: 0.5rem;
+								bottom: 0.5rem;
+								width: 1.5rem;
+								height: 1.5rem;
+								background: #505050;
+								border-radius: 8px;
+								display: flex;
+								align-items: center;
+								justify-content: center;
+							}
+
+							& icon {
+								font-size: 18px;
 							}
 						`,
-					}),
-					$.div({
-						ref: source_ref,
-						style: `display: none;`,
-					}),
-					$.button(
-						{
-							async onclick() {
-								is_editing = !is_editing;
-
-								if (!is_editing) {
-									try {
-										const exports = await BlobLoader.runModuleScript(source);
-										preview_ref.current.replaceChildren(exports.layout());
-									} catch (e) {
-										console.log(e);
-									}
-								}
-							},
-							styles: css`
-								& {
-									position: absolute;
-									right: 0.5rem;
-									bottom: 0.5rem;
-									width: 1.5rem;
-									height: 1.5rem;
-									background: #505050;
-									border-radius: 8px;
-									display: flex;
-									align-items: center;
-									justify-content: center;
-								}
-
-								& icon {
-									font-size: 18px;
-								}
-							`,
-						},
-						$.icon({ name: () => (is_editing ? "toggle_off" : "toggle_on") }),
-					),
+					},
+					$.icon({ name: () => (is_editing ? "toggle_off" : "toggle_on") }),
 				),
-			);
-		}
+			),
+		);
 	},
 	onlift() {
 		// console.log("lifted");
