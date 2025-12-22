@@ -1,6 +1,6 @@
 import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
 import { EditableApplet } from "applets/isolate";
-import { isUserTyping, finish } from "utils";
+import { isUserTyping, finish, useGlobalStyles } from "utils";
 
 //
 // Mount new destkop element if not found
@@ -12,18 +12,25 @@ if (!document.querySelector("desktop-view")) {
 
 	document.body.appendChild(Desktop());
 	await finish();
-	mountApplet(EditableApplet());
+	mountApplet(EditableApplet({
+		x: 50_000,
+		y: 50_000,
+	}));
 
 	// mountApplet(EditableApplet());
 	// mountApplet(EditableApplet());
 	// mountApplet(EditableApplet());
 }
 
-window.addEventListener("keydown", (e) => {
-	if (e.key === " " && !isUserTyping()) {
-		translateCameraCenterSmooth(50000, 50000, 1, 1000);
+useGlobalStyles(`
+	#banner {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		background: black;
+		color: white;
 	}
-});
+`)
 
 // this is the main entry point module. this is where we load all the wanted applet modules and everything else.
 //

@@ -19,12 +19,12 @@ const APPLET_NAME = "isolate";
 
 export const EditableApplet = registerAppletTag(APPLET_NAME, {
 	setup() {
-		this.start_x = 50_000;
-		this.start_y = 50_000;
+		this.start_x = Number(this.getAttribute("x")) || 0;
+		this.start_y = Number(this.getAttribute("y")) || 0;
 		this.start_w = 300;
 		this.start_h = 300;
 	},
-	hydrate() {
+	onhydrate() {
 		const prev_el = this.firstElementChild;
 		const source_ref = { current: null };
 		const preview_ref = { current: null };

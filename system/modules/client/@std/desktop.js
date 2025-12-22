@@ -17,13 +17,20 @@ const MOTION_IDLE = "idle";
 const MOTION_LIFT = "lift";
 const MOTION_RESIZE = "resize";
 
+const CAMERA_LS_KEY = "_DESKTOP_CAMERA_";
+
 //
 // Config
 //
 
 const ZOOM_EVENT_DELAY = 150;
 const MOUSE_WHEEL_ZOOM_SENSITIVITY = 0.0015;
-const MOUSE_WHEEL_LOW_ZOOM_BOOST = 3.5;
+const MOUSE_WHEEL_LOW_ZOOM_BOOST = 3;
+
+const PANNING_BASE_SENSITIVITY = 1.5; // Overall speed
+const PANNING_BASELINE_SPEED = 1.0; // Minimum multiplier (try 1.0 - 1.5)
+const PANNING_CURVE_SHIFT = 1; // Curve shift (try 0.5 - 2.0)
+const PANNING_SCALE_STRENGHT_INTENSITY = 0.3; // Scaling intensity (try 0.3 - 0.8)
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
@@ -68,6 +75,9 @@ let camera_animation_start_world_y = null;
 let camera_animation_target_world_x = null;
 let camera_animation_target_world_y = null;
 let is_animating_camera = false;
+let hash_return_camera_x = null;
+let hash_return_camera_y = null;
+let hash_return_camera_scale = null;
 
 const $ = useTags();
 
@@ -114,6 +124,40 @@ export const Desktop = registerCustomTag("desktop-view", {
 			this.querySelector("canvas[layer='front']") ||
 			this.appendChild($.canvas({ layer: "front" }));
 
+		// Create center element if not existent
+		const center_element = this.querySelector("#center");
+		if (!center_element) {
+			surface_el.prepend(
+				$.div({
+					id: "center",
+					style: css`
+						position: absolute;
+						top: 50%;
+						left: 50%;
+					`,
+					"aria-label": "Document center",
+				}),
+			);
+		}
+
+		// Check for entrance_banner (TODO: or potentially generate index)
+		const entrance_banner = this.querySelector("#banner");
+		if (!entrance_banner) {
+			surface_el.prepend(
+				$.header(
+					{
+						id: "banner",
+					},
+					$.a(
+						{
+							href: "#center",
+						},
+						"Jump to document center",
+					),
+				),
+			);
+		}
+
 		// Let's wait for the browser to finish the current queue of actions.
 		await finish();
 
@@ -124,19 +168,6 @@ export const Desktop = registerCustomTag("desktop-view", {
 		// );
 
 		handleResize();
-
-		// Initialize camera position
-		const current_camera_x = viewport_el.getAttribute("camera-x");
-		const current_camera_y = viewport_el.getAttribute("camera-y");
-		const current_camera_scale = viewport_el.getAttribute("camera-scale");
-
-		if (current_camera_x === null || current_camera_y === null || current_camera_scale === null) {
-			scrollToCenter();
-		} else {
-			camera_x = parseFloat(current_camera_x);
-			camera_y = parseFloat(current_camera_y);
-			current_scale = parseFloat(current_camera_scale) || 1;
-		}
 
 		//
 		// Setup event listeners
@@ -150,8 +181,143 @@ export const Desktop = registerCustomTag("desktop-view", {
 		window.addEventListener("mousedown", windowMouseDown);
 		window.addEventListener("mouseup", windowMouseUp);
 		window.addEventListener("mousemove", windowMouseMove);
-
+		window.addEventListener("hashchange", handleHashChange);
+		window.addEventListener("click", handleGlobalAnchorClick, true);
 		surface_el.addEventListener("mousedown", surfaceMouseDown);
+
+		//
+		// Initialize camera position
+		//
+
+		const last_camera_pos = localStorage.getItem(CAMERA_LS_KEY);
+		if (window.location.hash) {
+			// We should actually ask the user if they want to go to that initial position.
+			finish().then(handleHashChange);
+		} else if (last_camera_pos) {
+			const [x, y, z] = last_camera_pos.split(",");
+			camera_x = parseFloat(x);
+			camera_y = parseFloat(y);
+			current_scale = parseFloat(z);
+		}
+
+		function handleGlobalAnchorClick(e) {
+			// Find if click is on or within an anchor element
+			const link = e.target.closest("a[href]");
+			if (!link) return;
+
+			const href = link.getAttribute("href");
+
+			// Only handle internal hash links
+			if (!href || !href.startsWith("#") || href === "#") return;
+
+			// Check if target element exists
+			const target_id = href.slice(1);
+			const target_el = document.getElementById(target_id);
+			if (!target_el) return;
+
+			// Prevent default scroll behavior
+			e.preventDefault();
+
+			// Update hash without triggering scroll
+			history.pushState(null, "", href);
+
+			// Manually trigger our hash change handler
+			handleHashChange();
+		}
+
+		function handleHashChange() {
+			const hash = window.location.hash.slice(1);
+
+			// If no hash, restore previous camera position
+			if (!hash) {
+				if (
+					hash_return_camera_x !== null &&
+					hash_return_camera_y !== null &&
+					hash_return_camera_scale !== null
+				) {
+					const animation_duration = 600;
+
+					translateCameraSmooth(
+						hash_return_camera_x,
+						hash_return_camera_y,
+						hash_return_camera_scale,
+						animation_duration,
+						defaultEase,
+					);
+
+					// Clear the saved position
+					hash_return_camera_x = null;
+					hash_return_camera_y = null;
+					hash_return_camera_scale = null;
+				}
+				return;
+			}
+
+			// Try to find element with matching ID
+			const target_el = document.getElementById(hash);
+
+			// If no element found, check if hash is coordinates
+			if (!target_el) {
+				const parts = hash.split(",").map((p) => p.trim());
+
+				// Check if all parts are valid numbers
+				const are_all_numbers = parts.every((p) => !isNaN(parseFloat(p)));
+
+				if (are_all_numbers && parts.length >= 1 && parts.length <= 3) {
+					const target_x = parseFloat(parts[0]) || 0;
+					const target_y = parts.length >= 2 ? parseFloat(parts[1]) : 0;
+					const target_scale = parts.length >= 3 ? parseFloat(parts[2]) : current_scale;
+
+					// Clamp scale to valid range
+					const clamped_scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, target_scale));
+
+					// Save current camera position before navigating
+					hash_return_camera_x = camera_x;
+					hash_return_camera_y = camera_y;
+					hash_return_camera_scale = current_scale;
+
+					// Animate to coordinates
+					const animation_duration = 600;
+
+					translateCameraCenterSmooth(
+						target_x,
+						target_y,
+						clamped_scale,
+						animation_duration,
+						defaultEase,
+					);
+
+					return;
+				}
+
+				// Hash is neither an element ID nor valid coordinates, do nothing
+				return;
+			}
+
+			// Save current camera position before navigating
+			hash_return_camera_x = camera_x;
+			hash_return_camera_y = camera_y;
+			hash_return_camera_scale = current_scale;
+
+			// Get element's position in world coordinates
+			const rect = target_el.getBoundingClientRect();
+			const viewport_rect = viewport_el.getBoundingClientRect();
+
+			// Calculate element's position in world space (unscaled surface coordinates)
+			const element_world_x = (rect.left - viewport_rect.left + camera_x) / current_scale;
+			const element_world_y = (rect.top - viewport_rect.top + camera_y) / current_scale;
+
+			// Animate camera to center on the element
+			const animation_duration = 600;
+
+			translateCameraCenterSmooth(
+				element_world_x,
+				element_world_y,
+				current_scale,
+				animation_duration,
+				defaultEase,
+			);
+		}
 
 		function handleResize() {
 			// resizeCanvas();
@@ -211,15 +377,10 @@ export const Desktop = registerCustomTag("desktop-view", {
 			if (!e.ctrlKey && !e.metaKey) {
 				e.preventDefault();
 
-				const base_sensitivity = 1.5; // Overall speed
-
-				const baseline = 1.0; // Minimum multiplier (try 1.0 - 1.5)
-				const offset = 1; // Curve shift (try 0.5 - 2.0)
-				const strength = 0.3; // Scaling intensity (try 0.3 - 0.8)
-
-				const zoom_multiplier = baseline + Math.log(current_scale + offset) * strength;
-
-				const sensitivity = base_sensitivity * zoom_multiplier;
+				const zoom_multiplier =
+					PANNING_BASELINE_SPEED +
+					Math.log(current_scale + PANNING_CURVE_SHIFT) * PANNING_SCALE_STRENGHT_INTENSITY;
+				const sensitivity = PANNING_BASE_SENSITIVITY * zoom_multiplier;
 
 				translateCamera(camera_x + e.deltaX * sensitivity, camera_y + e.deltaY * sensitivity);
 			}
@@ -415,10 +576,8 @@ export const Desktop = registerCustomTag("desktop-view", {
 				normalizeZIndexes();
 			}
 
-			// Save state in DOM
-			viewport_el.setAttribute("camera-x", camera_x);
-			viewport_el.setAttribute("camera-y", camera_y);
-			viewport_el.setAttribute("camera-scale", current_scale);
+			// Save state in localStorage
+			localStorage.setItem(CAMERA_LS_KEY, `${camera_x},${camera_y},${current_scale}`);
 
 			requestAnimationFrame(step);
 		}
@@ -893,14 +1052,14 @@ export function registerAppletTag(name, config) {
 			this.start_w = 0;
 			this.start_h = 0;
 
-			// Starting values could be overwritten here
-			config.setup?.call(this);
-
 			this.resize_observer = null;
 			this.$on("contextmenu", preventContextMenu);
 			this.$on("mousedown", handleAppletMouseDown);
 		},
 		onconnected() {
+			// Starting values could be overwritten here
+			config.setup?.call(this);
+
 			// Configure applet element attributes
 			const attrs = {
 				motion: MOTION_IDLE,
@@ -919,9 +1078,6 @@ export function registerAppletTag(name, config) {
 				this.setAttribute(attr, value);
 			}
 
-			// Run hydration code
-			config.hydrate?.call(this);
-
 			// Setup applet resize observer
 			if (config.onresize) {
 				this.resize_observer = new ResizeObserver((entries) => {
@@ -932,6 +1088,9 @@ export function registerAppletTag(name, config) {
 
 				this.resize_observer.observe(this);
 			}
+
+			// Run hydration code
+			config.onhydrate?.call(this);
 		},
 		attrs: ["motion"],
 		onattributechanged(name, old_value, new_value) {
@@ -967,6 +1126,14 @@ BlobLoader.addStyleModule(
 		body {
 			user-select: none;
 			background-color: black;
+		}
+
+		#banner {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100vw;
+			height: 100vh;
 		}
 
 		desktop-view viewport {
