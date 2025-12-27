@@ -25,6 +25,11 @@ if (!document.querySelector("desktop-view")) {
 }
 
 useGlobalStyles(`
+	:root {
+		--code-editor-font-size: 12px;
+		--code-editor-font-family: "Google Sans Code";
+	}
+
 	#banner {
 		display: flex;
 		justify-content: center;

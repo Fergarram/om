@@ -25,8 +25,6 @@ function createTheme(config: {
 		lineHighlight: string;
 		gutterBackground: string;
 		gutterForeground: string;
-		fontFamily: string;
-		fontSize: string;
 	};
 	styles: Array<{ tag: any; color: string }>;
 }) {
@@ -35,8 +33,6 @@ function createTheme(config: {
 			"&": {
 				backgroundColor: config.settings.background,
 				color: config.settings.foreground,
-				fontSize: config.settings.fontSize,
-				fontFamily: config.settings.fontFamily,
 				height: "100%",
 				width: "100%",
 			},
@@ -46,8 +42,6 @@ function createTheme(config: {
 			},
 			".cm-content": {
 				caretColor: config.settings.caret,
-				fontSize: config.settings.fontSize,
-				fontFamily: config.settings.fontFamily,
 			},
 			".cm-cursor, .cm-dropCursor": {
 				borderLeftColor: config.settings.caret,
@@ -62,8 +56,6 @@ function createTheme(config: {
 				backgroundColor: config.settings.gutterBackground,
 				color: config.settings.gutterForeground,
 				border: "none",
-				fontSize: config.settings.fontSize,
-				fontFamily: config.settings.fontFamily,
 			},
 			".cm-activeLineGutter": {
 				backgroundColor: config.settings.lineHighlight,
@@ -87,8 +79,6 @@ export const minimalDark = createTheme({
 		lineHighlight: "#aafee717",
 		gutterBackground: "#101010",
 		gutterForeground: "#444444",
-		fontFamily: "'Jetbrains Mono', 'Geist Mono', monospace",
-		fontSize: "12px",
 	},
 	styles: [
 		{ tag: t.comment, color: "#aafee7" },
@@ -118,8 +108,6 @@ export const minimalLight = createTheme({
 		lineHighlight: "#0066ff0a",
 		gutterBackground: "#ffffff",
 		gutterForeground: "#999999",
-		fontFamily: "'Jetbrains Mono', 'Geist Mono', monospace",
-		fontSize: "12px",
 	},
 	styles: [
 		{ tag: t.comment, color: "#008080" },
@@ -141,16 +129,16 @@ export const minimalLight = createTheme({
 
 export const fontOverride = EditorView.theme({
 	"&": {
-		fontSize: "12px",
-		fontFamily: "'Jetbrains Mono', 'Geist Mono', monospace",
+		fontSize: "var(--code-editor-font-size, 12px)",
+		fontFamily: "var(--code-editor-font-family, monospace)",
 	},
 	".cm-content": {
-		fontSize: "12px",
-		fontFamily: "'Jetbrains Mono', 'Geist Mono', monospace",
+		fontSize: "var(--code-editor-font-size, 12px)",
+		fontFamily: "var(--code-editor-font-family, monospace)",
 	},
 	".cm-gutters": {
-		fontSize: "12px",
-		fontFamily: "'Jetbrains Mono', 'Geist Mono', monospace",
+		fontSize: "var(--code-editor-font-size, 12px)",
+		fontFamily: "var(--code-editor-font-family, monospace)",
 	},
 });
 
@@ -200,6 +188,20 @@ export function createEditor(config: EditorConfig, extensions: Extension[] = [])
 		EditorView.lineWrapping,
 		EditorState.tabSize.of(4),
 		indentUnit.of("\t"),
+		// @FIXES: Add debounced viewport updates
+		// Fast traversal of the buffer would crash the editor
+		EditorView.updateListener.of((update: ViewUpdate) => {
+			if (update.viewportChanged || update.geometryChanged) {
+				// Force recalculation
+				requestAnimationFrame(() => {
+					try {
+						update.view.requestMeasure();
+					} catch (e) {
+						// Silently ignore measurement errors
+					}
+				});
+			}
+		}),
 		...extensions,
 	];
 
