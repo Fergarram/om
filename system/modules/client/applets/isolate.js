@@ -33,10 +33,12 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 		let source = prev_el ? prev_el.querySelector("source").innerHTML : "";
 		let is_editing = prev_el ? false : true;
 		let cleanup = null;
+		let editor_ref = { current: null };
 
 		this.replaceChildren(
 			$.div(
-				$.textarea({
+				$["code-editor"]({
+					ref: editor_ref,
 					style: () => `display: ${!is_editing ? "none" : "block"};`,
 					oninput(e) {
 						if (!source_ref.current) return;
@@ -140,7 +142,8 @@ BlobLoader.addStyleModule(
 			transition: backdrop-filter 150ms ease-in-out;
 		}
 
-		applet-${APPLET_NAME} > div > textarea {
+		applet-${APPLET_NAME} > div > textarea,
+		applet-${APPLET_NAME} > div > code-editor {
 			display: block;
 			position: absolute;
 			left: 0;
@@ -148,6 +151,7 @@ BlobLoader.addStyleModule(
 			width: 100%;
 			height: 100%;
 			resize: none;
+			background: black;
 		}
 
 		applet-${APPLET_NAME}[motion="lift"] {
@@ -181,8 +185,6 @@ with just having a single html file.
 Currently, I have two files: shell and export.
 
 I need it to always be an export.
-
-
 
 Also, we need the <header></header> banner and skip to main content links.
 Essentially for pure non-js renders we want to be able to navigate the site reliably.

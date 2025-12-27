@@ -2,6 +2,8 @@ import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
 import { EditableApplet } from "applets/isolate";
 import { isUserTyping, finish, useGlobalStyles } from "utils";
 
+import "ui/code-editor";
+
 //
 // Mount new destkop element if not found
 //

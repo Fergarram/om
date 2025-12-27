@@ -1,5 +1,5 @@
 //
-// BLOB LOADER | [80/100] to v1.0
+// BLOB LOADER | [90/100] to v1.0
 // by fergarram
 //
 
@@ -15,12 +15,17 @@
 	// TODO
 	//
 	// v1.5 === === === === === === === === === === === === === === === === === === === === ===
-	//
-	//      This version might require some internal refactorings, this is why a CRUD interface is
-	//      important over just exposing internals directly.
-	//
 	// [ ] Hooks for minification and formatting (we already have the lib thing)
-	//     - TSC for lang="ts" or even lang="tsx" (actually would go in the same spot as minification)
+	//     - TSC for lang="ts" or even lang="tsx"
+
+	//
+	// Constants
+	//
+
+	const SCRIPT_MODULE_TYPE = "script";
+	const STYLE_MODULE_TYPE = "style";
+	const MEDIA_MODULE_TYPE = "media";
+	const MODULE_TYPES = [SCRIPT_MODULE_TYPE, STYLE_MODULE_TYPE, MEDIA_MODULE_TYPE];
 
 	//
 	// Global BlobLoader object
@@ -33,7 +38,8 @@
 		// Module cache management
 		getCachedModule,
 		setCachedModule,
-		updateModule,
+		removeModuleCache,
+		updateModuleFromRemote,
 		clearAllCache,
 		openCache,
 		addStyleModule,
@@ -139,7 +145,7 @@
 				}
 			} else {
 				// Try cache
-				const cached_image = await getCachedModule(image_name, "media");
+				const cached_image = await getCachedModule(image_name, MEDIA_MODULE_TYPE);
 				if (cached_image) {
 					console.log(`Using cached image "${image_name}"`);
 
@@ -173,7 +179,7 @@
 					const blob = await response.blob();
 
 					// Cache it
-					await setCachedModule(image_name, blob, "media");
+					await setCachedModule(image_name, blob, MEDIA_MODULE_TYPE);
 					console.log(`Cached remote image "${image_name}"`);
 
 					// Convert to data URL
@@ -284,7 +290,7 @@
 				}
 			} else {
 				// Try cache
-				const cached_font = await getCachedModule(font_name, "media");
+				const cached_font = await getCachedModule(font_name, MEDIA_MODULE_TYPE);
 				if (cached_font) {
 					console.log(`Using cached font "${font_name}"`);
 
@@ -318,7 +324,7 @@
 					const blob = await response.blob();
 
 					// Cache it
-					await setCachedModule(font_name, blob, "media");
+					await setCachedModule(font_name, blob, MEDIA_MODULE_TYPE);
 					console.log(`Cached remote font "${font_name}"`);
 
 					// Convert to data URL
@@ -425,7 +431,7 @@
 				blob = await res.blob();
 			} else {
 				// Try cache
-				const cached_media = await getCachedModule(media_name, "media");
+				const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
 				if (cached_media) {
 					console.log(`Using cached media "${media_name}"`);
 					blob = cached_media.blob;
@@ -457,7 +463,7 @@
 					blob = await response.blob();
 
 					// Cache it for next time
-					await setCachedModule(media_name, blob, "media");
+					await setCachedModule(media_name, blob, MEDIA_MODULE_TYPE);
 					console.log(`Cached remote media "${media_name}"`);
 
 					// Convert to data URL
@@ -543,7 +549,6 @@
 				continue;
 			}
 
-			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 			const content = style.textContent.trim();
 
 			let final_content = null;
@@ -558,7 +563,7 @@
 				final_content = content;
 			} else {
 				// Try cache
-				const cached_style = await getCachedModule(style_module_name, "styles");
+				const cached_style = await getCachedModule(style_module_name, STYLE_MODULE_TYPE);
 				if (cached_style) {
 					console.log(`Using cached style "${style_module_name}"`);
 					final_content = cached_style.content;
@@ -585,7 +590,7 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(style_module_name, final_content, "styles");
+					await setCachedModule(style_module_name, final_content, STYLE_MODULE_TYPE);
 					console.log(`Cached remote style "${style_module_name}"`);
 
 					blob_style_sources.set(style_module_name, final_content);
@@ -596,6 +601,8 @@
 			if (!final_content) {
 				continue;
 			}
+
+			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 
 			// Create blob URL
 			const style_blob = new Blob([final_content], {
@@ -680,7 +687,6 @@
 				continue;
 			}
 
-			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 			const content = script.textContent.trim();
 
 			let final_content = null;
@@ -695,7 +701,7 @@
 				final_content = content;
 			} else {
 				// Try cache
-				const cached_module = await getCachedModule(module_name, "modules");
+				const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
 				if (cached_module) {
 					console.log(`Using cached module "${module_name}"`);
 					final_content = cached_module.content;
@@ -751,7 +757,7 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(module_name, final_content, "modules");
+					await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
 					console.log(`Cached remote module "${module_name}"`);
 
 					blob_modules_sources.set(module_name, final_content);
@@ -762,6 +768,8 @@
 			if (!final_content) {
 				continue;
 			}
+
+			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 
 			// Create blob URL
 			const module_blob = new Blob([final_content], {
@@ -828,8 +836,7 @@
 			const db = await openCache();
 
 			// Validate module type
-			const valid_types = ["modules", "styles", "media"];
-			if (!valid_types.includes(module_type)) {
+			if (!MODULE_TYPES.includes(module_type)) {
 				console.warn(`Invalid module type: ${module_type}`);
 				return null;
 			}
@@ -853,8 +860,7 @@
 			const db = await openCache();
 
 			// Validate module type
-			const valid_types = ["modules", "styles", "media"];
-			if (!valid_types.includes(module_type)) {
+			if (!MODULE_TYPES.includes(module_type)) {
 				console.warn(`Invalid module type: ${module_type}`);
 				return;
 			}
@@ -868,7 +874,7 @@
 			};
 
 			// Store content differently based on type
-			if (module_type === "media") {
+			if (module_type === MEDIA_MODULE_TYPE) {
 				cache_entry.blob = content;
 			} else {
 				cache_entry.content = content;
@@ -881,6 +887,33 @@
 			});
 		} catch (error) {
 			console.warn(`Failed to cache ${module_type} module:`, error);
+		}
+	}
+
+	async function removeModuleCache(name, module_type) {
+		try {
+			const db = await openCache();
+
+			// Validate module type
+			if (!MODULE_TYPES.includes(module_type)) {
+				console.warn(`Invalid module type: ${module_type}`);
+				return false;
+			}
+
+			const transaction = db.transaction([module_type], "readwrite");
+			const store = transaction.objectStore(module_type);
+
+			return new Promise((resolve, reject) => {
+				const request = store.delete(name);
+				request.onerror = () => reject(request.error);
+				request.onsuccess = () => {
+					console.log(`Removed ${module_type} module "${name}" from cache`);
+					resolve(true);
+				};
+			});
+		} catch (error) {
+			console.warn(`Failed to remove cached ${module_type} module "${name}":`, error);
+			return false;
 		}
 	}
 
@@ -984,11 +1017,10 @@
 			});
 	}
 
-	async function updateModule(name, remote_url, module_type) {
+	async function updateModuleFromRemote(name, remote_url, module_type) {
 		try {
 			// Validate module type
-			const valid_types = ["modules", "styles", "media"];
-			if (!valid_types.includes(module_type)) {
+			if (!MODULE_TYPES.includes(module_type)) {
 				console.warn(`Invalid module type: ${module_type}`);
 				return false;
 			}
@@ -1008,7 +1040,7 @@
 			let content;
 
 			// Handle different content types
-			if (module_type === "media") {
+			if (module_type === MEDIA_MODULE_TYPE) {
 				content = await response.blob();
 			} else {
 				content = await response.text();
@@ -1031,11 +1063,8 @@
 	async function clearAllCache() {
 		try {
 			const db = await openCache();
-
-			const store_names = ["modules", "styles", "media"];
-			const transaction = db.transaction(store_names, "readwrite");
-
-			const clear_promises = store_names.map((store_name) => {
+			const transaction = db.transaction(MODULE_TYPES, "readwrite");
+			const clear_promises = MODULE_TYPES.map((store_name) => {
 				return new Promise((resolve, reject) => {
 					const store = transaction.objectStore(store_name);
 					const request = store.clear();
@@ -1060,7 +1089,7 @@
 		return new Promise((resolve, reject) => {
 			const request = indexedDB.open(
 				"blob_module_cache",
-				7, // version
+				8, // version
 			);
 
 			request.onerror = () => reject(request.error);
@@ -1070,10 +1099,10 @@
 				const db = event.target.result;
 
 				// Modules store
-				if (db.objectStoreNames.contains("modules")) {
-					db.deleteObjectStore("modules");
+				if (db.objectStoreNames.contains(SCRIPT_MODULE_TYPE)) {
+					db.deleteObjectStore(SCRIPT_MODULE_TYPE);
 				}
-				const modules_store = db.createObjectStore("modules", {
+				const modules_store = db.createObjectStore(SCRIPT_MODULE_TYPE, {
 					keyPath: "name",
 				});
 				modules_store.createIndex("timestamp", "timestamp", {
@@ -1081,10 +1110,10 @@
 				});
 
 				// Styles store
-				if (db.objectStoreNames.contains("styles")) {
-					db.deleteObjectStore("styles");
+				if (db.objectStoreNames.contains(STYLE_MODULE_TYPE)) {
+					db.deleteObjectStore(STYLE_MODULE_TYPE);
 				}
-				const styles_store = db.createObjectStore("styles", {
+				const styles_store = db.createObjectStore(STYLE_MODULE_TYPE, {
 					keyPath: "name",
 				});
 				styles_store.createIndex("timestamp", "timestamp", {
@@ -1092,10 +1121,10 @@
 				});
 
 				// Media store
-				if (db.objectStoreNames.contains("media")) {
-					db.deleteObjectStore("media");
+				if (db.objectStoreNames.contains(MEDIA_MODULE_TYPE)) {
+					db.deleteObjectStore(MEDIA_MODULE_TYPE);
 				}
-				const media_store = db.createObjectStore("media", {
+				const media_store = db.createObjectStore(MEDIA_MODULE_TYPE, {
 					keyPath: "name",
 				});
 				media_store.createIndex("timestamp", "timestamp", {
