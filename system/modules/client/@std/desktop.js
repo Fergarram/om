@@ -366,16 +366,21 @@ export const Desktop = registerCustomTag("desktop-view", {
 
 		async function desktopWheel(e) {
 			let target = e.target;
-			while (target && target !== surface_el) {
-				if (isScrollable(target) && !is_scrolling) {
-					return;
+
+			if (!is_scrolling) {
+				while (target && target !== surface_el) {
+					if (isScrollable(target)) {
+						return;
+					}
+					target = target.parentElement;
 				}
-				target = target.parentElement;
 			}
 
 			// Panning via scroll
 			if (!e.ctrlKey && !e.metaKey) {
 				e.preventDefault();
+
+				is_scrolling = true;
 
 				const zoom_multiplier =
 					PANNING_BASELINE_SPEED +
@@ -383,6 +388,14 @@ export const Desktop = registerCustomTag("desktop-view", {
 				const sensitivity = PANNING_BASE_SENSITIVITY * zoom_multiplier;
 
 				translateCamera(camera_x + e.deltaX * sensitivity, camera_y + e.deltaY * sensitivity);
+
+				// Clear any existing timeout
+				clearTimeout(scrolling_timeout);
+
+				// Reset panning state after scroll stops
+				scrolling_timeout = setTimeout(() => {
+					is_scrolling = false;
+				}, 150);
 			}
 			// Zooming via CMD+CLICK
 			else if ((e.metaKey || e.ctrlKey) && !is_panning) {
