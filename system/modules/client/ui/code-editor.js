@@ -4,7 +4,7 @@ import { createEditor } from "codemirror";
 
 const $ = useTags();
 
-export const CodeEditor = registerCustomTag("code-editor", {
+const CodeEditor = registerCustomTag("code-editor", {
 	async onconnected() {
 		let source = this.getAttribute("source") || "";
 
@@ -17,11 +17,14 @@ export const CodeEditor = registerCustomTag("code-editor", {
 			source = btoa(source);
 		}
 
+		const language = this.getAttribute("language") || "plaintext";
+		const theme = this.getAttribute("theme") || "dark";
+
 		this.editor = createEditor({
 			host: this,
-			language: "javascript",
+			language,
 			source,
-			theme: "dark",
+			theme,
 			onInput: (new_value) => {
 				this.dispatchEvent(new CustomEvent("input"));
 				this.value = new_value;
@@ -29,3 +32,5 @@ export const CodeEditor = registerCustomTag("code-editor", {
 		});
 	},
 });
+
+export default CodeEditor;

@@ -1,6 +1,7 @@
 import { registerAppletTag } from "desktop";
 import { css } from "utils";
 import { useStyledTags } from "ima-utils";
+import CodeEditor from "ui/code-editor"
 
 const $ = useStyledTags();
 
@@ -17,7 +18,7 @@ const APPLET_NAME = "isolate";
 // Applet
 //
 
-export const EditableApplet = registerAppletTag(APPLET_NAME, {
+const IsolatedApplet = registerAppletTag(APPLET_NAME, {
 	setup() {
 		this.start_x = Number(this.getAttribute("x")) || 0;
 		this.start_y = Number(this.getAttribute("y")) || 0;
@@ -26,7 +27,6 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 	},
 	onhydrate() {
 		const prev_el = this.firstElementChild;
-		const source_ref = { current: null };
 		const preview_ref = { current: null };
 
 		// TODO: Finish this example so that it can be rehydrated based on its different states
@@ -37,13 +37,11 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 
 		this.replaceChildren(
 			$.div(
-				$["code-editor"]({
+				CodeEditor({
 					ref: editor_ref,
 					style: () => `display: ${!is_editing ? "none" : "block"};`,
 					oninput(e) {
-						if (!source_ref.current) return;
 						source = this.value;
-						source_ref.current.innerHTML = btoa(this.value);
 					},
 				}),
 				$.div({
@@ -58,10 +56,6 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 							height: 100%;
 						}
 					`,
-				}),
-				$.source({
-					ref: source_ref,
-					style: `display: none;`,
 				}),
 				$.button(
 					{
@@ -120,6 +114,8 @@ export const EditableApplet = registerAppletTag(APPLET_NAME, {
 		// clean up or whatever
 	},
 });
+
+export default IsolatedApplet;
 
 // This adds a module at runtime so that it may be included in the next build.
 // Because it's very likely that this will try to override the existing ones,

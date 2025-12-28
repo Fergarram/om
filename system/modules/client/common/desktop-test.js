@@ -1,8 +1,8 @@
-import { Desktop, mountApplet, translateCameraCenterSmooth } from "desktop";
-import { EditableApplet } from "applets/isolate";
-import { isUserTyping, finish, useGlobalStyles } from "utils";
+import { Desktop, mountApplet } from "desktop";
+import IsolatedApplet from "applets/isolate";
+import { finish, useGlobalStyles } from "utils";
 
-import "ui/code-editor";
+import { openModuleEditor } from "module-editor";
 
 //
 // Mount new destkop element if not found
@@ -14,14 +14,17 @@ if (!document.querySelector("desktop-view")) {
 
 	document.body.appendChild(Desktop());
 	await finish();
-	mountApplet(EditableApplet({
-		x: 50_000,
-		y: 50_000,
-	}));
 
-	// mountApplet(EditableApplet());
-	// mountApplet(EditableApplet());
-	// mountApplet(EditableApplet());
+	openModuleEditor();
+
+	// mountApplet(IsolatedApplet({
+	// 	x: 50_000,
+	// 	y: 50_000,
+	// }));
+
+	// mountApplet(IsolatedApplet());
+	// mountApplet(IsolatedApplet());
+	// mountApplet(IsolatedApplet());
 }
 
 useGlobalStyles(`

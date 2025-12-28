@@ -35,7 +35,7 @@
 		lib: {}, // The place for IIFEs to self attach before running the loader.
 		transformers: [], // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
 
-		// Module cache management
+		// API
 		getCachedModule,
 		setCachedModule,
 		removeModuleCache,
@@ -44,8 +44,10 @@
 		openCache,
 		addStyleModule,
 		runModuleScript,
-
-		// Utils
+		getAllModules,
+		getScriptModules,
+		getStyleModules,
+		getMediaModules,
 		saveAsHtmlFile,
 		getDocumentOuterHtml,
 	};
@@ -604,6 +606,9 @@
 
 			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 
+			// Add source URL comment for better debugging
+			final_content = `${final_content}\n//# sourceURL=${style_module_name}`;
+
 			// Create blob URL
 			const style_blob = new Blob([final_content], {
 				type: "text/css",
@@ -755,6 +760,9 @@
 					}
 
 					final_content = await response.text();
+
+					// Add source URL comment for better debugging
+					final_content = `${final_content}\n//# sourceURL=${module_name}`;
 
 					// Cache it
 					await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
@@ -917,6 +925,104 @@
 		}
 	}
 
+	async function clearAllCache() {
+		try {
+			const db = await openCache();
+			const transaction = db.transaction(MODULE_TYPES, "readwrite");
+			const clear_promises = MODULE_TYPES.map((store_name) => {
+				return new Promise((resolve, reject) => {
+					const store = transaction.objectStore(store_name);
+					const request = store.clear();
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						console.log(`Cleared ${store_name} cache`);
+						resolve();
+					};
+				});
+			});
+
+			await Promise.all(clear_promises);
+			console.log("All caches cleared successfully");
+			return true;
+		} catch (error) {
+			console.warn("Failed to clear caches:", error);
+			return false;
+		}
+	}
+
+	function openCache() {
+		return new Promise((resolve, reject) => {
+			const request = indexedDB.open(
+				"blob_module_cache",
+				8, // version
+			);
+
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => resolve(request.result);
+
+			request.onupgradeneeded = (event) => {
+				const db = event.target.result;
+
+				// Modules store
+				if (db.objectStoreNames.contains(SCRIPT_MODULE_TYPE)) {
+					db.deleteObjectStore(SCRIPT_MODULE_TYPE);
+				}
+				const modules_store = db.createObjectStore(SCRIPT_MODULE_TYPE, {
+					keyPath: "name",
+				});
+				modules_store.createIndex("timestamp", "timestamp", {
+					unique: false,
+				});
+
+				// Styles store
+				if (db.objectStoreNames.contains(STYLE_MODULE_TYPE)) {
+					db.deleteObjectStore(STYLE_MODULE_TYPE);
+				}
+				const styles_store = db.createObjectStore(STYLE_MODULE_TYPE, {
+					keyPath: "name",
+				});
+				styles_store.createIndex("timestamp", "timestamp", {
+					unique: false,
+				});
+
+				// Media store
+				if (db.objectStoreNames.contains(MEDIA_MODULE_TYPE)) {
+					db.deleteObjectStore(MEDIA_MODULE_TYPE);
+				}
+				const media_store = db.createObjectStore(MEDIA_MODULE_TYPE, {
+					keyPath: "name",
+				});
+				media_store.createIndex("timestamp", "timestamp", {
+					unique: false,
+				});
+			};
+		});
+	}
+
+	//
+	// Runtime module management
+	//
+
+	function getAllModules() {
+		return {
+			scripts: Array.from(blob_module_map.values()),
+			styles: Array.from(blob_style_map.values()),
+			media: Array.from(blob_media_map.values()),
+		};
+	}
+
+	function getScriptModules() {
+		return Array.from(blob_module_map.values());
+	}
+
+	function getStyleModules() {
+		return Array.from(blob_style_map.values());
+	}
+
+	function getMediaModules() {
+		return Array.from(blob_media_map.values());
+	}
+
 	function addStyleModule(style_name, style_content, metadata = {}, options = {}) {
 		const { override = false } = options;
 
@@ -1060,80 +1166,6 @@
 		}
 	}
 
-	async function clearAllCache() {
-		try {
-			const db = await openCache();
-			const transaction = db.transaction(MODULE_TYPES, "readwrite");
-			const clear_promises = MODULE_TYPES.map((store_name) => {
-				return new Promise((resolve, reject) => {
-					const store = transaction.objectStore(store_name);
-					const request = store.clear();
-					request.onerror = () => reject(request.error);
-					request.onsuccess = () => {
-						console.log(`Cleared ${store_name} cache`);
-						resolve();
-					};
-				});
-			});
-
-			await Promise.all(clear_promises);
-			console.log("All caches cleared successfully");
-			return true;
-		} catch (error) {
-			console.warn("Failed to clear caches:", error);
-			return false;
-		}
-	}
-
-	function openCache() {
-		return new Promise((resolve, reject) => {
-			const request = indexedDB.open(
-				"blob_module_cache",
-				8, // version
-			);
-
-			request.onerror = () => reject(request.error);
-			request.onsuccess = () => resolve(request.result);
-
-			request.onupgradeneeded = (event) => {
-				const db = event.target.result;
-
-				// Modules store
-				if (db.objectStoreNames.contains(SCRIPT_MODULE_TYPE)) {
-					db.deleteObjectStore(SCRIPT_MODULE_TYPE);
-				}
-				const modules_store = db.createObjectStore(SCRIPT_MODULE_TYPE, {
-					keyPath: "name",
-				});
-				modules_store.createIndex("timestamp", "timestamp", {
-					unique: false,
-				});
-
-				// Styles store
-				if (db.objectStoreNames.contains(STYLE_MODULE_TYPE)) {
-					db.deleteObjectStore(STYLE_MODULE_TYPE);
-				}
-				const styles_store = db.createObjectStore(STYLE_MODULE_TYPE, {
-					keyPath: "name",
-				});
-				styles_store.createIndex("timestamp", "timestamp", {
-					unique: false,
-				});
-
-				// Media store
-				if (db.objectStoreNames.contains(MEDIA_MODULE_TYPE)) {
-					db.deleteObjectStore(MEDIA_MODULE_TYPE);
-				}
-				const media_store = db.createObjectStore(MEDIA_MODULE_TYPE, {
-					keyPath: "name",
-				});
-				media_store.createIndex("timestamp", "timestamp", {
-					unique: false,
-				});
-			};
-		});
-	}
-
 	//
 	// Utils
 	//
@@ -1153,6 +1185,12 @@
 		if (main_execution_script) {
 			main_execution_script.remove();
 		}
+
+		// Remove all elements with no-export attribute
+		const no_export_elements = doc_clone.querySelectorAll("[no-export]");
+		no_export_elements.forEach((element) => {
+			element.remove();
+		});
 
 		// Process module loader script
 		const module_loader_script = doc_clone.querySelector('script[id="blob-loader"]');

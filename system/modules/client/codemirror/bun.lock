@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "codemirror",
@@ -17,6 +18,7 @@
         "@codemirror/search": "^6.5.11",
         "@codemirror/state": "^6.5.3",
         "@codemirror/view": "^6.39.7",
+        "@iizukak/codemirror-lang-wgsl": "^0.3.0",
         "@lezer/highlight": "^1.2.3",
         "codemirror": "^6.0.2",
       },
@@ -88,6 +90,8 @@
     "@codemirror/state": ["@codemirror/state@6.5.3", "", { "dependencies": { "@marijn/find-cluster-break": "^1.0.0" } }, "sha512-MerMzJzlXogk2fxWFU1nKp36bY5orBG59HnPiz0G9nLRebWa0zXuv2siH6PLIHBvv5TH8CkQRqjBs0MlxCZu+A=="],
 
     "@codemirror/view": ["@codemirror/view@6.39.7", "", { "dependencies": { "@codemirror/state": "^6.5.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-3Vif9hnNHJnl2YgOtkR/wzGzhYcQ8gy3LGdUhkLUU8xSBbgsTxrE8he/CMTpeINm5TgxLe2FmzvF6IYQL/BSAg=="],
+
+    "@iizukak/codemirror-lang-wgsl": ["@iizukak/codemirror-lang-wgsl@0.3.0", "", { "dependencies": { "@codemirror/language": "6.x", "@lezer/highlight": "1.x", "@lezer/lr": "^1.x", "codemirror": "6.x" } }, "sha512-Hv957EXK8CzJvoAlKLtHBfC3BIiqFlTBu/0znBgSYhooDBZBpZQEKp1zgr3OYbg03CG1mRJmrypO/HQXB3xavA=="],
 
     "@lezer/common": ["@lezer/common@1.5.0", "", {}, "sha512-PNGcolp9hr4PJdXR4ix7XtixDrClScvtSCYW3rQG106oVMOOI+jFb+0+J3mbeL/53g1Zd6s0kJzaw6Ri68GmAA=="],
 

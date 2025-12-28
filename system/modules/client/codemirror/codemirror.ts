@@ -6,6 +6,7 @@ import { html } from "@codemirror/lang-html";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { xml } from "@codemirror/lang-xml";
+import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 import { autocompletion } from "@codemirror/autocomplete";
 import { search, searchKeymap } from "@codemirror/search";
 import { foldKeymap } from "@codemirror/language";
@@ -153,6 +154,8 @@ const language_map = {
 	markdown: () => markdown(),
 	xml: () => xml(),
 	bash: () => null,
+	wgsl: () => wgsl(),
+	plaintext: () => null,
 };
 
 type LanguageType = keyof typeof language_map;

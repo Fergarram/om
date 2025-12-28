@@ -4,7 +4,8 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "bun build ./codemirror.ts --format esm --target browser --outdir . --sourcemap=inline --watch"
+		"dev": "bun build ./codemirror.ts --format esm --target browser --outdir . --sourcemap=inline --watch",
+		"build": "bun build ./codemirror.ts --format esm --target browser --outdir . --minify"
 	},
 	"devDependencies": {
 		"@types/bun": "latest"
@@ -26,6 +27,7 @@
 		"@codemirror/search": "^6.5.11",
 		"@codemirror/state": "^6.5.3",
 		"@codemirror/view": "^6.39.7",
+		"@iizukak/codemirror-lang-wgsl": "^0.3.0",
 		"@lezer/highlight": "^1.2.3",
 		"codemirror": "^6.0.2"
 	}
