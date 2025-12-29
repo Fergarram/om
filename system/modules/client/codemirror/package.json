@@ -28,11 +28,6 @@
 		"@codemirror/state": "6.5.2",
 		"@codemirror/view": "6.38.6",
 		"@iizukak/codemirror-lang-wgsl": "^0.3.0",
-		"@lezer/highlight": "^1.2.3",
-		"codemirror": "6.0.1"
-	},
-	"overrides": {
-		"@codemirror/view": "6.38.6",
-		"@codemirror/state": "6.5.2"
+		"@lezer/highlight": "^1.2.3"
 	}
 }

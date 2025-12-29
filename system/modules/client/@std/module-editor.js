@@ -45,6 +45,7 @@ function ModuleTabButton(mod_type, mod) {
 			onclick() {
 				current_module_tab = `${mod_type}.${mod.module_name}`;
 			},
+			selected: () => current_module_tab === `${mod_type}.${mod.module_name}`,
 			styles: css`
 				& {
 					width: 100%;
@@ -56,6 +57,10 @@ function ModuleTabButton(mod_type, mod) {
 
 				&:hover {
 					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&[selected="true"] {
+					background: rgba(255, 255, 255, 0.15);
 				}
 			`,
 		},

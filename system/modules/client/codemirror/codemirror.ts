@@ -1,5 +1,30 @@
-import { EditorView, basicSetup } from "codemirror";
+import {
+	EditorView,
+	lineNumbers,
+	highlightActiveLineGutter,
+	highlightSpecialChars,
+	drawSelection,
+	dropCursor,
+	rectangularSelection,
+	crosshairCursor,
+	highlightActiveLine,
+	keymap,
+	ViewUpdate,
+} from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
+import { history, defaultKeymap, historyKeymap, insertTab } from "@codemirror/commands";
+import {
+	foldGutter,
+	foldKeymap,
+	indentOnInput,
+	syntaxHighlighting,
+	defaultHighlightStyle,
+	bracketMatching,
+	HighlightStyle,
+	indentUnit,
+} from "@codemirror/language";
+import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
@@ -7,14 +32,27 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { xml } from "@codemirror/lang-xml";
 import { wgsl } from "@iizukak/codemirror-lang-wgsl";
-import { autocompletion } from "@codemirror/autocomplete";
-import { search, searchKeymap } from "@codemirror/search";
-import { foldKeymap } from "@codemirror/language";
-import { defaultKeymap, historyKeymap, insertTab } from "@codemirror/commands";
-import { keymap, ViewUpdate } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { HighlightStyle, syntaxHighlighting, indentUnit } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
+
+const basic_setup: Extension = [
+	lineNumbers(),
+	highlightActiveLineGutter(),
+	highlightSpecialChars(),
+	history(),
+	foldGutter(),
+	drawSelection(),
+	dropCursor(),
+	EditorState.allowMultipleSelections.of(true),
+	indentOnInput(),
+	syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+	bracketMatching(),
+	closeBrackets(),
+	rectangularSelection(),
+	crosshairCursor(),
+	highlightActiveLine(),
+	highlightSelectionMatches(),
+];
 
 function createTheme(config: {
 	theme: "light" | "dark";
@@ -176,7 +214,7 @@ export function createEditor(config: EditorConfig, extensions: Extension[] = [])
 	const theme_extension = theme === "dark" ? minimalDark : minimalLight;
 
 	const default_extensions: Extension[] = [
-		basicSetup,
+		basic_setup,
 		keymap.of([
 			...defaultKeymap,
 			...searchKeymap,
