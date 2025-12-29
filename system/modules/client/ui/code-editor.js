@@ -14,7 +14,7 @@ const CodeEditor = registerCustomTag("code-editor", {
 			const res = await fetch(source);
 			source = res.ok ? await res.text() : "failed to fetch url: " + source;
 		} else if (source) {
-			source = btoa(source);
+			source = atob(source);
 		}
 
 		const language = this.getAttribute("language") || "plaintext";

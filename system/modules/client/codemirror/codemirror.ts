@@ -191,20 +191,6 @@ export function createEditor(config: EditorConfig, extensions: Extension[] = [])
 		EditorView.lineWrapping,
 		EditorState.tabSize.of(4),
 		indentUnit.of("\t"),
-		// @FIXES: Add debounced viewport updates
-		// Fast traversal of the buffer would crash the editor
-		EditorView.updateListener.of((update: ViewUpdate) => {
-			if (update.viewportChanged || update.geometryChanged) {
-				// Force recalculation
-				requestAnimationFrame(() => {
-					try {
-						update.view.requestMeasure();
-					} catch (e) {
-						// Silently ignore measurement errors
-					}
-				});
-			}
-		}),
 		...extensions,
 	];
 
