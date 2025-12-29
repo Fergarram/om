@@ -1,7 +1,6 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
 import { createEditor } from "codemirror";
-import "jsx-transformer";
 
 const $ = useTags();
 

@@ -216,6 +216,30 @@
 				style.setAttribute("blob", blob_url);
 			}
 
+			// Detect extension
+			let extension = null;
+			if (remote_url) {
+				const url_path = new URL(remote_url, window.location.href).pathname;
+				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				if (ext_match) {
+					extension = ext_match[1];
+				}
+			}
+			// Try to infer from data URL if no extension from remote URL
+			if (!extension && data_url) {
+				const mime_match = data_url.match(/^data:image\/([^;,]+)/);
+				if (mime_match) {
+					const mime_to_ext = {
+						jpeg: "jpg",
+						png: "png",
+						gif: "gif",
+						"svg+xml": "svg",
+						webp: "webp",
+					};
+					extension = mime_to_ext[mime_match[1]] || mime_match[1];
+				}
+			}
+
 			// Populate metadata map
 			const known_attrs = new Set([
 				"name",
@@ -232,6 +256,11 @@
 					metadata[attr.name] = attr.value;
 				}
 			});
+
+			// Add extension to metadata if found
+			if (extension) {
+				metadata.extension = extension;
+			}
 
 			blob_style_map.set(image_name, {
 				name: image_name,
@@ -361,6 +390,34 @@
 				style.setAttribute("blob", blob_url);
 			}
 
+			let extension = null;
+			if (remote_url) {
+				const url_path = new URL(remote_url, window.location.href).pathname;
+				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				if (ext_match) {
+					extension = ext_match[1];
+				}
+			}
+			// Try to infer from data URL if no extension from remote URL
+			if (!extension && data_url) {
+				const mime_match = data_url.match(/^data:font\/([^;,]+)/);
+				if (mime_match) {
+					extension = mime_match[1];
+				} else {
+					// Check for common font formats in data URL
+					const format_match = data_url.match(/^data:application\/(?:x-)?font-([^;,]+)/);
+					if (format_match) {
+						const mime_to_ext = {
+							woff: "woff",
+							woff2: "woff2",
+							ttf: "ttf",
+							otf: "otf",
+						};
+						extension = mime_to_ext[format_match[1]] || format_match[1];
+					}
+				}
+			}
+
 			// Populate metadata map
 			const known_attrs = new Set([
 				"name",
@@ -377,6 +434,11 @@
 					metadata[attr.name] = attr.value;
 				}
 			});
+
+			// Add extension to metadata if found
+			if (extension) {
+				metadata.extension = extension;
+			}
 
 			blob_style_map.set(font_name, {
 				name: font_name,
@@ -495,6 +557,30 @@
 			link.setAttribute("href", blob_url);
 			link.setAttribute("blob", blob_url);
 
+			// Detect and store extension
+			let extension = null;
+			if (remote_url) {
+				// Extract extension from remote URL
+				const url_path = new URL(remote_url, window.location.href).pathname;
+				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				if (ext_match) {
+					extension = ext_match[1];
+				}
+			}
+
+			// Try to infer from blob type if no extension from URL
+			if (!extension && blob.type) {
+				const mime_to_ext = {
+					"video/mp4": "mp4",
+					"video/webm": "webm",
+					"video/ogg": "ogv",
+					"audio/mpeg": "mp3",
+					"audio/wav": "wav",
+					"audio/ogg": "oga",
+				};
+				extension = mime_to_ext[blob.type] || null;
+			}
+
 			// Populate metadata map
 			const known_attrs = new Set([
 				"name",
@@ -513,6 +599,11 @@
 					metadata[attr.name] = attr.value;
 				}
 			});
+
+			// Add extension to metadata if found
+			if (extension) {
+				metadata.extension = extension;
+			}
 
 			blob_media_map.set(media_name, {
 				name: media_name,

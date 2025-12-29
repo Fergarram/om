@@ -15,7 +15,7 @@ if (!document.querySelector("desktop-view")) {
 	document.body.appendChild(Desktop());
 	await finish();
 
-	openModuleEditor();
+	window.openModuleEditor = openModuleEditor;
 
 	// mountApplet(IsolatedApplet({
 	// 	x: 50_000,

@@ -1,17 +1,21 @@
 {
-  "name": "jsx",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "acorn": "^8.15.0",
-    "acorn-jsx": "^5.3.2",
-    "astring": "^1.9.0"
-  }
+	"name": "jsx",
+	"module": "jsx-transformer.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun build ./jsx-transformer.ts --format iife --target browser --outdir . --sourcemap=inline --watch",
+		"build": "bun build ./jsx-transformer.ts --format iife --target browser --outdir . --minify"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"acorn": "^8.15.0",
+		"acorn-jsx": "^5.3.2",
+		"astring": "^1.9.0"
+	}
 }

@@ -2,40 +2,7 @@ import { useStyledTags } from "ima-utils";
 import { css } from "utils";
 
 const $ = useStyledTags();
-
-async function importCodeEditor() {
-	try {
-		const module = await import("ui/code-editor");
-		return module.default;
-	} catch (error) {
-		console.warn(`Failed to import "ui/code-editor"`, error);
-		return $.textarea;
-	}
-}
-
 const CodeEditor = await importCodeEditor();
-
-function getLanguageFromModuleType(type) {
-	switch (type) {
-		case "scripts":
-			return "javascript";
-		case "styles":
-			return "css";
-		default:
-			return "plaintext";
-	}
-}
-
-function formatFileSize(bytes) {
-	const kb = bytes / 1024;
-
-	if (kb < 1024) {
-		return `${kb.toFixed(2)} kb`;
-	}
-
-	const mb = kb / 1024;
-	return `${mb.toFixed(2)} mb`;
-}
 
 //
 // State
@@ -43,97 +10,13 @@ function formatFileSize(bytes) {
 
 let current_module_tab = null;
 let modules = BlobLoader.getAllModules();
+let preview_html = await BlobLoader.getDocumentOuterHtml(true);
+let preview_url = URL.createObjectURL(new Blob([preview_html], { type: "text/html" }));
+
 console.log(modules);
 
 //
-// Components
-//
-
-function ModuleTabButton(mod_type, mod) {
-	return $.button(
-		{
-			onclick() {
-				current_module_tab = `${mod_type}.${mod.name}`;
-			},
-			selected: () => current_module_tab === `${mod_type}.${mod.name}`,
-			styles: css`
-				& {
-					width: 100%;
-					white-space: nowrap;
-					display: flex;
-					align-items: center;
-					padding: 4px;
-				}
-
-				&:hover {
-					background: rgba(255, 255, 255, 0.1);
-				}
-
-				&[selected="true"] {
-					background: rgba(255, 255, 255, 0.15);
-				}
-			`,
-		},
-		mod.name,
-	);
-}
-
-function EditorPanel(mod_type, mod) {
-	return $.div(
-		{
-			style: () => css`
-				display: ${current_module_tab === `${mod_type}.${mod.name}` ? "block" : "none"};
-
-				--titlebar-height: 32px;
-			`,
-			styles: css`
-				& {
-					position: relative;
-					width: 100%;
-					height: 100%;
-					flex: 1;
-					overflow: hidden;
-					background: black;
-					display: flex;
-					flex-direction: column;
-				}
-			`,
-		},
-		$.div(
-			{
-				styles: css`
-					& {
-						position: relative;
-						width: 100%;
-						height: var(--titlebar-height);
-						background: black;
-						z-index: 1;
-						display: flex;
-						align-items: center;
-					}
-				`,
-			},
-			`${mod.name} [${formatFileSize(mod.src_bytes)}]`,
-		),
-		CodeEditor({
-			language: getLanguageFromModuleType(mod_type),
-			source: mod.blob_url,
-			style: css`
-				position: absolute;
-				left: 0;
-				top: var(--titlebar-height);
-				width: 100%;
-				height: calc(100% - var(--titlebar-height));
-				border-radius: 6px;
-				overflow: hidden;
-				border: 1px solid rgba(255, 255, 255, 0.1);
-			`,
-		}),
-	);
-}
-
-//
-// Main export
+// Main Component
 //
 
 export function openModuleEditor() {
@@ -178,6 +61,20 @@ export function openModuleEditor() {
 						& {
 							opacity: 0.3;
 							padding: 8px 4px;
+							margin-top: 12px;
+						}
+					`,
+				},
+				"menu",
+			),
+			PreviewTabButton(),
+			$.div(
+				{
+					styles: css`
+						& {
+							opacity: 0.3;
+							padding: 8px 4px;
+							margin-top: 12px;
 						}
 					`,
 				},
@@ -203,6 +100,7 @@ export function openModuleEditor() {
 						& {
 							opacity: 0.3;
 							padding: 8px 4px;
+							margin-top: 12px;
 						}
 					`,
 				},
@@ -228,6 +126,7 @@ export function openModuleEditor() {
 						& {
 							opacity: 0.3;
 							padding: 8px 4px;
+							margin-top: 12px;
 						}
 					`,
 				},
@@ -263,4 +162,196 @@ export function openModuleEditor() {
 	);
 
 	document.body.appendChild(root_el);
+}
+
+//
+// Components
+//
+
+function ModuleTabButton(mod_type, mod) {
+	const color = getFileSizeColor(mod.src_bytes);
+
+	return $.button(
+		{
+			onclick() {
+				current_module_tab = `${mod_type}.${mod.name}`;
+			},
+			selected: () => current_module_tab === `${mod_type}.${mod.name}`,
+			styles: css`
+				& {
+					width: 100%;
+					white-space: nowrap;
+					border-radius: 4px;
+					display: flex;
+					align-items: center;
+					padding: 4px 8px;
+					gap: 4px;
+				}
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&[selected="true"] {
+					background: rgba(255, 255, 255, 0.15);
+				}
+			`,
+		},
+		$.span(
+			{
+				title: color !== "inherit" ? `Module size is${formatFileSize(mod.src_bytes)}` : null,
+			},
+			mod.name,
+		),
+		color !== "inherit"
+			? $.icon({
+					name: "warning",
+					style: css`
+						color: ${color};
+					`,
+				})
+			: null,
+	);
+}
+
+function PreviewTabButton() {
+	return $.button(
+		{
+			onclick() {
+				window.open(preview_url, "_blank");
+			},
+			styles: css`
+				& {
+					width: 100%;
+					white-space: nowrap;
+					border-radius: 4px;
+					display: flex;
+					align-items: center;
+					padding: 4px 8px;
+					gap: 4px;
+				}
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&:active {
+					background: rgba(255, 255, 255, 0.15);
+				}
+
+				& icon {
+					font-size: 1.2em;
+				}
+			`,
+		},
+		"preview",
+		$.icon({
+			name: "open_in_new",
+		}),
+	);
+}
+
+function EditorPanel(mod_type, mod) {
+	return $.div(
+		{
+			style: () => css`
+				display: ${current_module_tab === `${mod_type}.${mod.name}` ? "block" : "none"};
+
+				--titlebar-height: 32px;
+			`,
+			styles: css`
+				& {
+					position: relative;
+					width: 100%;
+					height: 100%;
+					flex: 1;
+					overflow: hidden;
+					background: black;
+					display: flex;
+					flex-direction: column;
+				}
+			`,
+		},
+		$.div(
+			{
+				style: css`
+					color: ${getFileSizeColor(mod.src_bytes)};
+				`,
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: var(--titlebar-height);
+						background: black;
+						z-index: 1;
+						display: flex;
+						align-items: center;
+					}
+				`,
+			},
+			mod.name,
+			mod.metadata.extension
+				? ` [${mod.metadata.extension}]`
+				: ` [${mod_type === "scripts" ? "js" : mod_type === "styles" ? "css" : "Unknown"}]`,
+			formatFileSize(mod.src_bytes),
+		),
+		CodeEditor({
+			language: getLanguageFromModuleType(mod_type),
+			source: mod.blob_url,
+			style: css`
+				position: absolute;
+				left: 0;
+				top: var(--titlebar-height);
+				width: 100%;
+				height: calc(100% - var(--titlebar-height));
+				border-radius: 6px;
+				overflow: hidden;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+			`,
+		}),
+	);
+}
+
+//
+// Utils
+//
+
+async function importCodeEditor() {
+	try {
+		const module = await import("ui/code-editor");
+		return module.default;
+	} catch (error) {
+		console.warn(`Failed to import "ui/code-editor"`, error);
+		return $.textarea;
+	}
+}
+
+function getLanguageFromModuleType(type) {
+	switch (type) {
+		case "scripts":
+			return "javascript";
+		case "styles":
+			return "css";
+		default:
+			return "plaintext";
+	}
+}
+
+function getFileSizeColor(bytes) {
+	const kb = bytes / 1024;
+
+	if (kb > 1023) return "red";
+	if (kb > 200) return "yellow";
+	return "inherit";
+}
+
+function formatFileSize(bytes) {
+	const kb = bytes / 1024;
+
+	if (kb < 1024) {
+		return ` ${kb.toFixed(2)} kb`;
+	}
+
+	const mb = kb / 1024;
+	return ` ${mb.toFixed(2)} mb`;
 }
