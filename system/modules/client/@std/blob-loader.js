@@ -607,7 +607,7 @@
 			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
 
 			// Add source URL comment for better debugging
-			final_content = `${final_content}\n//# sourceURL=${style_module_name}`;
+			final_content = `${final_content}\n/*# sourceURL=${style_module_name}*/`;
 
 			// Create blob URL
 			const style_blob = new Blob([final_content], {
@@ -748,7 +748,7 @@
 						});
 
 						blob_module_map.set(module_name, {
-							module_name,
+							name: module_name,
 							src_bytes: 0,
 							remote_url: remote_url || null,
 							blob_url: remote_url,
@@ -801,7 +801,7 @@
 			});
 
 			blob_module_map.set(module_name, {
-				module_name,
+				name: module_name,
 				src_bytes: module_blob.size,
 				remote_url: remote_url || null,
 				blob_url,
