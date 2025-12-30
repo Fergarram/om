@@ -1,5 +1,5 @@
 //
-// BLOB LOADER | [90/100] to v1.0
+// BLOB LOADER v1.0
 // by fergarram
 //
 
@@ -12,12 +12,6 @@
 //
 
 (async () => {
-	// TODO
-	//
-	// v1.5 === === === === === === === === === === === === === === === === === === === === ===
-	// [ ] Hooks for minification and formatting (we already have the lib thing)
-	//     - TSC for lang="ts" or even lang="tsx"
-
 	//
 	// Constants
 	//
@@ -265,7 +259,7 @@
 			blob_style_map.set(image_name, {
 				name: image_name,
 				remote_url: remote_url || null,
-				src_bytes: final_css.length,
+				size_bytes: final_css.length,
 				blob_url: blob_style_urls.get(image_name) || null,
 				metadata,
 			});
@@ -443,7 +437,7 @@
 			blob_style_map.set(font_name, {
 				name: font_name,
 				remote_url: remote_url || null,
-				src_bytes: final_css.length,
+				size_bytes: final_css.length,
 				blob_url: blob_style_urls.get(font_name) || null,
 				metadata,
 			});
@@ -483,16 +477,39 @@
 			let blob = null;
 
 			if (inline_src) {
-				// Has inline source
-				console.log(`Using inline source for media "${media_name}"`);
-				blob_media_sources.set(media_name, inline_src);
-				if (remote_url) {
-					remote_media_hrefs.set(media_name, remote_url);
-				}
+				// Check if it's a data URL or plain text
+				const is_data_url = inline_src.startsWith("data:");
 
-				// Convert data URL to blob
-				const res = await fetch(inline_src);
-				blob = await res.blob();
+				if (is_data_url) {
+					// Has inline data URL source
+					console.log(`Using inline data URL for media "${media_name}"`);
+					blob_media_sources.set(media_name, inline_src);
+					if (remote_url) {
+						remote_media_hrefs.set(media_name, remote_url);
+					}
+
+					// Convert data URL to blob
+					const res = await fetch(inline_src);
+					blob = await res.blob();
+				} else {
+					// Has inline text content
+					console.log(`Using inline text content for media "${media_name}"`);
+
+					// Treat as plain text and create a blob from it
+					blob = new Blob([inline_src], { type: "text/plain" });
+
+					// Convert to data URL for storage
+					const reader = new FileReader();
+					const data_url = await new Promise((resolve) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.readAsDataURL(blob);
+					});
+					blob_media_sources.set(media_name, data_url);
+
+					if (remote_url) {
+						remote_media_hrefs.set(media_name, remote_url);
+					}
+				}
 			} else {
 				// Try cache
 				const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
@@ -695,7 +712,13 @@
 				continue;
 			}
 
-			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
+			// Apply source transformations if any
+			window.BlobLoader.transformers.forEach((transformer) => {
+				final_content =
+					typeof transformer.style === "function"
+						? transformer.style(final_content)
+						: final_content;
+			});
 
 			// Add source URL comment for better debugging
 			final_content = `${final_content}\n/*# sourceURL=${style_module_name}*/`;
@@ -749,7 +772,7 @@
 			blob_style_map.set(style_module_name, {
 				name: style_module_name,
 				remote_url: remote_url || null,
-				src_bytes: style_blob.size,
+				size_bytes: style_blob.size,
 				blob_url,
 				metadata,
 			});
@@ -840,7 +863,7 @@
 
 						blob_module_map.set(module_name, {
 							name: module_name,
-							src_bytes: 0,
+							size_bytes: 0,
 							remote_url: remote_url || null,
 							blob_url: remote_url,
 							is_disabled: false,
@@ -868,7 +891,13 @@
 				continue;
 			}
 
-			// @NOTE: This is a good spot to add hooks for formatting, minifying, or doing preprocessing.
+			// Apply source transformations if any
+			window.BlobLoader.transformers.forEach((transformer) => {
+				final_content =
+					typeof transformer.script === "function"
+						? transformer.script(final_content)
+						: final_content;
+			});
 
 			// Create blob URL
 			const module_blob = new Blob([final_content], {
@@ -893,7 +922,7 @@
 
 			blob_module_map.set(module_name, {
 				name: module_name,
-				src_bytes: module_blob.size,
+				size_bytes: module_blob.size,
 				remote_url: remote_url || null,
 				blob_url,
 				is_disabled: false,
@@ -1182,7 +1211,7 @@
 		blob_style_map.set(style_name, {
 			name: style_name,
 			remote_url: null,
-			src_bytes: style_blob.size,
+			size_bytes: style_blob.size,
 			blob_url: blob_url,
 			metadata: metadata,
 		});

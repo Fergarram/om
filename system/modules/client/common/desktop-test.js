@@ -40,7 +40,7 @@ useGlobalStyles(`
 		background: black;
 		color: white;
 	}
-`)
+`);
 
 // this is the main entry point module. this is where we load all the wanted applet modules and everything else.
 //

@@ -8,10 +8,10 @@ const CodeEditor = await importCodeEditor();
 // State
 //
 
-let current_module_tab = null;
 let modules = BlobLoader.getAllModules();
 let preview_html = await BlobLoader.getDocumentOuterHtml(true);
 let preview_url = URL.createObjectURL(new Blob([preview_html], { type: "text/html" }));
+let current_module_tab = `scripts.${modules.scripts[0].name}`;
 
 console.log(modules);
 
@@ -68,6 +68,8 @@ export function openModuleEditor() {
 				"menu",
 			),
 			PreviewTabButton(),
+			ExportTabButton(),
+			PushChangesTabButton(),
 			$.div(
 				{
 					styles: css`
@@ -169,7 +171,7 @@ export function openModuleEditor() {
 //
 
 function ModuleTabButton(mod_type, mod) {
-	const color = getFileSizeColor(mod.src_bytes);
+	const color = getFileSizeColor(mod.size_bytes);
 
 	return $.button(
 		{
@@ -199,7 +201,7 @@ function ModuleTabButton(mod_type, mod) {
 		},
 		$.span(
 			{
-				title: color !== "inherit" ? `Module size is${formatFileSize(mod.src_bytes)}` : null,
+				title: color !== "inherit" ? `Module size is${formatFileSize(mod.size_bytes)}` : null,
 			},
 			mod.name,
 		),
@@ -251,6 +253,74 @@ function PreviewTabButton() {
 	);
 }
 
+function ExportTabButton() {
+	return $.button(
+		{
+			onclick() {
+				window.open(preview_url, "_blank");
+			},
+			styles: css`
+				& {
+					width: 100%;
+					white-space: nowrap;
+					border-radius: 4px;
+					display: flex;
+					align-items: center;
+					padding: 4px 8px;
+					gap: 4px;
+				}
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&:active {
+					background: rgba(255, 255, 255, 0.15);
+				}
+
+				& icon {
+					font-size: 1.2em;
+				}
+			`,
+		},
+		"export",
+	);
+}
+
+function PushChangesTabButton() {
+	return $.button(
+		{
+			onclick() {
+				window.open(preview_url, "_blank");
+			},
+			styles: css`
+				& {
+					width: 100%;
+					white-space: nowrap;
+					border-radius: 4px;
+					display: flex;
+					align-items: center;
+					padding: 4px 8px;
+					gap: 4px;
+				}
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&:active {
+					background: rgba(255, 255, 255, 0.15);
+				}
+
+				& icon {
+					font-size: 1.2em;
+				}
+			`,
+		},
+		"push changes",
+	);
+}
+
 function EditorPanel(mod_type, mod) {
 	return $.div(
 		{
@@ -275,7 +345,7 @@ function EditorPanel(mod_type, mod) {
 		$.div(
 			{
 				style: css`
-					color: ${getFileSizeColor(mod.src_bytes)};
+					color: ${getFileSizeColor(mod.size_bytes)};
 				`,
 				styles: css`
 					& {
@@ -293,7 +363,7 @@ function EditorPanel(mod_type, mod) {
 			mod.metadata.extension
 				? ` [${mod.metadata.extension}]`
 				: ` [${mod_type === "scripts" ? "js" : mod_type === "styles" ? "css" : "Unknown"}]`,
-			formatFileSize(mod.src_bytes),
+			formatFileSize(mod.size_bytes),
 		),
 		CodeEditor({
 			language: getLanguageFromModuleType(mod_type),
