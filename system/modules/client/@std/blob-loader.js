@@ -27,7 +27,7 @@
 
 	window.BlobLoader = {
 		lib: {}, // The place for IIFEs to self attach before running the loader.
-		transformers: [], // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
+		transformers: (window.BlobLoader && window.BlobLoader.transformers) || [], // It's where scripts can hook so they can transform a module or media blob before it's processed by the blob loader.
 
 		// API
 		getCachedModule,
@@ -786,6 +786,7 @@
 			const module_name = script.getAttribute("name");
 			const remote_url = script.getAttribute("remote");
 			const is_disabled = script.hasAttribute("disabled");
+			const encoded = script.hasAttribute("encode");
 
 			if (!module_name) {
 				console.warn("blob-module script missing name attribute");
@@ -811,13 +812,25 @@
 			let final_content = null;
 
 			if (content) {
-				// Has inline content
+				// Check if content is base64 encoded
+				if (encoded && content.length > 0) {
+					// Try to decode it
+					try {
+						final_content = decodeFromBase64(content);
+						console.log(`Decoded base64 content for module "${module_name}"`);
+					} catch (error) {
+						console.warn(`Failed to decode base64 for module "${module_name}", using as-is`);
+						final_content = content;
+					}
+				} else {
+					final_content = content;
+				}
+
 				console.log(`Using inline content for module "${module_name}"`);
-				blob_modules_sources.set(module_name, content);
+				blob_modules_sources.set(module_name, final_content);
 				if (remote_url) {
 					remote_modules_hrefs.set(module_name, remote_url);
 				}
-				final_content = content;
 			} else {
 				// Try cache
 				const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
@@ -852,6 +865,7 @@
 							"blob",
 							"type",
 							"nodownload",
+							"encode",
 						]);
 						const metadata = {};
 
@@ -867,6 +881,7 @@
 							remote_url: remote_url || null,
 							blob_url: remote_url,
 							is_disabled: false,
+							encoded,
 							metadata,
 						});
 
@@ -874,9 +889,6 @@
 					}
 
 					final_content = await response.text();
-
-					// Add source URL comment for better debugging
-					final_content = `${final_content}\n//# sourceURL=${module_name}`;
 
 					// Cache it
 					await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
@@ -899,6 +911,9 @@
 						: final_content;
 			});
 
+			// Add source URL comment for better debugging
+			final_content = `${final_content}\n//# sourceURL=${module_name}`;
+
 			// Create blob URL
 			const module_blob = new Blob([final_content], {
 				type: "text/javascript",
@@ -911,7 +926,15 @@
 			script.setAttribute("blob", blob_url);
 
 			// Populate metadata map
-			const known_attrs = new Set(["name", "remote", "disabled", "blob", "type", "nodownload"]);
+			const known_attrs = new Set([
+				"name",
+				"remote",
+				"disabled",
+				"blob",
+				"type",
+				"nodownload",
+				"encode",
+			]);
 			const metadata = {};
 
 			Array.from(script.attributes).forEach((attr) => {
@@ -926,6 +949,7 @@
 				remote_url: remote_url || null,
 				blob_url,
 				is_disabled: false,
+				encoded,
 				metadata,
 			});
 		}
@@ -1318,7 +1342,6 @@
 			const src = module_loader_script.getAttribute("src");
 			const has_content = module_loader_script.textContent.trim().length > 0;
 
-			// Only fetch and inline if src exists and textContent is empty
 			if (src && !has_content) {
 				try {
 					const response = await fetch(src);
@@ -1453,25 +1476,33 @@
 			const remote_url = script.getAttribute("remote");
 			const no_download = script.hasAttribute("nodownload");
 			const is_disabled = script.hasAttribute("disabled");
+			const should_encode = script.hasAttribute("encode");
 
-			// Remove blob attribute if it exists
 			if (script.hasAttribute("blob")) {
 				script.removeAttribute("blob");
 			}
 
-			// Skip processing content for disabled modules
 			if (is_disabled) {
 				return;
 			}
 
-			// Get the module content
 			const module_content = blob_modules_sources.get(module_name);
 
-			// Check for nodownload modules
 			if ((module_content && !no_download) || force_inline) {
-				script.textContent = module_content;
+				// If encode attribute is present, encode the content as base64
+				if (should_encode) {
+					try {
+						const encoded_content = encodeToBase64(module_content);
+						script.textContent = encoded_content;
+						console.log(`Encoded module "${module_name}" as base64`);
+					} catch (error) {
+						console.warn(`Failed to encode module "${module_name}" as base64:`, error);
+						script.textContent = module_content; // Fallback to plain text
+					}
+				} else {
+					script.textContent = module_content;
+				}
 			} else if (no_download) {
-				// Keep the remote URL but clear any local content
 				script.textContent = "";
 			}
 		});
@@ -1567,5 +1598,17 @@
 
 	function finish(t = 0) {
 		return new Promise((resolve) => setTimeout(resolve, t));
+	}
+
+	function encodeToBase64(content) {
+		const bytes = new TextEncoder().encode(content);
+		const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
+		return btoa(binString);
+	}
+
+	function decodeFromBase64(encoded) {
+		const binString = atob(encoded);
+		const bytes = Uint8Array.from(binString, (char) => char.codePointAt(0));
+		return new TextDecoder().decode(bytes);
 	}
 })();
