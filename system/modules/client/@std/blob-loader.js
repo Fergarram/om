@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.93.0
+// BLOB LOADER v0.94.0
 // by fergarram
 //
 
@@ -94,7 +94,7 @@
 		blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
 
 		//
-		// Process blob image tags (CSS-based, no-JS compatible)
+		// Process blob image tags (CSS-based, no js required)
 		//
 
 		for (const style of blob_image_tags) {
@@ -204,14 +204,22 @@
 			style.textContent = final_css;
 
 			// If we have a data URL, create blob for programmatic access
+			let blob = null;
+			let media_blob_url = null;
 			if (data_url) {
 				const res = await fetch(data_url);
-				const blob = await res.blob();
+				blob = await res.blob();
 				blob_media_blobs.set(image_name, blob);
 
-				const blob_url = URL.createObjectURL(blob);
-				blob_style_urls.set(image_name, blob_url);
-				style.setAttribute("blob", blob_url);
+				media_blob_url = URL.createObjectURL(blob);
+				blob_media_urls.set(image_name, media_blob_url); // Media blob URL
+
+				// Create blob URL for the CSS itself
+				const style_blob = new Blob([final_css], { type: "text/css" });
+				const style_blob_url = URL.createObjectURL(style_blob);
+				blob_style_urls.set(image_name, style_blob_url); // CSS blob URL
+
+				style.setAttribute("blob", media_blob_url); // Reference to the image/font
 			}
 
 			// Detect extension
@@ -237,7 +245,7 @@
 				}
 			}
 
-			// Populate metadata map
+			// Populate metadata map for style module
 			const known_attrs = new Set([
 				"name",
 				"remote",
@@ -247,32 +255,61 @@
 				"nodownload",
 				"nocache",
 			]);
-			const metadata = {};
+			const style_metadata = {};
 
 			Array.from(style.attributes).forEach((attr) => {
 				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
+					style_metadata[attr.name] = attr.value;
 				}
 			});
 
 			// Add extension to metadata if found
 			if (extension) {
-				metadata.extension = extension;
+				style_metadata.extension = extension;
 			}
 
 			blob_style_map.set(image_name, {
 				name: image_name,
 				remote_url: remote_url || null,
 				size_bytes: final_css.length,
-				blob_url: blob_style_urls.get(image_name) || null,
-				metadata,
+				blob_url: blob_style_urls.get(image_name), // CSS blob URL
+				metadata: style_metadata,
 			});
+
+			// Register as media module too (if we have a blob)
+			if (blob && media_blob_url) {
+				// Create media metadata (mark as generated from style module)
+				const media_metadata = {
+					generated: image_name, // References the style module name
+				};
+
+				if (extension) {
+					media_metadata.extension = extension;
+				}
+
+				// Copy over custom attributes to media metadata too
+				Array.from(style.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						media_metadata[attr.name] = attr.value;
+					}
+				});
+
+				blob_media_map.set(image_name, {
+					name: image_name,
+					remote_url: remote_url || null,
+					size_bytes: blob.size,
+					blob_url: media_blob_url, // Media blob URL
+					metadata: media_metadata,
+				});
+
+				console.log(`Registered media module for image "${image_name}"`);
+			}
 
 			console.log(`Processed image module "${image_name}" (no-JS compatible)`);
 		}
 
 		//
-		// Process blob font tags (CSS-based, no-JS compatible)
+		// Process blob font tags (CSS-based, no js required)
 		//
 
 		for (const style of blob_font_tags) {
@@ -381,13 +418,16 @@
 			style.textContent = final_css;
 
 			// If we have a data URL, create blob for programmatic access
+			let blob = null;
+			let blob_url = null;
 			if (data_url) {
 				const res = await fetch(data_url);
-				const blob = await res.blob();
+				blob = await res.blob();
 				blob_media_blobs.set(font_name, blob);
 
-				const blob_url = URL.createObjectURL(blob);
+				blob_url = URL.createObjectURL(blob);
 				blob_style_urls.set(font_name, blob_url);
+				blob_media_urls.set(font_name, blob_url); // Reuse same URL
 				style.setAttribute("blob", blob_url);
 			}
 
@@ -418,7 +458,7 @@
 				}
 			}
 
-			// Populate metadata map
+			// Populate metadata map for style module
 			const known_attrs = new Set([
 				"name",
 				"remote",
@@ -428,26 +468,55 @@
 				"nodownload",
 				"nocache",
 			]);
-			const metadata = {};
+			const style_metadata = {};
 
 			Array.from(style.attributes).forEach((attr) => {
 				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
+					style_metadata[attr.name] = attr.value;
 				}
 			});
 
 			// Add extension to metadata if found
 			if (extension) {
-				metadata.extension = extension;
+				style_metadata.extension = extension;
 			}
 
 			blob_style_map.set(font_name, {
 				name: font_name,
 				remote_url: remote_url || null,
 				size_bytes: final_css.length,
-				blob_url: blob_style_urls.get(font_name) || null,
-				metadata,
+				blob_url: blob_url,
+				metadata: style_metadata,
 			});
+
+			// Register as media module too (if we have a blob)
+			if (blob && blob_url) {
+				// Create media metadata (mark as generated from style module)
+				const media_metadata = {
+					generated: font_name, // References the style module name
+				};
+
+				if (extension) {
+					media_metadata.extension = extension;
+				}
+
+				// Copy over custom attributes to media metadata too
+				Array.from(style.attributes).forEach((attr) => {
+					if (!known_attrs.has(attr.name)) {
+						media_metadata[attr.name] = attr.value;
+					}
+				});
+
+				blob_media_map.set(font_name, {
+					name: font_name,
+					remote_url: remote_url || null,
+					size_bytes: blob.size,
+					blob_url: blob_url, // Same URL as style module
+					metadata: media_metadata,
+				});
+
+				console.log(`Registered media module for font "${font_name}"`);
+			}
 
 			console.log(`Processed font module "${font_name}" (no-JS compatible)`);
 		}

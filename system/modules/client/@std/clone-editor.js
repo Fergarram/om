@@ -615,16 +615,16 @@ function formatFileSize(bytes) {
 function getExtensionDisplay(mod, mod_type) {
 	const generated = mod.metadata && mod.metadata.generated ? "generated " : "";
 
-	if (mod.metadata.extension) {
-		return ` [${generated}${mod.metadata.extension}]`;
-	}
-
 	if (mod_type === "scripts") {
 		return ` [${generated}script]`;
 	}
 
 	if (mod_type === "styles") {
 		return ` [${generated}styles]`;
+	}
+
+	if (mod_type === "media" && mod.metadata.extension) {
+		return ` [${generated}${mod.metadata.extension}]`;
 	}
 
 	return ` [${generated}data]`;
