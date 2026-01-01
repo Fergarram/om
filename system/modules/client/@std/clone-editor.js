@@ -19,12 +19,12 @@ console.log(modules);
 // Main Component
 //
 
-export function openModuleEditor() {
-	if (document.getElementById("the-module-editor")) return;
+export function openCloneEditor() {
+	if (document.getElementById("the-clone-editor")) return;
 
 	const root_el = $.div(
 		{
-			id: "the-module-editor",
+			id: "the-clone-editor",
 			"no-export": "", // Removes from outer HTML when BlobLoader.saveAsHTMLFile is called.
 			styles: css`
 				& {
@@ -59,22 +59,26 @@ export function openModuleEditor() {
 				{
 					styles: css`
 						& {
+							height: 32px;
+							display: flex;
+							align-items: center;
 							opacity: 0.3;
-							padding: 8px 4px;
-							margin-top: 12px;
+							padding: 0 8px;
+							text-transform: uppercase;
 						}
 					`,
 				},
-				"menu",
+				"clone editor",
 			),
 			PreviewTabButton(),
-			ExportTabButton(),
-			PushChangesTabButton(),
+			DocumentTabButton(),
+			SyncTabButton(),
 			$.div(
 				{
 					styles: css`
 						& {
 							opacity: 0.3;
+							text-transform: uppercase;
 							padding: 8px 4px;
 							margin-top: 12px;
 						}
@@ -101,6 +105,7 @@ export function openModuleEditor() {
 					styles: css`
 						& {
 							opacity: 0.3;
+							text-transform: uppercase;
 							padding: 8px 4px;
 							margin-top: 12px;
 						}
@@ -127,6 +132,7 @@ export function openModuleEditor() {
 					styles: css`
 						& {
 							opacity: 0.3;
+							text-transform: uppercase;
 							padding: 8px 4px;
 							margin-top: 12px;
 						}
@@ -158,6 +164,9 @@ export function openModuleEditor() {
 				}
 			`,
 		}),
+		PreviewPanel(),
+		DocumentPanel(),
+		SyncPanel(),
 		...modules.scripts.map((mod) => EditorPanel("scripts", mod)),
 		...modules.styles.map((mod) => EditorPanel("styles", mod)),
 		...modules.media.map((mod) => EditorPanel("media", mod)),
@@ -178,6 +187,7 @@ function ModuleTabButton(mod_type, mod) {
 			onclick() {
 				current_module_tab = `${mod_type}.${mod.name}`;
 			},
+			generated: mod.metadata && mod.metadata.generated ? true : false,
 			selected: () => current_module_tab === `${mod_type}.${mod.name}`,
 			styles: css`
 				& {
@@ -196,6 +206,11 @@ function ModuleTabButton(mod_type, mod) {
 
 				&[selected="true"] {
 					background: rgba(255, 255, 255, 0.15);
+				}
+
+				&[generated="true"] {
+					opacity: 0.5;
+					font-style: italic;
 				}
 			`,
 		},
@@ -220,8 +235,9 @@ function PreviewTabButton() {
 	return $.button(
 		{
 			onclick() {
-				window.open(preview_url, "_blank");
+				current_module_tab = "preview";
 			},
+			selected: () => current_module_tab === "preview",
 			styles: css`
 				& {
 					width: 100%;
@@ -237,7 +253,7 @@ function PreviewTabButton() {
 					background: rgba(255, 255, 255, 0.1);
 				}
 
-				&:active {
+				&[selected="true"] {
 					background: rgba(255, 255, 255, 0.15);
 				}
 
@@ -247,18 +263,16 @@ function PreviewTabButton() {
 			`,
 		},
 		"preview",
-		$.icon({
-			name: "open_in_new",
-		}),
 	);
 }
 
-function ExportTabButton() {
+function DocumentTabButton() {
 	return $.button(
 		{
 			onclick() {
-				window.open(preview_url, "_blank");
+				current_module_tab = "document";
 			},
+			selected: () => current_module_tab === "document",
 			styles: css`
 				& {
 					width: 100%;
@@ -274,7 +288,7 @@ function ExportTabButton() {
 					background: rgba(255, 255, 255, 0.1);
 				}
 
-				&:active {
+				&[selected="true"] {
 					background: rgba(255, 255, 255, 0.15);
 				}
 
@@ -283,16 +297,17 @@ function ExportTabButton() {
 				}
 			`,
 		},
-		"export",
+		"document",
 	);
 }
 
-function PushChangesTabButton() {
+function SyncTabButton() {
 	return $.button(
 		{
 			onclick() {
-				window.open(preview_url, "_blank");
+				current_module_tab = "sync";
 			},
+			selected: () => current_module_tab === "sync",
 			styles: css`
 				& {
 					width: 100%;
@@ -308,7 +323,7 @@ function PushChangesTabButton() {
 					background: rgba(255, 255, 255, 0.1);
 				}
 
-				&:active {
+				&[selected="true"] {
 					background: rgba(255, 255, 255, 0.15);
 				}
 
@@ -317,7 +332,7 @@ function PushChangesTabButton() {
 				}
 			`,
 		},
-		"push changes",
+		"sync",
 	);
 }
 
@@ -360,14 +375,185 @@ function EditorPanel(mod_type, mod) {
 				`,
 			},
 			mod.name,
-			mod.metadata.extension
-				? ` [${mod.metadata.extension}]`
-				: ` [${mod_type === "scripts" ? "js" : mod_type === "styles" ? "css" : "Unknown"}]`,
+			getExtensionDisplay(mod, mod_type),
 			formatFileSize(mod.size_bytes),
 		),
 		CodeEditor({
 			language: getLanguageFromModuleType(mod_type),
 			source: mod.blob_url,
+			style: css`
+				position: absolute;
+				left: 0;
+				top: var(--titlebar-height);
+				width: 100%;
+				height: calc(100% - var(--titlebar-height));
+				border-radius: 6px;
+				overflow: hidden;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+			`,
+		}),
+	);
+}
+
+function PreviewPanel() {
+	return $.div(
+		{
+			style: () => css`
+				display: ${current_module_tab === "preview" ? "block" : "none"};
+
+				--titlebar-height: 32px;
+			`,
+			styles: css`
+				& {
+					position: relative;
+					width: 100%;
+					height: 100%;
+					flex: 1;
+					overflow: hidden;
+					background: black;
+					display: flex;
+					flex-direction: column;
+				}
+			`,
+		},
+		$.a(
+			{
+				href: preview_url,
+				target: "_blank",
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: var(--titlebar-height);
+						background: black;
+						z-index: 1;
+						display: flex;
+						align-items: center;
+						gap: 4px;
+					}
+
+					&:hover {
+						text-decoration: underline;
+					}
+
+					& icon {
+						font-size: 16px;
+					}
+				`,
+			},
+			preview_url,
+			$.icon({
+				name: "open_in_new",
+			}),
+		),
+		$.iframe({
+			src: preview_url,
+			style: css`
+				position: absolute;
+				left: 0;
+				top: var(--titlebar-height);
+				width: 100%;
+				height: calc(100% - var(--titlebar-height));
+				border-radius: 6px;
+				overflow: hidden;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+			`,
+		}),
+	);
+}
+
+function DocumentPanel() {
+	return $.div(
+		{
+			style: () => css`
+				display: ${current_module_tab === "document" ? "block" : "none"};
+
+				--titlebar-height: 32px;
+			`,
+			styles: css`
+				& {
+					position: relative;
+					width: 100%;
+					height: 100%;
+					flex: 1;
+					overflow: hidden;
+					background: black;
+					display: flex;
+					flex-direction: column;
+				}
+			`,
+		},
+		$.div(
+			{
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: var(--titlebar-height);
+						background: black;
+						z-index: 1;
+						display: flex;
+						align-items: center;
+						gap: 4px;
+					}
+				`,
+			},
+			"document",
+		),
+		$.div({
+			style: css`
+				position: absolute;
+				left: 0;
+				top: var(--titlebar-height);
+				width: 100%;
+				height: calc(100% - var(--titlebar-height));
+				border-radius: 6px;
+				overflow: hidden;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+			`,
+		}),
+	);
+}
+
+function SyncPanel() {
+	return $.div(
+		{
+			style: () => css`
+				display: ${current_module_tab === "sync" ? "block" : "none"};
+
+				--titlebar-height: 32px;
+			`,
+			styles: css`
+				& {
+					position: relative;
+					width: 100%;
+					height: 100%;
+					flex: 1;
+					overflow: hidden;
+					background: black;
+					display: flex;
+					flex-direction: column;
+				}
+			`,
+		},
+		$.div(
+			{
+				styles: css`
+					& {
+						position: relative;
+						width: 100%;
+						height: var(--titlebar-height);
+						background: black;
+						z-index: 1;
+						display: flex;
+						align-items: center;
+						gap: 4px;
+					}
+				`,
+			},
+			"sync",
+		),
+		$.div({
 			style: css`
 				position: absolute;
 				left: 0;
@@ -424,4 +610,22 @@ function formatFileSize(bytes) {
 
 	const mb = kb / 1024;
 	return ` ${mb.toFixed(2)} mb`;
+}
+
+function getExtensionDisplay(mod, mod_type) {
+	const generated = mod.metadata && mod.metadata.generated ? "generated " : "";
+
+	if (mod.metadata.extension) {
+		return ` [${generated}${mod.metadata.extension}]`;
+	}
+
+	if (mod_type === "scripts") {
+		return ` [${generated}script]`;
+	}
+
+	if (mod_type === "styles") {
+		return ` [${generated}styles]`;
+	}
+
+	return ` [${generated}data]`;
 }

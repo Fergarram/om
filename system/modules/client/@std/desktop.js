@@ -1193,7 +1193,9 @@ BlobLoader.addStyleModule(
 			}
 		}
 	`,
-	{},
+	{
+		"generated": "desktop.js"
+	},
 	{ override: true },
 );
 

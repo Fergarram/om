@@ -161,7 +161,9 @@ BlobLoader.addStyleModule(
 			}
 		}
 	`,
-	{},
+	{
+		generated: "isolate.js"
+	},
 	{ override: true },
 );
 

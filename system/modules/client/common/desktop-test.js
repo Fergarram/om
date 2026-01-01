@@ -1,26 +1,33 @@
 import { Desktop, mountApplet } from "desktop";
 import IsolatedApplet from "applets/isolate";
 import { finish, useGlobalStyles } from "utils";
+import { openCloneEditor } from "clone-editor";
 
-import { openModuleEditor } from "module-editor";
+const params = new URLSearchParams(window.location.search);
+
+//
+// Open editor directly
+//
+
+if (params.get("clone-editor") === "true") {
+	openCloneEditor();
+}
 
 //
 // Mount new destkop element if not found
 //
 
-if (!document.querySelector("desktop-view")) {
+else if (!document.querySelector("desktop-view")) {
 	// DEV: Clear module cache
 	await BlobLoader.clearAllCache();
 
 	document.body.appendChild(Desktop());
 	await finish();
 
-	window.openModuleEditor = openModuleEditor;
-
-	// mountApplet(IsolatedApplet({
-	// 	x: 50_000,
-	// 	y: 50_000,
-	// }));
+	mountApplet(IsolatedApplet({
+		x: 50_000,
+		y: 50_000,
+	}));
 
 	// mountApplet(IsolatedApplet());
 	// mountApplet(IsolatedApplet());
