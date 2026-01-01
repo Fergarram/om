@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v1.0
+// BLOB LOADER v0.93.0
 // by fergarram
 //
 
@@ -101,6 +101,7 @@
 			const image_name = style.getAttribute("name");
 			const remote_url = style.getAttribute("remote");
 			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
 
 			if (!image_name) {
 				console.warn("blob-module image missing name attribute");
@@ -142,7 +143,8 @@
 			} else {
 				// Try cache
 				const cached_image = await getCachedModule(image_name, MEDIA_MODULE_TYPE);
-				if (cached_image) {
+
+				if (cached_image && !no_cache) {
 					console.log(`Using cached image "${image_name}"`);
 
 					// Convert blob to data URL
@@ -175,8 +177,10 @@
 					const blob = await response.blob();
 
 					// Cache it
-					await setCachedModule(image_name, blob, MEDIA_MODULE_TYPE);
-					console.log(`Cached remote image "${image_name}"`);
+					if (!no_cache) {
+						await setCachedModule(image_name, blob, MEDIA_MODULE_TYPE);
+						console.log(`Cached remote image "${image_name}"`);
+					}
 
 					// Convert to data URL
 					const reader = new FileReader();
@@ -213,8 +217,7 @@
 			// Detect extension
 			let extension = null;
 			if (remote_url) {
-				const url_path = new URL(remote_url, window.location.href).pathname;
-				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				const ext_match = remote_url.match(/\.([^./?#]+)(?:[?#]|$)/);
 				if (ext_match) {
 					extension = ext_match[1];
 				}
@@ -242,6 +245,7 @@
 				"blob",
 				"blob-module",
 				"nodownload",
+				"nocache",
 			]);
 			const metadata = {};
 
@@ -275,6 +279,7 @@
 			const font_name = style.getAttribute("name");
 			const remote_url = style.getAttribute("remote");
 			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
 
 			if (!font_name) {
 				console.warn("blob-module font missing name attribute");
@@ -316,7 +321,7 @@
 			} else {
 				// Try cache
 				const cached_font = await getCachedModule(font_name, MEDIA_MODULE_TYPE);
-				if (cached_font) {
+				if (cached_font && !no_cache) {
 					console.log(`Using cached font "${font_name}"`);
 
 					// Convert blob to data URL
@@ -349,8 +354,10 @@
 					const blob = await response.blob();
 
 					// Cache it
-					await setCachedModule(font_name, blob, MEDIA_MODULE_TYPE);
-					console.log(`Cached remote font "${font_name}"`);
+					if (!no_cache) {
+						await setCachedModule(font_name, blob, MEDIA_MODULE_TYPE);
+						console.log(`Cached remote font "${font_name}"`);
+					}
 
 					// Convert to data URL
 					const reader = new FileReader();
@@ -386,8 +393,7 @@
 
 			let extension = null;
 			if (remote_url) {
-				const url_path = new URL(remote_url, window.location.href).pathname;
-				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				const ext_match = remote_url.match(/\.([^./?#]+)(?:[?#]|$)/);
 				if (ext_match) {
 					extension = ext_match[1];
 				}
@@ -420,6 +426,7 @@
 				"blob",
 				"blob-module",
 				"nodownload",
+				"nocache",
 			]);
 			const metadata = {};
 
@@ -454,6 +461,7 @@
 			const remote_url = link.getAttribute("remote");
 			const inline_src = link.getAttribute("source");
 			const is_disabled = link.hasAttribute("disabled");
+			const no_cache = link.hasAttribute("nocache");
 
 			if (!media_name) {
 				console.warn("blob-module link missing name attribute");
@@ -513,7 +521,7 @@
 			} else {
 				// Try cache
 				const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
-				if (cached_media) {
+				if (cached_media && !no_cache) {
 					console.log(`Using cached media "${media_name}"`);
 					blob = cached_media.blob;
 
@@ -544,8 +552,10 @@
 					blob = await response.blob();
 
 					// Cache it for next time
-					await setCachedModule(media_name, blob, MEDIA_MODULE_TYPE);
-					console.log(`Cached remote media "${media_name}"`);
+					if (!no_cache) {
+						await setCachedModule(media_name, blob, MEDIA_MODULE_TYPE);
+						console.log(`Cached remote media "${media_name}"`);
+					}
 
 					// Convert to data URL
 					const reader = new FileReader();
@@ -578,8 +588,7 @@
 			let extension = null;
 			if (remote_url) {
 				// Extract extension from remote URL
-				const url_path = new URL(remote_url, window.location.href).pathname;
-				const ext_match = url_path.match(/\.([^./?#]+)(?:[?#]|$)/);
+				const ext_match = remote_url.match(/\.([^./?#]+)(?:[?#]|$)/);
 				if (ext_match) {
 					extension = ext_match[1];
 				}
@@ -608,6 +617,7 @@
 				"type",
 				"source",
 				"nodownload",
+				"nocache",
 			]);
 			const metadata = {};
 
@@ -641,6 +651,7 @@
 			const remote_url = style.getAttribute("remote");
 			const style_module_name = style.getAttribute("name");
 			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
 
 			// Skip disabled styles
 			if (is_disabled) {
@@ -674,7 +685,7 @@
 			} else {
 				// Try cache
 				const cached_style = await getCachedModule(style_module_name, STYLE_MODULE_TYPE);
-				if (cached_style) {
+				if (cached_style && !no_cache) {
 					console.log(`Using cached style "${style_module_name}"`);
 					final_content = cached_style.content;
 					blob_style_sources.set(style_module_name, final_content);
@@ -700,8 +711,10 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(style_module_name, final_content, STYLE_MODULE_TYPE);
-					console.log(`Cached remote style "${style_module_name}"`);
+					if (!no_cache) {
+						await setCachedModule(style_module_name, final_content, STYLE_MODULE_TYPE);
+						console.log(`Cached remote style "${style_module_name}"`);
+					}
 
 					blob_style_sources.set(style_module_name, final_content);
 					remote_styles_hrefs.set(style_module_name, remote_url);
@@ -760,6 +773,7 @@
 				"blob",
 				"blob-module",
 				"nodownload",
+				"nocache",
 			]);
 			const metadata = {};
 
@@ -787,6 +801,7 @@
 			const remote_url = script.getAttribute("remote");
 			const is_disabled = script.hasAttribute("disabled");
 			const encoded = script.hasAttribute("encode");
+			const no_cache = script.hasAttribute("nocache");
 
 			if (!module_name) {
 				console.warn("blob-module script missing name attribute");
@@ -834,7 +849,7 @@
 			} else {
 				// Try cache
 				const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
-				if (cached_module) {
+				if (cached_module && !no_cache) {
 					console.log(`Using cached module "${module_name}"`);
 					final_content = cached_module.content;
 					blob_modules_sources.set(module_name, final_content);
@@ -865,6 +880,7 @@
 							"blob",
 							"type",
 							"nodownload",
+							"nocache",
 							"encode",
 						]);
 						const metadata = {};
@@ -891,8 +907,10 @@
 					final_content = await response.text();
 
 					// Cache it
-					await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
-					console.log(`Cached remote module "${module_name}"`);
+					if (!no_cache) {
+						await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
+						console.log(`Cached remote module "${module_name}"`);
+					}
 
 					blob_modules_sources.set(module_name, final_content);
 					remote_modules_hrefs.set(module_name, remote_url);
@@ -933,6 +951,7 @@
 				"blob",
 				"type",
 				"nodownload",
+				"nocache",
 				"encode",
 			]);
 			const metadata = {};
@@ -1267,7 +1286,7 @@
 			});
 	}
 
-	async function updateModuleFromRemote(name, remote_url, module_type) {
+	async function updateModuleFromRemote(name, remote_url, module_type, no_cache = false) {
 		try {
 			// Validate module type
 			if (!MODULE_TYPES.includes(module_type)) {
@@ -1297,8 +1316,10 @@
 			}
 
 			// Cache the updated content
-			await setCachedModule(name, content, module_type);
-			console.log(`Successfully updated cached ${module_type} module "${name}" from remote`);
+			if (!no_cache) {
+				await setCachedModule(name, content, module_type);
+				console.log(`Successfully updated cached ${module_type} module "${name}" from remote`);
+			}
 
 			return true;
 		} catch (error) {
