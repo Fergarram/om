@@ -2,6 +2,11 @@
 
 Electron but with a different name and other defaults.
 
+> [!WARNING]
+> This project is in a very experimental stage. Breaking changes should be
+> expected at any time without notice. Do not use this in production or for
+> any critical applications.
+
 ## Windows
 TODO
 
