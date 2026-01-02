@@ -44,9 +44,11 @@ export function openCloneEditor() {
 		},
 		$.div(
 			{
-				style: `width: 240px;`,
+				style: `max-width: 240px;`,
 				styles: css`
 					& {
+						width: fit-content;
+						padding-right: 24px;
 						height: 100%;
 						display: flex;
 						overflow: auto;

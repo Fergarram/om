@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.96.0
+// BLOB LOADER v0.97.0
 // by fergarram
 //
 
@@ -54,6 +54,7 @@
 		saveAsHtmlFile,
 		getDocumentOuterHtml,
 		getUntransformedBlobUrl,
+		getMediaData,
 	};
 
 	//
@@ -1681,5 +1682,43 @@
 
 		const blob = new Blob([source], { type: mime_type });
 		return URL.createObjectURL(blob);
+	}
+
+	async function getMediaData(module_name) {
+		const data_url = blob_media_sources.get(module_name);
+
+		if (!data_url) {
+			return null;
+		}
+
+		if (!data_url.startsWith("data:")) {
+			return data_url;
+		}
+
+		try {
+			// Extract MIME type from data URL
+			const mime_match = data_url.match(/^data:([^;,]+)/);
+			const mime_type = mime_match ? mime_match[1] : "";
+
+			// Check if it's a text-based MIME type
+			const is_text =
+				mime_type.startsWith("text/") ||
+				mime_type === "application/json" ||
+				mime_type === "application/xml" ||
+				mime_type === "application/javascript";
+
+			const response = await fetch(data_url);
+
+			if (is_text) {
+				const text = await response.text();
+				return text;
+			} else {
+				const blob = await response.blob();
+				return blob;
+			}
+		} catch (error) {
+			console.warn(`Failed to decode media data for "${module_name}". Returning response.`, error);
+			return response;
+		}
 	}
 })();
