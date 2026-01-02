@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.95.0
+// BLOB LOADER v0.96.0
 // by fergarram
 //
 
@@ -53,6 +53,7 @@
 		getMediaModules,
 		saveAsHtmlFile,
 		getDocumentOuterHtml,
+		getUntransformedBlobUrl,
 	};
 
 	//
@@ -262,6 +263,8 @@
 				style_metadata.extension = extension;
 			}
 
+			style_metadata.generated = image_name;
+
 			blob_style_map.set(image_name, {
 				name: image_name,
 				remote_url: remote_url || null,
@@ -272,9 +275,8 @@
 
 			// Register as media module too (if we have a blob)
 			if (blob && media_blob_url) {
-				// Create media metadata (mark as generated from style module)
 				const media_metadata = {
-					generated: image_name, // References the style module name
+					"parent-module": image_name,
 				};
 
 				if (extension) {
@@ -409,16 +411,21 @@
 
 			// If we have a data URL, create blob for programmatic access
 			let blob = null;
-			let blob_url = null;
+			let media_blob_url = null;
 			if (data_url) {
 				const res = await fetch(data_url);
 				blob = await res.blob();
 				blob_media_blobs.set(font_name, blob);
 
-				blob_url = URL.createObjectURL(blob);
-				blob_style_urls.set(font_name, blob_url);
-				blob_media_urls.set(font_name, blob_url); // Reuse same URL
-				style.setAttribute("blob", blob_url);
+				media_blob_url = URL.createObjectURL(blob);
+				blob_media_urls.set(font_name, media_blob_url); // Media blob URL
+
+				// Create blob URL for the CSS itself
+				const style_blob = new Blob([final_css], { type: "text/css" });
+				const style_blob_url = URL.createObjectURL(style_blob);
+				blob_style_urls.set(font_name, style_blob_url); // CSS blob URL
+
+				style.setAttribute("blob", media_blob_url); // Reference to the font file
 			}
 
 			let extension = null;
@@ -456,19 +463,20 @@
 				style_metadata.extension = extension;
 			}
 
+			style_metadata.generated = font_name;
+
 			blob_style_map.set(font_name, {
 				name: font_name,
 				remote_url: remote_url || null,
 				size_bytes: final_css.length,
-				blob_url: blob_url,
+				blob_url: blob_style_urls.get(font_name), // CSS blob URL
 				metadata: style_metadata,
 			});
 
 			// Register as media module too (if we have a blob)
-			if (blob && blob_url) {
-				// Create media metadata (mark as generated from style module)
+			if (blob && media_blob_url) {
 				const media_metadata = {
-					generated: font_name, // References the style module name
+					"parent-module": font_name,
 				};
 
 				if (extension) {
@@ -482,7 +490,7 @@
 					name: font_name,
 					remote_url: remote_url || null,
 					size_bytes: blob.size,
-					blob_url: blob_url, // Same URL as style module
+					blob_url: media_blob_url, // Media blob URL
 					metadata: media_metadata,
 				});
 
@@ -1157,18 +1165,30 @@
 
 	function getAllModules() {
 		return {
-			scripts: Array.from(blob_module_map.values()),
-			styles: Array.from(blob_style_map.values()),
+			scripts: Array.from(blob_module_map.values()).map((module) => ({
+				...module,
+				untransformed_source: getUntransformedBlobUrl(SCRIPT_MODULE_TYPE, module.name),
+			})),
+			styles: Array.from(blob_style_map.values()).map((style) => ({
+				...style,
+				untransformed_source: getUntransformedBlobUrl(STYLE_MODULE_TYPE, style.name),
+			})),
 			media: Array.from(blob_media_map.values()),
 		};
 	}
 
 	function getScriptModules() {
-		return Array.from(blob_module_map.values());
+		return Array.from(blob_module_map.values()).map((module) => ({
+			...module,
+			untransformed_source: getUntransformedBlobUrl(SCRIPT_MODULE_TYPE, module.name),
+		}));
 	}
 
 	function getStyleModules() {
-		return Array.from(blob_style_map.values());
+		return Array.from(blob_style_map.values()).map((style) => ({
+			...style,
+			untransformed_source: getUntransformedBlobUrl(STYLE_MODULE_TYPE, style.name),
+		}));
 	}
 
 	function getMediaModules() {
@@ -1637,5 +1657,29 @@
 		});
 
 		return metadata;
+	}
+
+	function getUntransformedBlobUrl(module_type, module_name) {
+		if (module_type !== SCRIPT_MODULE_TYPE && module_type !== STYLE_MODULE_TYPE) {
+			return null;
+		}
+
+		let source = null;
+		let mime_type = null;
+
+		if (module_type === SCRIPT_MODULE_TYPE) {
+			source = blob_modules_sources.get(module_name);
+			mime_type = "text/javascript";
+		} else if (module_type === STYLE_MODULE_TYPE) {
+			source = blob_style_sources.get(module_name);
+			mime_type = "text/css";
+		}
+
+		if (!source) {
+			return null;
+		}
+
+		const blob = new Blob([source], { type: mime_type });
+		return URL.createObjectURL(blob);
 	}
 })();

@@ -392,7 +392,7 @@ function EditorPanel(mod_type, mod) {
 		),
 		CodeEditor({
 			language: getLanguageFromModuleType(mod_type),
-			source: mod.blob_url,
+			source: mod.untransformed_source || mod.blob_url,
 			style: css`
 				position: absolute;
 				left: 0;
@@ -512,7 +512,9 @@ function DocumentPanel() {
 			},
 			"document",
 		),
-		$.div({
+		CodeEditor({
+			language: "html",
+			source: window.location.href, // lol
 			style: css`
 				position: absolute;
 				left: 0;
