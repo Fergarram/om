@@ -49,9 +49,7 @@ export function openCloneEditor() {
 					& {
 						height: 100%;
 						display: flex;
-						flex-direction: column;
 						overflow: auto;
-						padding-left: 4px;
 					}
 				`,
 			},
@@ -59,101 +57,115 @@ export function openCloneEditor() {
 				{
 					styles: css`
 						& {
-							height: 32px;
+							width: fit-content;
+							height: fit-content;
 							display: flex;
-							align-items: center;
-							opacity: 0.3;
-							padding: 0 8px;
-							text-transform: uppercase;
+							flex-direction: column;
+							overflow: auto;
+							padding-left: 4px;
 						}
 					`,
 				},
-				"clone editor",
+				$.div(
+					{
+						styles: css`
+							& {
+								height: 32px;
+								display: flex;
+								align-items: center;
+								opacity: 0.3;
+								padding: 0 8px;
+								text-transform: uppercase;
+							}
+						`,
+					},
+					"clone editor v0.0.0",
+				),
+				PreviewTabButton(),
+				DocumentTabButton(),
+				SyncTabButton(),
+				$.div(
+					{
+						styles: css`
+							& {
+								opacity: 0.3;
+								text-transform: uppercase;
+								padding: 8px 4px;
+								margin-top: 12px;
+							}
+						`,
+					},
+					"scripts",
+				),
+				modules.scripts.length === 0
+					? $.div(
+							{
+								styles: css`
+									& {
+										opacity: 0.2;
+										padding: 8px 4px;
+									}
+								`,
+							},
+							"No scripts found",
+						)
+					: "",
+				...modules.scripts.map((mod) => ModuleTabButton("scripts", mod)),
+				$.div(
+					{
+						styles: css`
+							& {
+								opacity: 0.3;
+								text-transform: uppercase;
+								padding: 8px 4px;
+								margin-top: 12px;
+							}
+						`,
+					},
+					"styles",
+				),
+				modules.styles.length === 0
+					? $.div(
+							{
+								styles: css`
+									& {
+										opacity: 0.2;
+										padding: 8px 4px;
+									}
+								`,
+							},
+							"No styles found",
+						)
+					: "",
+				...modules.styles.map((mod) => ModuleTabButton("styles", mod)),
+				$.div(
+					{
+						styles: css`
+							& {
+								opacity: 0.3;
+								text-transform: uppercase;
+								padding: 8px 4px;
+								margin-top: 12px;
+							}
+						`,
+					},
+					"media",
+				),
+				modules.media.length === 0
+					? $.div(
+							{
+								styles: css`
+									& {
+										opacity: 0.2;
+										padding: 8px 4px;
+									}
+								`,
+							},
+							"No media found",
+						)
+					: "",
+				...modules.media.map((mod) => ModuleTabButton("media", mod)),
 			),
-			PreviewTabButton(),
-			DocumentTabButton(),
-			SyncTabButton(),
-			$.div(
-				{
-					styles: css`
-						& {
-							opacity: 0.3;
-							text-transform: uppercase;
-							padding: 8px 4px;
-							margin-top: 12px;
-						}
-					`,
-				},
-				"scripts",
-			),
-			modules.scripts.length === 0
-				? $.div(
-						{
-							styles: css`
-								& {
-									opacity: 0.2;
-									padding: 8px 4px;
-								}
-							`,
-						},
-						"No scripts found",
-					)
-				: "",
-			...modules.scripts.map((mod) => ModuleTabButton("scripts", mod)),
-			$.div(
-				{
-					styles: css`
-						& {
-							opacity: 0.3;
-							text-transform: uppercase;
-							padding: 8px 4px;
-							margin-top: 12px;
-						}
-					`,
-				},
-				"styles",
-			),
-			modules.styles.length === 0
-				? $.div(
-						{
-							styles: css`
-								& {
-									opacity: 0.2;
-									padding: 8px 4px;
-								}
-							`,
-						},
-						"No styles found",
-					)
-				: "",
-			...modules.styles.map((mod) => ModuleTabButton("styles", mod)),
-			$.div(
-				{
-					styles: css`
-						& {
-							opacity: 0.3;
-							text-transform: uppercase;
-							padding: 8px 4px;
-							margin-top: 12px;
-						}
-					`,
-				},
-				"media",
-			),
-			modules.media.length === 0
-				? $.div(
-						{
-							styles: css`
-								& {
-									opacity: 0.2;
-									padding: 8px 4px;
-								}
-							`,
-						},
-						"No media found",
-					)
-				: "",
-			...modules.media.map((mod) => ModuleTabButton("media", mod)),
 		),
 		$.div({
 			styles: css`

@@ -40,6 +40,7 @@ const IsolatedApplet = registerAppletTag(APPLET_NAME, {
 				CodeEditor({
 					ref: editor_ref,
 					style: () => `display: ${!is_editing ? "none" : "block"};`,
+					language: "javascript",
 					oninput(e) {
 						source = this.value;
 					},

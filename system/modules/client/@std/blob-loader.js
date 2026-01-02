@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.94.0
+// BLOB LOADER v0.95.0
 // by fergarram
 //
 
@@ -20,6 +20,15 @@
 	const STYLE_MODULE_TYPE = "style";
 	const MEDIA_MODULE_TYPE = "media";
 	const MODULE_TYPES = [SCRIPT_MODULE_TYPE, STYLE_MODULE_TYPE, MEDIA_MODULE_TYPE];
+	const KNOWN_ATTRIBUTES = {
+		shared: ["name", "remote", "disabled", "blob", "nodownload", "nocache"],
+		script: ["type", "encode", "autorun"],
+		style: ["blob-module"],
+		media: ["href", "type", "source"],
+	};
+	const SKIP_CACHE_CHECK = localStorage.getItem("BLOB_LOADER_SKIP_CACHE") ? true : false;
+
+	if (SKIP_CACHE_CHECK) console.log("Skipping cache");
 
 	//
 	// Global BlobLoader object
@@ -144,7 +153,7 @@
 				// Try cache
 				const cached_image = await getCachedModule(image_name, MEDIA_MODULE_TYPE);
 
-				if (cached_image && !no_cache) {
+				if (cached_image && !no_cache && !SKIP_CACHE_CHECK) {
 					console.log(`Using cached image "${image_name}"`);
 
 					// Convert blob to data URL
@@ -246,22 +255,7 @@
 			}
 
 			// Populate metadata map for style module
-			const known_attrs = new Set([
-				"name",
-				"remote",
-				"disabled",
-				"blob",
-				"blob-module",
-				"nodownload",
-				"nocache",
-			]);
-			const style_metadata = {};
-
-			Array.from(style.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					style_metadata[attr.name] = attr.value;
-				}
-			});
+			const style_metadata = extractCustomMetadata(style, STYLE_MODULE_TYPE);
 
 			// Add extension to metadata if found
 			if (extension) {
@@ -288,11 +282,7 @@
 				}
 
 				// Copy over custom attributes to media metadata too
-				Array.from(style.attributes).forEach((attr) => {
-					if (!known_attrs.has(attr.name)) {
-						media_metadata[attr.name] = attr.value;
-					}
-				});
+				Object.assign(media_metadata, extractCustomMetadata(style, STYLE_MODULE_TYPE));
 
 				blob_media_map.set(image_name, {
 					name: image_name,
@@ -358,7 +348,7 @@
 			} else {
 				// Try cache
 				const cached_font = await getCachedModule(font_name, MEDIA_MODULE_TYPE);
-				if (cached_font && !no_cache) {
+				if (cached_font && !no_cache && !SKIP_CACHE_CHECK) {
 					console.log(`Using cached font "${font_name}"`);
 
 					// Convert blob to data URL
@@ -459,22 +449,7 @@
 			}
 
 			// Populate metadata map for style module
-			const known_attrs = new Set([
-				"name",
-				"remote",
-				"disabled",
-				"blob",
-				"blob-module",
-				"nodownload",
-				"nocache",
-			]);
-			const style_metadata = {};
-
-			Array.from(style.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					style_metadata[attr.name] = attr.value;
-				}
-			});
+			const style_metadata = extractCustomMetadata(style, STYLE_MODULE_TYPE);
 
 			// Add extension to metadata if found
 			if (extension) {
@@ -501,11 +476,7 @@
 				}
 
 				// Copy over custom attributes to media metadata too
-				Array.from(style.attributes).forEach((attr) => {
-					if (!known_attrs.has(attr.name)) {
-						media_metadata[attr.name] = attr.value;
-					}
-				});
+				Object.assign(media_metadata, extractCustomMetadata(style, STYLE_MODULE_TYPE));
 
 				blob_media_map.set(font_name, {
 					name: font_name,
@@ -590,7 +561,7 @@
 			} else {
 				// Try cache
 				const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
-				if (cached_media && !no_cache) {
+				if (cached_media && !no_cache && !SKIP_CACHE_CHECK) {
 					console.log(`Using cached media "${media_name}"`);
 					blob = cached_media.blob;
 
@@ -677,24 +648,7 @@
 			}
 
 			// Populate metadata map
-			const known_attrs = new Set([
-				"name",
-				"remote",
-				"disabled",
-				"blob",
-				"href",
-				"type",
-				"source",
-				"nodownload",
-				"nocache",
-			]);
-			const metadata = {};
-
-			Array.from(link.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
-				}
-			});
+			const metadata = extractCustomMetadata(link, MEDIA_MODULE_TYPE);
 
 			// Add extension to metadata if found
 			if (extension) {
@@ -754,7 +708,7 @@
 			} else {
 				// Try cache
 				const cached_style = await getCachedModule(style_module_name, STYLE_MODULE_TYPE);
-				if (cached_style && !no_cache) {
+				if (cached_style && !no_cache && !SKIP_CACHE_CHECK) {
 					console.log(`Using cached style "${style_module_name}"`);
 					final_content = cached_style.content;
 					blob_style_sources.set(style_module_name, final_content);
@@ -835,22 +789,7 @@
 			}
 
 			// Populate metadata map
-			const known_attrs = new Set([
-				"name",
-				"remote",
-				"disabled",
-				"blob",
-				"blob-module",
-				"nodownload",
-				"nocache",
-			]);
-			const metadata = {};
-
-			Array.from(style.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
-				}
-			});
+			const metadata = extractCustomMetadata(style, STYLE_MODULE_TYPE);
 
 			blob_style_map.set(style_module_name, {
 				name: style_module_name,
@@ -871,6 +810,7 @@
 			const is_disabled = script.hasAttribute("disabled");
 			const encoded = script.hasAttribute("encode");
 			const no_cache = script.hasAttribute("nocache");
+			const autorun = script.hasAttribute("autorun");
 
 			if (!module_name) {
 				console.warn("blob-module script missing name attribute");
@@ -918,7 +858,7 @@
 			} else {
 				// Try cache
 				const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
-				if (cached_module && !no_cache) {
+				if (cached_module && !no_cache && !SKIP_CACHE_CHECK) {
 					console.log(`Using cached module "${module_name}"`);
 					final_content = cached_module.content;
 					blob_modules_sources.set(module_name, final_content);
@@ -942,23 +882,7 @@
 						console.log(`Will use remote URL directly for module "${module_name}"`);
 
 						// Still populate metadata for disabled/failed modules
-						const known_attrs = new Set([
-							"name",
-							"remote",
-							"disabled",
-							"blob",
-							"type",
-							"nodownload",
-							"nocache",
-							"encode",
-						]);
-						const metadata = {};
-
-						Array.from(script.attributes).forEach((attr) => {
-							if (!known_attrs.has(attr.name)) {
-								metadata[attr.name] = attr.value;
-							}
-						});
+						const metadata = extractCustomMetadata(script, SCRIPT_MODULE_TYPE);
 
 						blob_module_map.set(module_name, {
 							name: module_name,
@@ -967,6 +891,7 @@
 							blob_url: remote_url,
 							is_disabled: false,
 							encoded,
+							autorun,
 							metadata,
 						});
 
@@ -1013,23 +938,7 @@
 			script.setAttribute("blob", blob_url);
 
 			// Populate metadata map
-			const known_attrs = new Set([
-				"name",
-				"remote",
-				"disabled",
-				"blob",
-				"type",
-				"nodownload",
-				"nocache",
-				"encode",
-			]);
-			const metadata = {};
-
-			Array.from(script.attributes).forEach((attr) => {
-				if (!known_attrs.has(attr.name)) {
-					metadata[attr.name] = attr.value;
-				}
-			});
+			const metadata = extractCustomMetadata(script, SCRIPT_MODULE_TYPE);
 
 			blob_module_map.set(module_name, {
 				name: module_name,
@@ -1038,6 +947,7 @@
 				blob_url,
 				is_disabled: false,
 				encoded,
+				autorun,
 				metadata,
 			});
 		}
@@ -1046,6 +956,14 @@
 		blob_module_urls.forEach((url, name) => (importmap[name] = url));
 		import_map.textContent = JSON.stringify({ imports: importmap }, null, 2);
 		document.head.appendChild(import_map);
+
+		// Generate autorun import calls
+		let autorun_scripts = "";
+		blob_module_map.forEach((module, name) => {
+			if (module.autorun) {
+				autorun_scripts += `import "${name}";\n`;
+			}
+		});
 
 		// Run the main module if it exists and is not disabled
 		if (blob_modules_sources.has("main")) {
@@ -1061,7 +979,9 @@
 				const load_duration = main_start_time - ${load_start_time};
 				console.log(\`Main module started \${load_duration.toFixed(2)}ms after page load\`);
 
-				import("main");
+				import "main";
+
+				${autorun_scripts}
 			`;
 			document.head.appendChild(main_script);
 		}
@@ -1700,5 +1620,22 @@
 		const binString = atob(encoded);
 		const bytes = Uint8Array.from(binString, (char) => char.codePointAt(0));
 		return new TextDecoder().decode(bytes);
+	}
+
+	function extractCustomMetadata(element, module_type) {
+		const known = new Set([
+			...KNOWN_ATTRIBUTES.shared, //
+			...(KNOWN_ATTRIBUTES[module_type] || []),
+		]);
+
+		const metadata = {};
+
+		Array.from(element.attributes).forEach((attr) => {
+			if (!known.has(attr.name)) {
+				metadata[attr.name] = attr.value;
+			}
+		});
+
+		return metadata;
 	}
 })();

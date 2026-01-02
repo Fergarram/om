@@ -18,9 +18,6 @@ if (params.get("clone-editor") === "true") {
 //
 
 else if (!document.querySelector("desktop-view")) {
-	// DEV: Clear module cache
-	await BlobLoader.clearAllCache();
-
 	document.body.appendChild(Desktop());
 	await finish();
 
