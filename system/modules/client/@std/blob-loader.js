@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.97.0
+// BLOB LOADER v0.98.0
 // by fergarram
 //
 
@@ -84,6 +84,8 @@
 	const blob_media_blobs = new Map();
 	const blob_adopted_sheets = new Map();
 
+	const prefetched_remotes = new Map();
+
 	let blob_media_tags = null;
 	let blob_image_tags = null;
 	let blob_font_tags = null;
@@ -103,6 +105,13 @@
 		blob_font_tags = document.querySelectorAll(`style[blob-module="font"]`);
 		blob_style_tags = document.querySelectorAll(`style[blob-module="css"]`);
 		blob_script_tags = document.querySelectorAll('script[type="blob-module"]');
+
+		//
+		// Prefetch all remotes in parallel
+		//
+
+		const fetch_tasks = await collectRemoteFetchTasks();
+		await prefetchRemotes(fetch_tasks);
 
 		//
 		// Process blob image tags (CSS-based, no js required)
@@ -152,17 +161,16 @@
 					data_url = data_url_match[1];
 				}
 			} else {
-				// Try cache
-				const cached_image = await getCachedModule(image_name, MEDIA_MODULE_TYPE);
-
-				if (cached_image && !no_cache && !SKIP_CACHE_CHECK) {
-					console.log(`Using cached image "${image_name}"`);
+				// Check prefetched first
+				const prefetched = getPrefetched(image_name, MEDIA_MODULE_TYPE);
+				if (prefetched) {
+					console.log(`Using prefetched image "${image_name}"`);
 
 					// Convert blob to data URL
 					const reader = new FileReader();
 					data_url = await new Promise((resolve) => {
 						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(cached_image.blob);
+						reader.readAsDataURL(prefetched);
 					});
 
 					// Create CSS with the data URL
@@ -172,38 +180,68 @@
 					if (remote_url) {
 						remote_styles_hrefs.set(image_name, remote_url);
 					}
-				} else if (remote_url) {
-					// Fetch from remote
-					console.log(
-						`Fetching remote image "${image_name}" from ${remote_url} (no local/cached version)`,
-					);
-					const response = await fetch(remote_url);
-
-					if (!response.ok) {
-						console.warn(`Failed to fetch remote image "${image_name}": ${response.status}`);
-						style.setAttribute("disabled", "");
-						continue;
-					}
-
-					const blob = await response.blob();
 
 					// Cache it
 					if (!no_cache) {
-						await setCachedModule(image_name, blob, MEDIA_MODULE_TYPE);
-						console.log(`Cached remote image "${image_name}"`);
+						await setCachedModule(image_name, prefetched, MEDIA_MODULE_TYPE);
+						console.log(`Cached prefetched image "${image_name}"`);
 					}
+				} else {
+					// Try cache
+					const cached_image = await getCachedModule(image_name, MEDIA_MODULE_TYPE);
 
-					// Convert to data URL
-					const reader = new FileReader();
-					data_url = await new Promise((resolve) => {
-						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(blob);
-					});
+					if (cached_image && !no_cache && !SKIP_CACHE_CHECK) {
+						console.log(`Using cached image "${image_name}"`);
 
-					// Create CSS
-					final_css = `:root {\n\t--BM-${image_name.replaceAll(" ", "-")}: url('${data_url}');\n}`;
-					blob_style_sources.set(image_name, final_css);
-					remote_styles_hrefs.set(image_name, remote_url);
+						// Convert blob to data URL
+						const reader = new FileReader();
+						data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(cached_image.blob);
+						});
+
+						// Create CSS with the data URL
+						final_css = `:root {\n\t--BM-${image_name.replaceAll(" ", "-")}: url('${data_url}');\n}`;
+						blob_style_sources.set(image_name, final_css);
+
+						if (remote_url) {
+							remote_styles_hrefs.set(image_name, remote_url);
+						}
+					} else if (remote_url) {
+						// Fallback to direct fetch (shouldn't happen normally)
+						console.log(
+							`Fetching remote image "${image_name}" from ${remote_url} (fallback)`,
+						);
+						const response = await fetch(remote_url);
+
+						if (!response.ok) {
+							console.warn(
+								`Failed to fetch remote image "${image_name}": ${response.status}`,
+							);
+							style.setAttribute("disabled", "");
+							continue;
+						}
+
+						const blob = await response.blob();
+
+						// Cache it
+						if (!no_cache) {
+							await setCachedModule(image_name, blob, MEDIA_MODULE_TYPE);
+							console.log(`Cached remote image "${image_name}"`);
+						}
+
+						// Convert to data URL
+						const reader = new FileReader();
+						data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(blob);
+						});
+
+						// Create CSS
+						final_css = `:root {\n\t--BM-${image_name.replaceAll(" ", "-")}: url('${data_url}');\n}`;
+						blob_style_sources.set(image_name, final_css);
+						remote_styles_hrefs.set(image_name, remote_url);
+					}
 				}
 			}
 
@@ -349,16 +387,16 @@
 					data_url = data_url_match[1];
 				}
 			} else {
-				// Try cache
-				const cached_font = await getCachedModule(font_name, MEDIA_MODULE_TYPE);
-				if (cached_font && !no_cache && !SKIP_CACHE_CHECK) {
-					console.log(`Using cached font "${font_name}"`);
+				// Check prefetched first
+				const prefetched = getPrefetched(font_name, MEDIA_MODULE_TYPE);
+				if (prefetched) {
+					console.log(`Using prefetched font "${font_name}"`);
 
 					// Convert blob to data URL
 					const reader = new FileReader();
 					data_url = await new Promise((resolve) => {
 						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(cached_font.blob);
+						reader.readAsDataURL(prefetched);
 					});
 
 					// Create @font-face CSS with the data URL
@@ -368,38 +406,63 @@
 					if (remote_url) {
 						remote_styles_hrefs.set(font_name, remote_url);
 					}
-				} else if (remote_url) {
-					// Fetch from remote
-					console.log(
-						`Fetching remote font "${font_name}" from ${remote_url} (no local/cached version)`,
-					);
-					const response = await fetch(remote_url);
-
-					if (!response.ok) {
-						console.warn(`Failed to fetch remote font "${font_name}": ${response.status}`);
-						style.setAttribute("disabled", "");
-						continue;
-					}
-
-					const blob = await response.blob();
 
 					// Cache it
 					if (!no_cache) {
-						await setCachedModule(font_name, blob, MEDIA_MODULE_TYPE);
-						console.log(`Cached remote font "${font_name}"`);
+						await setCachedModule(font_name, prefetched, MEDIA_MODULE_TYPE);
+						console.log(`Cached prefetched font "${font_name}"`);
 					}
+				} else {
+					// Try cache
+					const cached_font = await getCachedModule(font_name, MEDIA_MODULE_TYPE);
+					if (cached_font && !no_cache && !SKIP_CACHE_CHECK) {
+						console.log(`Using cached font "${font_name}"`);
 
-					// Convert to data URL
-					const reader = new FileReader();
-					data_url = await new Promise((resolve) => {
-						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(blob);
-					});
+						// Convert blob to data URL
+						const reader = new FileReader();
+						data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(cached_font.blob);
+						});
 
-					// Create @font-face CSS
-					final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
-					blob_style_sources.set(font_name, final_css);
-					remote_styles_hrefs.set(font_name, remote_url);
+						// Create @font-face CSS with the data URL
+						final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+						blob_style_sources.set(font_name, final_css);
+
+						if (remote_url) {
+							remote_styles_hrefs.set(font_name, remote_url);
+						}
+					} else if (remote_url) {
+						// Fallback to direct fetch (shouldn't happen normally)
+						console.log(`Fetching remote font "${font_name}" from ${remote_url} (fallback)`);
+						const response = await fetch(remote_url);
+
+						if (!response.ok) {
+							console.warn(`Failed to fetch remote font "${font_name}": ${response.status}`);
+							style.setAttribute("disabled", "");
+							continue;
+						}
+
+						const blob = await response.blob();
+
+						// Cache it
+						if (!no_cache) {
+							await setCachedModule(font_name, blob, MEDIA_MODULE_TYPE);
+							console.log(`Cached remote font "${font_name}"`);
+						}
+
+						// Convert to data URL
+						const reader = new FileReader();
+						data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(blob);
+						});
+
+						// Create @font-face CSS
+						final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+						blob_style_sources.set(font_name, final_css);
+						remote_styles_hrefs.set(font_name, remote_url);
+					}
 				}
 			}
 
@@ -568,52 +631,79 @@
 					}
 				}
 			} else {
-				// Try cache
-				const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
-				if (cached_media && !no_cache && !SKIP_CACHE_CHECK) {
-					console.log(`Using cached media "${media_name}"`);
-					blob = cached_media.blob;
+				// Check prefetched first
+				const prefetched = getPrefetched(media_name, MEDIA_MODULE_TYPE);
+				if (prefetched) {
+					console.log(`Using prefetched media "${media_name}"`);
+					blob = prefetched;
 
 					// Convert to data URL for storage
 					const reader = new FileReader();
 					const data_url = await new Promise((resolve) => {
 						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(cached_media.blob);
+						reader.readAsDataURL(prefetched);
 					});
 					blob_media_sources.set(media_name, data_url);
 
 					if (remote_url) {
 						remote_media_hrefs.set(media_name, remote_url);
 					}
-				} else if (remote_url) {
-					// Fetch from remote
-					console.log(
-						`Fetching remote media "${media_name}" from ${remote_url} (no local/cached version)`,
-					);
-					const response = await fetch(remote_url);
 
-					if (!response.ok) {
-						console.warn(`Failed to fetch remote media "${media_name}": ${response.status}`);
-						link.setAttribute("disabled", "");
-						continue;
-					}
-
-					blob = await response.blob();
-
-					// Cache it for next time
+					// Cache it
 					if (!no_cache) {
 						await setCachedModule(media_name, blob, MEDIA_MODULE_TYPE);
-						console.log(`Cached remote media "${media_name}"`);
+						console.log(`Cached prefetched media "${media_name}"`);
 					}
+				} else {
+					// Try cache
+					const cached_media = await getCachedModule(media_name, MEDIA_MODULE_TYPE);
+					if (cached_media && !no_cache && !SKIP_CACHE_CHECK) {
+						console.log(`Using cached media "${media_name}"`);
+						blob = cached_media.blob;
 
-					// Convert to data URL
-					const reader = new FileReader();
-					const data_url = await new Promise((resolve) => {
-						reader.onloadend = () => resolve(reader.result);
-						reader.readAsDataURL(blob);
-					});
-					blob_media_sources.set(media_name, data_url);
-					remote_media_hrefs.set(media_name, remote_url);
+						// Convert to data URL for storage
+						const reader = new FileReader();
+						const data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(cached_media.blob);
+						});
+						blob_media_sources.set(media_name, data_url);
+
+						if (remote_url) {
+							remote_media_hrefs.set(media_name, remote_url);
+						}
+					} else if (remote_url) {
+						// Fallback to direct fetch (shouldn't happen normally)
+						console.log(
+							`Fetching remote media "${media_name}" from ${remote_url} (fallback)`,
+						);
+						const response = await fetch(remote_url);
+
+						if (!response.ok) {
+							console.warn(
+								`Failed to fetch remote media "${media_name}": ${response.status}`,
+							);
+							link.setAttribute("disabled", "");
+							continue;
+						}
+
+						blob = await response.blob();
+
+						// Cache it for next time
+						if (!no_cache) {
+							await setCachedModule(media_name, blob, MEDIA_MODULE_TYPE);
+							console.log(`Cached remote media "${media_name}"`);
+						}
+
+						// Convert to data URL
+						const reader = new FileReader();
+						const data_url = await new Promise((resolve) => {
+							reader.onloadend = () => resolve(reader.result);
+							reader.readAsDataURL(blob);
+						});
+						blob_media_sources.set(media_name, data_url);
+						remote_media_hrefs.set(media_name, remote_url);
+					}
 				}
 			}
 
@@ -715,41 +805,59 @@
 				}
 				final_content = content;
 			} else {
-				// Try cache
-				const cached_style = await getCachedModule(style_module_name, STYLE_MODULE_TYPE);
-				if (cached_style && !no_cache && !SKIP_CACHE_CHECK) {
-					console.log(`Using cached style "${style_module_name}"`);
-					final_content = cached_style.content;
+				// Check prefetched first
+				const prefetched = getPrefetched(style_module_name, STYLE_MODULE_TYPE);
+				if (prefetched) {
+					console.log(`Using prefetched style "${style_module_name}"`);
+					final_content = prefetched;
 					blob_style_sources.set(style_module_name, final_content);
 
 					if (remote_url) {
 						remote_styles_hrefs.set(style_module_name, remote_url);
 					}
-				} else if (remote_url) {
-					// Fetch from remote
-					console.log(
-						`Fetching remote style "${style_module_name}" from ${remote_url} (no local/cached version)`,
-					);
-					const response = await fetch(remote_url);
-
-					if (!response.ok) {
-						console.warn(
-							`Failed to fetch remote style "${style_module_name}" from "${remote_url}": ${response.status}`,
-						);
-						style.setAttribute("disabled", "");
-						continue;
-					}
-
-					final_content = await response.text();
 
 					// Cache it
 					if (!no_cache) {
 						await setCachedModule(style_module_name, final_content, STYLE_MODULE_TYPE);
-						console.log(`Cached remote style "${style_module_name}"`);
+						console.log(`Cached prefetched style "${style_module_name}"`);
 					}
+				} else {
+					// Try cache
+					const cached_style = await getCachedModule(style_module_name, STYLE_MODULE_TYPE);
+					if (cached_style && !no_cache && !SKIP_CACHE_CHECK) {
+						console.log(`Using cached style "${style_module_name}"`);
+						final_content = cached_style.content;
+						blob_style_sources.set(style_module_name, final_content);
 
-					blob_style_sources.set(style_module_name, final_content);
-					remote_styles_hrefs.set(style_module_name, remote_url);
+						if (remote_url) {
+							remote_styles_hrefs.set(style_module_name, remote_url);
+						}
+					} else if (remote_url) {
+						// Fallback to direct fetch (shouldn't happen normally)
+						console.log(
+							`Fetching remote style "${style_module_name}" from ${remote_url} (fallback)`,
+						);
+						const response = await fetch(remote_url);
+
+						if (!response.ok) {
+							console.warn(
+								`Failed to fetch remote style "${style_module_name}" from "${remote_url}": ${response.status}`,
+							);
+							style.setAttribute("disabled", "");
+							continue;
+						}
+
+						final_content = await response.text();
+
+						// Cache it
+						if (!no_cache) {
+							await setCachedModule(style_module_name, final_content, STYLE_MODULE_TYPE);
+							console.log(`Cached remote style "${style_module_name}"`);
+						}
+
+						blob_style_sources.set(style_module_name, final_content);
+						remote_styles_hrefs.set(style_module_name, remote_url);
+					}
 				}
 			}
 
@@ -865,58 +973,76 @@
 					remote_modules_hrefs.set(module_name, remote_url);
 				}
 			} else {
-				// Try cache
-				const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
-				if (cached_module && !no_cache && !SKIP_CACHE_CHECK) {
-					console.log(`Using cached module "${module_name}"`);
-					final_content = cached_module.content;
+				// Check prefetched first
+				const prefetched = getPrefetched(module_name, SCRIPT_MODULE_TYPE);
+				if (prefetched) {
+					console.log(`Using prefetched module "${module_name}"`);
+					final_content = prefetched;
 					blob_modules_sources.set(module_name, final_content);
 
 					if (remote_url) {
 						remote_modules_hrefs.set(module_name, remote_url);
 					}
-				} else if (remote_url) {
-					// Fetch from remote
-					console.log(
-						`Fetching remote module "${module_name}" from ${remote_url} (no local/cached version)`,
-					);
-					const response = await fetch(remote_url);
-
-					if (!response.ok) {
-						console.warn(
-							`Failed to fetch remote module "${module_name}": ${response.status}`,
-						);
-						// Use remote URL directly in importmap as last fallback
-						blob_module_urls.set(module_name, remote_url);
-						console.log(`Will use remote URL directly for module "${module_name}"`);
-
-						// Still populate metadata for disabled/failed modules
-						const metadata = extractCustomMetadata(script, SCRIPT_MODULE_TYPE);
-
-						blob_module_map.set(module_name, {
-							name: module_name,
-							size_bytes: 0,
-							remote_url: remote_url || null,
-							blob_url: remote_url,
-							is_disabled: false,
-							encoded,
-							autorun,
-							metadata,
-						});
-
-						continue;
-					}
-
-					final_content = await response.text();
 
 					// Cache it
 					if (!no_cache) {
 						await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
-						console.log(`Cached remote module "${module_name}"`);
+						console.log(`Cached prefetched module "${module_name}"`);
 					}
+				} else {
+					// Try cache
+					const cached_module = await getCachedModule(module_name, SCRIPT_MODULE_TYPE);
+					if (cached_module && !no_cache && !SKIP_CACHE_CHECK) {
+						console.log(`Using cached module "${module_name}"`);
+						final_content = cached_module.content;
+						blob_modules_sources.set(module_name, final_content);
 
-					blob_modules_sources.set(module_name, final_content);
-					remote_modules_hrefs.set(module_name, remote_url);
+						if (remote_url) {
+							remote_modules_hrefs.set(module_name, remote_url);
+						}
+					} else if (remote_url) {
+						// Fallback to direct fetch (shouldn't happen normally)
+						console.log(
+							`Fetching remote module "${module_name}" from ${remote_url} (fallback)`,
+						);
+						const response = await fetch(remote_url);
+
+						if (!response.ok) {
+							console.warn(
+								`Failed to fetch remote module "${module_name}": ${response.status}`,
+							);
+							// Use remote URL directly in importmap as last fallback
+							blob_module_urls.set(module_name, remote_url);
+							console.log(`Will use remote URL directly for module "${module_name}"`);
+
+							// Still populate metadata for disabled/failed modules
+							const metadata = extractCustomMetadata(script, SCRIPT_MODULE_TYPE);
+
+							blob_module_map.set(module_name, {
+								name: module_name,
+								size_bytes: 0,
+								remote_url: remote_url || null,
+								blob_url: remote_url,
+								is_disabled: false,
+								encoded,
+								autorun,
+								metadata,
+							});
+
+							continue;
+						}
+
+						final_content = await response.text();
+
+						// Cache it
+						if (!no_cache) {
+							await setCachedModule(module_name, final_content, SCRIPT_MODULE_TYPE);
+							console.log(`Cached remote module "${module_name}"`);
+						}
+
+						blob_modules_sources.set(module_name, final_content);
+						remote_modules_hrefs.set(module_name, remote_url);
+					}
 				}
 			}
 
@@ -995,6 +1121,138 @@
 			document.head.appendChild(main_script);
 		}
 	});
+
+	//
+	// Prefetch helpers
+	//
+
+	async function collectRemoteFetchTasks() {
+		const tasks = [];
+
+		// Check script modules
+		for (const script of blob_script_tags) {
+			const name = script.getAttribute("name");
+			const remote_url = script.getAttribute("remote");
+			const is_disabled = script.hasAttribute("disabled");
+			const no_cache = script.hasAttribute("nocache");
+			const has_inline = script.textContent.trim().length > 0;
+
+			if (!name || is_disabled || !remote_url || has_inline) continue;
+
+			const cached = await getCachedModule(name, SCRIPT_MODULE_TYPE);
+			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
+
+			tasks.push({ name, remote_url, type: SCRIPT_MODULE_TYPE });
+		}
+
+		// Check style modules
+		for (const style of blob_style_tags) {
+			const name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
+			const has_inline = style.textContent.trim().length > 0;
+
+			if (!name || is_disabled || !remote_url || has_inline) continue;
+
+			const cached = await getCachedModule(name, STYLE_MODULE_TYPE);
+			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
+
+			tasks.push({ name, remote_url, type: STYLE_MODULE_TYPE });
+		}
+
+		// Check image modules
+		for (const style of blob_image_tags) {
+			const name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
+			const has_inline = style.textContent.trim().length > 0;
+
+			if (!name || is_disabled || !remote_url || has_inline) continue;
+
+			const cached = await getCachedModule(name, MEDIA_MODULE_TYPE);
+			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
+
+			tasks.push({ name, remote_url, type: MEDIA_MODULE_TYPE });
+		}
+
+		// Check font modules
+		for (const style of blob_font_tags) {
+			const name = style.getAttribute("name");
+			const remote_url = style.getAttribute("remote");
+			const is_disabled = style.hasAttribute("disabled");
+			const no_cache = style.hasAttribute("nocache");
+			const has_inline = style.textContent.trim().length > 0;
+
+			if (!name || is_disabled || !remote_url || has_inline) continue;
+
+			const cached = await getCachedModule(name, MEDIA_MODULE_TYPE);
+			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
+
+			tasks.push({ name, remote_url, type: MEDIA_MODULE_TYPE });
+		}
+
+		// Check media modules (links)
+		for (const link of blob_media_tags) {
+			const name = link.getAttribute("name");
+			const remote_url = link.getAttribute("remote");
+			const is_disabled = link.hasAttribute("disabled");
+			const no_cache = link.hasAttribute("nocache");
+			const has_inline = link.getAttribute("source");
+
+			if (!name || is_disabled || !remote_url || has_inline) continue;
+
+			const cached = await getCachedModule(name, MEDIA_MODULE_TYPE);
+			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
+
+			tasks.push({ name, remote_url, type: MEDIA_MODULE_TYPE });
+		}
+
+		return tasks;
+	}
+
+	async function prefetchRemotes(tasks) {
+		if (tasks.length === 0) return;
+
+		console.log(`Prefetching ${tasks.length} remote modules in parallel...`);
+		const prefetch_start = performance.now();
+
+		const results = await Promise.all(
+			tasks.map(async (task) => {
+				try {
+					const response = await fetch(task.remote_url);
+					if (!response.ok) {
+						console.warn(`Failed to prefetch "${task.name}": ${response.status}`);
+						return null;
+					}
+
+					const content =
+						task.type === MEDIA_MODULE_TYPE ? await response.blob() : await response.text();
+
+					return { ...task, content };
+				} catch (error) {
+					console.warn(`Failed to prefetch "${task.name}":`, error);
+					return null;
+				}
+			}),
+		);
+
+		for (const result of results) {
+			if (result && result.content) {
+				const key = `${result.type}:${result.name}`;
+				prefetched_remotes.set(key, result.content);
+				console.log(`Prefetched "${result.name}"`);
+			}
+		}
+
+		const prefetch_duration = performance.now() - prefetch_start;
+		console.log(`Prefetch completed in ${prefetch_duration.toFixed(2)}ms`);
+	}
+
+	function getPrefetched(name, module_type) {
+		return prefetched_remotes.get(`${module_type}:${name}`);
+	}
 
 	//
 	// Module cache management
@@ -1609,7 +1867,6 @@
 			}
 		}
 
-		alert("File System Access API not available, falling back to download");
 		console.log("File System Access API not available, falling back to download");
 
 		const blob = new Blob([html_content], {
@@ -1644,10 +1901,7 @@
 	}
 
 	function extractCustomMetadata(element, module_type) {
-		const known = new Set([
-			...KNOWN_ATTRIBUTES.shared, //
-			...(KNOWN_ATTRIBUTES[module_type] || []),
-		]);
+		const known = new Set([...KNOWN_ATTRIBUTES.shared, ...(KNOWN_ATTRIBUTES[module_type] || [])]);
 
 		const metadata = {};
 
@@ -1717,7 +1971,10 @@
 				return blob;
 			}
 		} catch (error) {
-			console.warn(`Failed to decode media data for "${module_name}". Returning response.`, error);
+			console.warn(
+				`Failed to decode media data for "${module_name}". Returning response.`,
+				error,
+			);
 			return response;
 		}
 	}
