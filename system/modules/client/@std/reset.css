@@ -1,6 +1,6 @@
 :root {
-	--font-default: "Inter", sans-serif;
-	--font-monospace: "Jetbrains Mono", monospace;
+	--font-default: sans-serif;
+	--font-monospace: monospace;
 }
 
 /*
