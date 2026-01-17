@@ -1,7 +1,7 @@
 import { Desktop, mountApplet } from "desktop";
 import IsolatedApplet from "applets/isolate";
 import { finish, useGlobalStyles } from "utils";
-import { openCloneEditor } from "clone-editor";
+import { CloneEditor } from "clone-editor";
 
 const params = new URLSearchParams(window.location.search);
 
@@ -10,21 +10,24 @@ const params = new URLSearchParams(window.location.search);
 //
 
 if (params.get("clone-editor") === "true") {
-	openCloneEditor();
+	document.body.appendChild(
+		CloneEditor(window.location.href.replace("clone-editor=true", "clone-editor=false")),
+	);
 }
 
 //
 // Mount new destkop element if not found
 //
-
 else if (!document.querySelector("desktop-view")) {
 	document.body.appendChild(Desktop());
 	await finish();
 
-	mountApplet(IsolatedApplet({
-		x: 50_000,
-		y: 50_000,
-	}));
+	mountApplet(
+		IsolatedApplet({
+			x: 50_000,
+			y: 50_000,
+		}),
+	);
 
 	// mountApplet(IsolatedApplet());
 	// mountApplet(IsolatedApplet());
