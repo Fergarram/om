@@ -18,7 +18,7 @@ let months_passed = 0;
 let years_passed = 0;
 
 let last_update_time = Date.now();
-const MILLISECONDS_PER_DAY = 3000; // 3 seconds = 1 day
+const MILLISECONDS_PER_DAY = 10000; // 3 seconds = 1 day
 
 //
 // Game Logic
@@ -43,8 +43,8 @@ function updateGameTime() {
 	stress_level = Math.floor((day_in_month / 30) * 100);
 }
 
-function handleSellCandy() {
-	cash += 1;
+function sellCandy() {
+	cash += 2;
 }
 
 function resetGame() {
@@ -93,6 +93,12 @@ setInterval(() => {
 	saveGameState();
 }, 100);
 
+function saveInBank() {
+	if (cash < 100) return;
+	bank += cash;
+	cash = 0;
+}
+
 //
 // Layout
 //
@@ -117,7 +123,7 @@ document.body.replaceChildren(
 				},
 				$.button(
 					{
-						onclick: handleSellCandy,
+						onclick: sellCandy,
 					},
 					"Sell candy",
 				),
@@ -126,7 +132,13 @@ document.body.replaceChildren(
 						class: "flex justify-between w-full",
 					},
 					$.p(() => `Cash: $${cash}`),
-					$.button({}, "Save in bank"),
+					$.button(
+						{
+							disabled: () => (cash < 100 ? "true" : undefined),
+							onclick: saveInBank,
+						},
+						"Save in bank",
+					),
 				),
 			),
 			$.br(),
@@ -144,9 +156,9 @@ document.body.replaceChildren(
 					class: "grid grid-cols-2",
 				},
 				$.div(
-					$.p(() => `Days passed: ${days_passed}`),
-					$.p(() => `Months passed: ${months_passed}`),
-					$.p(() => `Years passed: ${years_passed}`),
+					$.p(() => `Days passed: ${days_passed} / 30`),
+					$.p(() => `Months passed: ${months_passed} / 12`),
+					$.p(() => `Years passed: ${years_passed} / ${TOTAL_YEARS}`),
 					$.br(),
 				),
 				$.div(
@@ -163,13 +175,11 @@ document.body.replaceChildren(
 				),
 				$.p("Monthly payment:"),
 				$.p(
-					$.span({ class: "text-red-700" }, "$", bank),
+					$.span({ class: "text-red-700" }, "$", () => bank),
 					" / ",
 					"$",
 					INITIAL_DEBT / TOTAL_YEARS / 12,
 				),
-				$.p("Years left:"),
-				$.p(TOTAL_YEARS - years_passed),
 			),
 		),
 		PageColumn($.p("Ideas:")),
