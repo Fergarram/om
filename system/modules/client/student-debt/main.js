@@ -5,9 +5,13 @@ const $ = useTags();
 // State
 //
 
+const INITIAL_DEBT = 1_500_000;
+const TOTAL_YEARS = 50;
+
 let cash = 0;
-let debt = 100_000_000;
+let debt = INITIAL_DEBT;
 let bank = 50;
+let stress_level = 0; // 0 to 100
 
 let days_passed = 0;
 let months_passed = 0;
@@ -33,6 +37,10 @@ function updateGameTime() {
 
 		last_update_time = current_time - (elapsed_ms % MILLISECONDS_PER_DAY);
 	}
+
+	// Update stress level based on current day in month
+	const day_in_month = days_passed % 30;
+	stress_level = Math.floor((day_in_month / 30) * 100);
 }
 
 function handleSellCandy() {
@@ -53,6 +61,7 @@ function saveGameState() {
 		months_passed,
 		years_passed,
 		last_update_time,
+		stress_level,
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
 }
@@ -68,6 +77,7 @@ function loadGameState() {
 		months_passed = state.months_passed;
 		years_passed = state.years_passed;
 		last_update_time = state.last_update_time;
+		stress_level = state.stress_level || 0;
 
 		// Calculate time passed since last save
 		updateGameTime();
@@ -95,7 +105,7 @@ document.body.replaceChildren(
 		PageColumn(
 			$.div(
 				{
-					class: "flex justify-evenly",
+					class: "grid grid-cols-2",
 				},
 				$.h1(() => `Debt: $${debt.toLocaleString()}`),
 				$.p(() => `Bank: $${bank}`),
@@ -103,7 +113,7 @@ document.body.replaceChildren(
 			$.br(),
 			$.div(
 				{
-					class: "flex justify-between",
+					class: "grid grid-cols-2",
 				},
 				$.button(
 					{
@@ -111,7 +121,13 @@ document.body.replaceChildren(
 					},
 					"Sell candy",
 				),
-				$.p(() => `Cash: $${cash}`),
+				$.div(
+					{
+						class: "flex justify-between w-full",
+					},
+					$.p(() => `Cash: $${cash}`),
+					$.button({}, "Save in bank"),
+				),
 			),
 			$.br(),
 			$.button(
@@ -131,17 +147,29 @@ document.body.replaceChildren(
 					$.p(() => `Days passed: ${days_passed}`),
 					$.p(() => `Months passed: ${months_passed}`),
 					$.p(() => `Years passed: ${years_passed}`),
+					$.br(),
 				),
 				$.div(
 					$.p("Stress meter:"),
 					$.div(
 						{
-							class: "border w-full h-5 text-red-700",
+							class: "border w-full h-5 text-red-700 font-mono flex items-center px-1",
 						},
-						// 30 characters for filled bar:
-						"//////////////////////////////",
+						() => {
+							const filled_slashes = Math.floor((stress_level / 100) * 30);
+							return "/".repeat(filled_slashes);
+						},
 					),
 				),
+				$.p("Monthly payment:"),
+				$.p(
+					$.span({ class: "text-red-700" }, "$", bank),
+					" / ",
+					"$",
+					INITIAL_DEBT / TOTAL_YEARS / 12,
+				),
+				$.p("Years left:"),
+				$.p(TOTAL_YEARS - years_passed),
 			),
 		),
 		PageColumn($.p("Ideas:")),
@@ -151,11 +179,10 @@ document.body.replaceChildren(
 function PageColumn(...children) {
 	return $.div(
 		{
-			class: "px-4 min-w-[32rem] pt-3",
+			class: "pl-6 min-w-[32rem] pt-1.5",
 			style: `
-			background-image: url(https://img.freepik.com/free-vector/blank-white-notepaper-design_53876-118304.jpg?semt=ais_hybrid&w=740&q=80);
+			background-image: url(/modules/student-debt/bg.png);
 			background-size: 100%;
-			background-position: 432px;
 		`,
 		},
 		...children,
