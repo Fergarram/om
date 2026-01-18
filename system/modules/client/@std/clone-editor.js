@@ -1,10 +1,18 @@
 import { parseTagArgs } from "ima";
 import { useStyledTags } from "ima-utils";
-import { css, finish } from "utils";
+import { css } from "utils";
+
+//
+// Constants
+//
 
 const $ = useStyledTags();
 const CodeEditor = await importCodeEditor();
 const parser = new DOMParser();
+
+const DB_NAME = "clone-editor-backups";
+const DB_VERSION = 1;
+const STORE_NAME = "documents";
 
 //
 // State
@@ -33,18 +41,29 @@ export async function CloneEditor(document_url) {
 	if (!doc_url) {
 		return FileDropArea();
 	} else {
-		const res = await fetch(doc_url);
-		if (!res.ok) console.error("Unable to fetch doc_url", doc_url, res);
+		const backup = await loadBackup(doc_url);
 
-		doc_clone = parser.parseFromString(await res.text(), "text/html");
+		// Find backup
+		if (backup && backup.html) {
+			console.log("Loading from backup", new Date(backup.timestamp));
+			doc_clone = parser.parseFromString(backup.html, "text/html");
+			initial_modules = await extractModulesFromDocument(doc_clone);
+		}
 
-		initial_modules =
-			doc_url === location.href
-				? BlobLoader.getAllModules()
-				: await extractModulesFromDocument(doc_clone);
+		// No backup found
+		else {
+			const res = await fetch(doc_url);
+			if (!res.ok) console.error("Unable to fetch doc_url", doc_url, res);
+
+			doc_clone = parser.parseFromString(await res.text(), "text/html");
+
+			initial_modules =
+				doc_url === location.href
+					? BlobLoader.getAllModules()
+					: await extractModulesFromDocument(doc_clone);
+		}
 
 		updatePreviewHtml();
-
 		current_module_tab = "preview";
 	}
 
@@ -767,18 +786,32 @@ function SyncPanel() {
 			},
 			"sync",
 		),
-		$.div({
-			style: css`
-				position: absolute;
-				left: 0;
-				top: var(--titlebar-height);
-				width: 100%;
-				height: calc(100% - var(--titlebar-height));
-				border-radius: 6px;
-				overflow: hidden;
-				border: 1px solid rgba(255, 255, 255, 0.1);
-			`,
-		}),
+		$.div(
+			{
+				style: css`
+					position: absolute;
+					left: 0;
+					top: var(--titlebar-height);
+					width: 100%;
+					height: calc(100% - var(--titlebar-height));
+					border-radius: 6px;
+					overflow: hidden;
+					border: 1px solid rgba(255, 255, 255, 0.1);
+					padding: 8px;
+				`,
+			},
+			Button(
+				{
+					onclick: async () => {
+						if (confirm("Clear backup for this document?")) {
+							await deleteBackup(doc_url);
+							alert("Backup cleared");
+						}
+					},
+				},
+				"clear backup",
+			),
+		),
 	);
 }
 
@@ -1344,6 +1377,9 @@ function updatePreviewHtml() {
 	// Generate new HTML content
 	preview_html = "<!DOCTYPE html>\n" + doc_clone.documentElement.outerHTML;
 
+	// Save backup to IndexedDB
+	saveBackup(doc_url, preview_html);
+
 	// Create new blob URL
 	const blob = new Blob([preview_html], { type: "text/html" });
 
@@ -1352,5 +1388,83 @@ function updatePreviewHtml() {
 	if (preview_ref.current) {
 		preview_ref.current.removeAttribute("src");
 		preview_ref.current.srcdoc = preview_html;
+	}
+}
+
+function openDatabase() {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+		request.onerror = () => reject(request.error);
+		request.onsuccess = () => resolve(request.result);
+
+		request.onupgradeneeded = (event) => {
+			const db = event.target.result;
+			if (!db.objectStoreNames.contains(STORE_NAME)) {
+				db.createObjectStore(STORE_NAME, { keyPath: "url" });
+			}
+		};
+	});
+}
+
+async function saveBackup(url, html_content) {
+	try {
+		const db = await openDatabase();
+		const transaction = db.transaction([STORE_NAME], "readwrite");
+		const store = transaction.objectStore(STORE_NAME);
+
+		const backup_data = {
+			url: url,
+			html: html_content,
+			timestamp: Date.now(),
+		};
+
+		await new Promise((resolve, reject) => {
+			const request = store.put(backup_data);
+			request.onsuccess = () => resolve();
+			request.onerror = () => reject(request.error);
+		});
+
+		db.close();
+	} catch (error) {
+		console.warn("Failed to save backup", error);
+	}
+}
+
+async function loadBackup(url) {
+	try {
+		const db = await openDatabase();
+		const transaction = db.transaction([STORE_NAME], "readonly");
+		const store = transaction.objectStore(STORE_NAME);
+
+		const backup_data = await new Promise((resolve, reject) => {
+			const request = store.get(url);
+			request.onsuccess = () => resolve(request.result);
+			request.onerror = () => reject(request.error);
+		});
+
+		db.close();
+		return backup_data;
+	} catch (error) {
+		console.warn("Failed to load backup", error);
+		return null;
+	}
+}
+
+async function deleteBackup(url) {
+	try {
+		const db = await openDatabase();
+		const transaction = db.transaction([STORE_NAME], "readwrite");
+		const store = transaction.objectStore(STORE_NAME);
+
+		await new Promise((resolve, reject) => {
+			const request = store.delete(url);
+			request.onsuccess = () => resolve();
+			request.onerror = () => reject(request.error);
+		});
+
+		db.close();
+	} catch (error) {
+		console.warn("Failed to delete backup", error);
 	}
 }
