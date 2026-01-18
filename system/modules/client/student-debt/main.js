@@ -1,4 +1,5 @@
 import { useTags } from "ima";
+import { finish } from "utils";
 const $ = useTags();
 
 //
@@ -19,6 +20,34 @@ let years_passed = 0;
 
 let last_update_time = Date.now();
 const MILLISECONDS_PER_DAY = 10000; // 3 seconds = 1 day
+
+const ideas = [
+	{
+		description: "Sell candy on the street",
+		checked: true,
+		isPurchasable: () => true,
+		implementIdea: () => {},
+		notes: "",
+	},
+	{
+		description: "Sell homemade cookies for $4 each",
+		checked: false,
+		isPurchasable: () => bank >= 120,
+		implementIdea: () => {
+			bank -= 120;
+		},
+		notes: "Requires $120 in bank",
+	},
+	{
+		description: "Buy a mini vending machine for $500",
+		checked: false,
+		isPurchasable: () => bank >= 500,
+		implementIdea: () => {
+			bank -= 500;
+		},
+		notes: "Generate passive income",
+	},
+];
 
 //
 // Game Logic
@@ -58,8 +87,9 @@ function saveInBank() {
 	cash = 0;
 }
 
-function resetGame() {
+async function resetGame() {
 	localStorage.removeItem("student_debt_game");
+	await finish();
 	location.reload();
 }
 
@@ -105,9 +135,9 @@ setInterval(() => {
 }, 100);
 
 // Generate passive income every second
-setInterval(() => {
-	generatePassiveIncome();
-}, 1000);
+// setInterval(() => {
+// 	generatePassiveIncome();
+// }, 1000);
 
 //
 // Layout
@@ -119,11 +149,13 @@ document.body.replaceChildren(
 			class: "flex whitespace-nowrap w-full overflow-scroll min-h-screen bg-neutral-200",
 		},
 		PageColumn(
+			$.h1("HOW THE FUCK WILL I PAY THIS?"),
+			$.br(),
 			$.div(
 				{
 					class: "grid grid-cols-2",
 				},
-				$.h1(() => `Debt: $${debt.toLocaleString()}`),
+				$.p(() => `Debt: $${debt.toLocaleString()}`),
 				$.p(() => `Bank: $${bank}`),
 			),
 			$.br(),
@@ -161,6 +193,8 @@ document.body.replaceChildren(
 			),
 		),
 		PageColumn(
+			$.h2("JOURNAL"),
+			$.br(),
 			$.div(
 				{
 					class: "grid grid-cols-2",
@@ -192,14 +226,32 @@ document.body.replaceChildren(
 				),
 			),
 		),
-		PageColumn($.p("Ideas:")),
+		PageColumn(
+			$.p("IDEAS"),
+			$.br(),
+			...ideas.map((idea, i) => {
+				return $.div(
+					() => {
+						if (idea.checked) {
+							return $.p({ class: "line-through decoration-2" }, `- ${idea.description}`);
+						} else if (idea.isPurchasable()) {
+							return $.button(`- ${idea.description}`);
+						} else {
+							return $.p(`- ${idea.description}`);
+						}
+					},
+					$.p({ class: "opacity-40 pl-4" }, idea.notes),
+					$.br(),
+				);
+			}),
+		),
 	),
 );
 
 function PageColumn(...children) {
 	return $.div(
 		{
-			class: "pl-6 min-w-[32rem] pt-1.5",
+			class: "pl-6 min-w-[32rem] pt-8",
 			style: `
 			background-image: url(/modules/student-debt/bg.png);
 			background-size: 100%;
