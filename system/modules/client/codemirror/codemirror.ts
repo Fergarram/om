@@ -23,14 +23,13 @@ import {
 	HighlightStyle,
 	indentUnit,
 } from "@codemirror/language";
-import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
+import { autocompletion } from "@codemirror/autocomplete";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
-import { xml } from "@codemirror/lang-xml";
 import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 import { tags as t } from "@lezer/highlight";
 import type { Extension } from "@codemirror/state";
@@ -47,7 +46,7 @@ const basic_setup: Extension = [
 	indentOnInput(),
 	syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
 	bracketMatching(),
-	closeBrackets(),
+	// closeBrackets(),
 	rectangularSelection(),
 	crosshairCursor(),
 	highlightActiveLine(),
@@ -190,7 +189,6 @@ const language_map = {
 	html: () => html(),
 	json: () => json(),
 	markdown: () => markdown(),
-	xml: () => xml(),
 	bash: () => null,
 	wgsl: () => wgsl(),
 	plaintext: () => null,
@@ -204,11 +202,11 @@ export type EditorConfig = {
 	language: LanguageType;
 	source: string;
 	theme: ThemeType;
-	onInput?: (value: string) => void;
+	onChange?: (value: string) => void;
 };
 
 export function createEditor(config: EditorConfig, extensions: Extension[] = []): EditorView {
-	const { host, language, source, theme, onInput } = config;
+	const { host, language, source, theme, onChange } = config;
 
 	const language_extension = language_map[language]();
 	const theme_extension = theme === "dark" ? minimalDark : minimalLight;
@@ -232,12 +230,12 @@ export function createEditor(config: EditorConfig, extensions: Extension[] = [])
 		...extensions,
 	];
 
-	if (onInput) {
+	if (onChange) {
 		default_extensions.push(
 			EditorView.updateListener.of((update: ViewUpdate) => {
 				if (update.docChanged) {
 					const new_value = update.state.doc.toString();
-					onInput(new_value);
+					onChange(new_value);
 				}
 			}),
 		);
@@ -258,4 +256,20 @@ export function createEditor(config: EditorConfig, extensions: Extension[] = [])
 	});
 
 	return view;
+}
+
+export function updateEditorContent(view: EditorView, new_content: string) {
+	const current_content = view.state.doc.toString();
+
+	if (current_content === new_content) {
+		return;
+	}
+
+	view.dispatch({
+		changes: {
+			from: 0,
+			to: view.state.doc.length,
+			insert: new_content,
+		},
+	});
 }

@@ -1,3 +1,6 @@
+/*
+Setup system default fonts
+*/
 :root {
 	--font-default: sans-serif;
 	--font-monospace: monospace;

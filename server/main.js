@@ -60,6 +60,15 @@ function handleRequest(req, res) {
 	const url_path = req.url.split("?")[0];
 
 	//
+	// Proxy route
+	//
+
+	if (url_path.startsWith("/xxx/")) {
+		handleProxyRoute(req, res);
+		return;
+	}
+
+	//
 	// API route
 	//
 
@@ -235,7 +244,7 @@ function handleSpaceRoute(req, res, space_slug) {
 }
 
 //
-// APIs
+// APIs & utilities
 //
 
 function API_pullFromGit(req, res) {
@@ -254,6 +263,91 @@ function API_pullFromGit(req, res) {
 			res.end("OK");
 		},
 	);
+}
+
+function handleProxyRoute(req, res) {
+	// Handle CORS preflight
+	if (req.method === "OPTIONS") {
+		res.writeHead(200, {
+			"Access-Control-Allow-Origin": "*",
+			"Access-Control-Allow-Methods": "GET, OPTIONS",
+			"Access-Control-Allow-Headers": "Content-Type",
+		});
+		res.end();
+		return;
+	}
+
+	if (req.method !== "GET") {
+		res.writeHead(405, { "Content-Type": "text/plain" });
+		res.end("405 Method Not Allowed");
+		return;
+	}
+
+	// Extract target URL from path: /xxx/https://example.com/page
+	const target_url = req.url.slice(5); // Remove /xxx/
+
+	if (!target_url) {
+		res.writeHead(400, { "Content-Type": "text/plain" });
+		res.end("400 Bad Request: Missing target URL");
+		return;
+	}
+
+	try {
+		// Validate URL
+		new URL(target_url);
+	} catch (error) {
+		res.writeHead(400, { "Content-Type": "text/plain" });
+		res.end("400 Bad Request: Invalid URL");
+		return;
+	}
+
+	console.log("Proxying request to:", target_url);
+
+	// Determine protocol
+	const protocol = target_url.startsWith("https") ? https : http;
+
+	// Make the request
+	const proxy_req = protocol.get(
+		target_url,
+		{
+			headers: {
+				"User-Agent": "Mozilla/5.0 (compatible; CloneEditor/1.0)",
+			},
+		},
+		(proxy_res) => {
+			// Forward status code
+			const headers = {
+				"Access-Control-Allow-Origin": "*",
+				"Access-Control-Allow-Methods": "GET, OPTIONS",
+				"Access-Control-Allow-Headers": "Content-Type",
+			};
+
+			// Copy content-type if available
+			if (proxy_res.headers["content-type"]) {
+				headers["Content-Type"] = proxy_res.headers["content-type"];
+			}
+
+			res.writeHead(proxy_res.statusCode, headers);
+
+			// Pipe the response
+			proxy_res.pipe(res);
+		},
+	);
+
+	proxy_req.on("error", (error) => {
+		console.error("Proxy request failed:", error);
+		if (!res.headersSent) {
+			res.writeHead(500, {
+				"Content-Type": "text/plain",
+				"Access-Control-Allow-Origin": "*",
+			});
+			res.end(`Proxy Error: ${error.message}`);
+		} else {
+			res.end();
+		}
+	});
+
+	proxy_req.end();
 }
 
 //

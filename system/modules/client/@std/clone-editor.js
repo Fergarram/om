@@ -1,5 +1,6 @@
+import { parseTagArgs } from "ima";
 import { useStyledTags } from "ima-utils";
-import { css } from "utils";
+import { css, finish } from "utils";
 
 const $ = useStyledTags();
 const CodeEditor = await importCodeEditor();
@@ -9,9 +10,13 @@ const parser = new DOMParser();
 // State
 //
 
-let modules = [];
+let initial_modules = [];
 let current_module_tab = null;
 let doc_url = "";
+let doc_clone = null;
+let preview_ref = { current: null };
+let preview_html = null;
+let preview_html_blob_url = null;
 
 //
 // Main Component
@@ -20,46 +25,32 @@ let doc_url = "";
 export async function CloneEditor(document_url) {
 	doc_url = document_url;
 
-	// Url not passed, expect manual file load
+	//
+	// Process incoming url prop
+	//
+
 	if (!doc_url) {
-		return $.div({}, "drop HTML file");
-	}
-
-	// Url is current doc, we self inspect
-	else if (doc_url === location.href) {
-		modules = BlobLoader.getAllModules();
-		current_module_tab = `scripts.${modules.scripts[0].name}`;
-	}
-
-	// If different url passed, we parse the contents and use that instead
-	else {
+		return FileDropArea();
+	} else {
 		const res = await fetch(doc_url);
+		if (!res.ok) console.error("Unable to fetch doc_url", doc_url, res);
 
-		if (!res.ok) {
-			console.error("Unable to fetch doc_url", doc_url, res);
-		}
+		doc_clone = parser.parseFromString(await res.text(), "text/html");
 
-		const source = await res.text();
+		initial_modules =
+			doc_url === location.href
+				? BlobLoader.getAllModules()
+				: await extractModulesFromDocument(doc_clone);
 
-		const doc_clone = parser.parseFromString(source, "text/html");
+		updatePreviewHtml();
 
-		// Extract modules using same resolution as BlobLoader
-		modules = await extractModulesFromDocument(doc_clone);
-
-		// Set initial tab
-		if (modules.scripts.length > 0) {
-			current_module_tab = `scripts.${modules.scripts[0].name}`;
-		} else if (modules.styles.length > 0) {
-			current_module_tab = `styles.${modules.styles[0].name}`;
-		} else {
-			current_module_tab = "preview";
-		}
+		current_module_tab = "preview";
 	}
 
 	return $.div(
 		{
 			id: "the-clone-editor",
-			"no-export": "", // Removes from outer HTML when BlobLoader.saveAsHTMLFile is called.
+			"no-export": "", // Makes BlobLoader.saveAsHTMLFile() skip this element.
 			styles: css`
 				& {
 					position: fixed;
@@ -119,88 +110,10 @@ export async function CloneEditor(document_url) {
 				),
 				PreviewTabButton(),
 				DocumentTabButton(),
-				SyncTabButton(),
-				$.div(
-					{
-						styles: css`
-							& {
-								opacity: 0.3;
-								text-transform: uppercase;
-								padding: 8px 4px;
-								margin-top: 12px;
-							}
-						`,
-					},
-					"scripts",
-				),
-				modules.scripts.length === 0
-					? $.div(
-							{
-								styles: css`
-									& {
-										opacity: 0.2;
-										padding: 8px 4px;
-									}
-								`,
-							},
-							"No scripts found",
-						)
-					: "",
-				...modules.scripts.map((mod) => ModuleTabButton("scripts", mod)),
-				$.div(
-					{
-						styles: css`
-							& {
-								opacity: 0.3;
-								text-transform: uppercase;
-								padding: 8px 4px;
-								margin-top: 12px;
-							}
-						`,
-					},
-					"styles",
-				),
-				modules.styles.length === 0
-					? $.div(
-							{
-								styles: css`
-									& {
-										opacity: 0.2;
-										padding: 8px 4px;
-									}
-								`,
-							},
-							"No styles found",
-						)
-					: "",
-				...modules.styles.map((mod) => ModuleTabButton("styles", mod)),
-				$.div(
-					{
-						styles: css`
-							& {
-								opacity: 0.3;
-								text-transform: uppercase;
-								padding: 8px 4px;
-								margin-top: 12px;
-							}
-						`,
-					},
-					"media",
-				),
-				modules.media.length === 0
-					? $.div(
-							{
-								styles: css`
-									& {
-										opacity: 0.2;
-										padding: 8px 4px;
-									}
-								`,
-							},
-							"No media found",
-						)
-					: "",
-				...modules.media.map((mod) => ModuleTabButton("media", mod)),
+				// SyncTabButton(),
+				...ModuleSection("scripts", "scripts"),
+				...ModuleSection("styles", "styles"),
+				...ModuleSection("media", "media"),
 			),
 		),
 		$.div({
@@ -214,16 +127,158 @@ export async function CloneEditor(document_url) {
 		}),
 		PreviewPanel(),
 		DocumentPanel(),
-		SyncPanel(),
-		...modules.scripts.map((mod) => EditorPanel("scripts", mod)),
-		...modules.styles.map((mod) => EditorPanel("styles", mod)),
-		...modules.media.map((mod) => EditorPanel("media", mod)),
+		// SyncPanel(),
+		...initial_modules.scripts.map((mod) => EditorPanel("scripts", mod)),
+		...initial_modules.styles.map((mod) => EditorPanel("styles", mod)),
+		...initial_modules.media.map((mod) => EditorPanel("media", mod)),
 	);
 }
 
 //
 // Components
 //
+
+function FileDropArea() {
+	return $.div(
+		{
+			tabindex: "0",
+			styles: css`
+				& {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					width: 100%;
+					height: 100vh;
+					background: black;
+					color: white;
+					font-size: var(--code-editor-font-size);
+					font-family: var(--code-editor-font-family);
+					transition: background 0.2s;
+					outline: none;
+					gap: 8px;
+					user-select: none;
+				}
+
+				&[dragging="true"] {
+					background: #101010;
+				}
+			`,
+			ondragover(event) {
+				console.log("test");
+				event.preventDefault();
+				this.setAttribute("dragging", "true");
+			},
+			ondragleave(event) {
+				event.preventDefault();
+				this.removeAttribute("dragging");
+			},
+			ondrop(event) {
+				event.preventDefault();
+				this.removeAttribute("dragging");
+
+				const files = event.dataTransfer.files;
+				if (files.length === 0) return;
+
+				const file = files[0];
+				if (!file.name.endsWith(".html") && !file.name.endsWith(".htm")) {
+					console.error("Only HTML files are supported");
+					return;
+				}
+
+				const reader = new FileReader();
+
+				reader.onload = async (event) => {
+					const html_content = event.target.result;
+
+					// Create blob URL for the file
+					const blob = new Blob([html_content], { type: "text/html" });
+					const url = URL.createObjectURL(blob);
+					document.body.replaceChildren(await CloneEditor(url));
+				};
+
+				reader.readAsText(file);
+			},
+			async onpaste(event) {
+				event.preventDefault();
+				const pasted_url = event.clipboardData.getData("text").trim();
+				if (pasted_url) {
+					document.body.replaceChildren(await CloneEditor(pasted_url));
+				}
+			},
+		},
+		"Drop HTML file",
+		Button(
+			{
+				onclick() {
+					let file_input = $.input({
+						type: "file",
+						accept: ".html,.htm",
+						async onchange(event) {
+							const files = event.target.files;
+							if (files.length === 0) return;
+
+							const file = files[0];
+							if (!file.name.endsWith(".html") && !file.name.endsWith(".htm")) {
+								console.error("Only HTML files are supported");
+								return;
+							}
+
+							const reader = new FileReader();
+
+							reader.onload = async (event) => {
+								const html_content = event.target.result;
+
+								const blob = new Blob([html_content], { type: "text/html" });
+								const url = URL.createObjectURL(blob);
+								document.body.replaceChildren(await CloneEditor(url));
+							};
+
+							reader.readAsText(file);
+							file_input.remove();
+						},
+					});
+
+					file_input.click();
+				},
+			},
+			"or select file",
+		),
+	);
+}
+
+function ModuleSection(type, label) {
+	const modules = initial_modules[type];
+
+	return [
+		$.div(
+			{
+				styles: css`
+					& {
+						opacity: 0.3;
+						text-transform: uppercase;
+						padding: 8px 4px;
+						margin-top: 12px;
+					}
+				`,
+			},
+			label,
+		),
+		modules.length === 0
+			? $.div(
+					{
+						styles: css`
+							& {
+								opacity: 0.2;
+								padding: 8px 4px;
+							}
+						`,
+					},
+					`No ${label} found`,
+				)
+			: null,
+		...modules.map((mod) => ModuleTabButton(type, mod)),
+	];
+}
 
 function ModuleTabButton(mod_type, mod) {
 	const color = getFileSizeColor(mod.size_bytes);
@@ -277,11 +332,52 @@ function ModuleTabButton(mod_type, mod) {
 	);
 }
 
+function Button(...args) {
+	const { props, children, ref } = parseTagArgs(args);
+	return $.button(
+		{
+			ref,
+			styles: css`
+				& {
+					width: fit-content;
+					white-space: nowrap;
+					border-radius: 4px;
+					display: flex;
+					align-items: center;
+					padding: 4px 8px;
+					gap: 4px;
+					background: rgba(255, 255, 255, 0.15);
+				}
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.125);
+				}
+
+				&:active {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
+				& icon {
+					font-size: 1.2em;
+				}
+			`,
+			...props,
+		},
+		...children,
+	);
+}
+
 function PreviewTabButton() {
 	return $.button(
 		{
 			onclick() {
 				current_module_tab = "preview";
+
+				if (doc_clone && preview_ref.current) {
+					updatePreviewHtml();
+					preview_ref.current.removeAttribute("src");
+					preview_ref.current.srcdoc = preview_html;
+				}
 			},
 			selected: () => current_module_tab === "preview",
 			styles: css`
@@ -317,6 +413,20 @@ function DocumentTabButton() {
 		{
 			onclick() {
 				current_module_tab = "document";
+
+				if (doc_clone) {
+					// Revoke existing blob URL if it exists
+					if (preview_html_blob_url) {
+						URL.revokeObjectURL(preview_html_blob_url);
+					}
+
+					// Generate new HTML content
+					preview_html = "<!DOCTYPE html>\n" + doc_clone.documentElement.outerHTML;
+
+					// Create new blob URL
+					const blob = new Blob([preview_html], { type: "text/html" });
+					preview_html_blob_url = URL.createObjectURL(blob);
+				}
 			},
 			selected: () => current_module_tab === "document",
 			styles: css`
@@ -423,22 +533,14 @@ function EditorPanel(mod_type, mod) {
 			mod.name,
 			getExtensionDisplay(mod, mod_type),
 			formatFileSize(mod.size_bytes),
-			$.button({
-				styles: css`
-					& {
-						margin-left: auto;
-						margin-right: 0.25rem;
-						padding: 0.25rem 0.5rem;
-					}
-					&:hover {
-						background: rgba(255, 255, 255, 0.1);
-					}
-				`
-			}, "save")
 		),
 		CodeEditor({
 			language: getLanguageFromModuleType(mod_type),
 			source: mod.untransformed_source || mod.blob_url,
+			onchange() {
+				if (mod.metadata && mod.metadata.generated) return;
+				updateDocCloneModule(mod_type, mod.name, this.value);
+			},
 			style: css`
 				position: absolute;
 				left: 0;
@@ -474,10 +576,8 @@ function PreviewPanel() {
 				}
 			`,
 		},
-		$.a(
+		$.div(
 			{
-				href: doc_url,
-				target: "_blank",
 				styles: css`
 					& {
 						position: relative;
@@ -487,10 +587,17 @@ function PreviewPanel() {
 						z-index: 1;
 						display: flex;
 						align-items: center;
+						gap: 2px;
+						padding-right: 2px;
+					}
+
+					& a {
+						display: flex;
+						align-items: center;
 						gap: 4px;
 					}
 
-					&:hover {
+					& a:hover {
 						text-decoration: underline;
 					}
 
@@ -499,12 +606,38 @@ function PreviewPanel() {
 					}
 				`,
 			},
-			doc_url,
-			$.icon({
-				name: "open_in_new",
+			Button(
+				{
+					onclick() {
+						const new_window = window.open("", "_blank");
+						new_window.document.open();
+						new_window.document.write(preview_html);
+						new_window.document.close();
+					},
+				},
+				"preview in window",
+			),
+			Button(
+				{
+					onclick() {
+						if (preview_ref.current)
+							preview_ref.current.contentWindow.BlobLoader.saveAsHtmlFile(true);
+					},
+				},
+				"download clone",
+			),
+			$.div({
+				style: "width: 100%; flex-grow: 1;",
 			}),
+			Button(
+				{
+					onclick() {},
+				},
+				"split view",
+			),
 		),
 		$.iframe({
+			ref: preview_ref,
 			src: doc_url,
 			style: css`
 				position: absolute;
@@ -560,7 +693,7 @@ function DocumentPanel() {
 		),
 		CodeEditor({
 			language: "html",
-			source: doc_url, // @TODO: update with the clone url
+			source: () => preview_html_blob_url,
 			style: css`
 				position: absolute;
 				left: 0;
@@ -1151,4 +1284,47 @@ async function extractModulesFromDocument(doc) {
 	}
 
 	return { scripts, styles, media };
+}
+
+function updateDocCloneModule(mod_type, mod_name, new_content) {
+	if (!doc_clone) return;
+
+	let element = null;
+
+	if (mod_type === "scripts") {
+		element = doc_clone.querySelector(`script[type="blob-module"][name="${mod_name}"]`);
+		if (element) {
+			element.textContent = new_content;
+		}
+	} else if (mod_type === "styles") {
+		element = doc_clone.querySelector(`style[blob-module="css"][name="${mod_name}"]`);
+		if (element) {
+			element.textContent = new_content;
+		}
+	} else if (mod_type === "media") {
+		element = doc_clone.querySelector(`link[type="blob-module"][name="${mod_name}"]`);
+		if (element) {
+			const bytes = new TextEncoder().encode(new_content);
+			const bin_string = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
+			element.setAttribute("source", btoa(bin_string));
+			element.setAttribute("encode", "");
+		}
+	}
+}
+
+function updatePreviewHtml() {
+	if (!doc_clone) return;
+
+	// Revoke existing blob URL if it exists
+	if (preview_html_blob_url) {
+		URL.revokeObjectURL(preview_html_blob_url);
+	}
+
+	// Generate new HTML content
+	preview_html = "<!DOCTYPE html>\n" + doc_clone.documentElement.outerHTML;
+
+	// Create new blob URL
+	const blob = new Blob([preview_html], { type: "text/html" });
+
+	preview_html_blob_url = URL.createObjectURL(blob);
 }

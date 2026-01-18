@@ -1,6 +1,6 @@
 import { useTags } from "ima";
 import { registerCustomTag } from "ima-utils";
-import { createEditor } from "codemirror";
+import { createEditor, updateEditorContent } from "codemirror";
 
 const $ = useTags();
 
@@ -43,37 +43,59 @@ function decodeBase64(encoded) {
 	return new TextDecoder().decode(bytes);
 }
 
-const CodeEditor = registerCustomTag("code-editor", {
-	async onconnected() {
-		let source = this.getAttribute("source") || "";
-		const source_type = this.getAttribute("source-type") || detectSourceType(source);
+async function processSource(source_attr) {
+	let source = source_attr || "";
+	const source_type = detectSourceType(source);
 
-		if (source_type === "url") {
-			const res = await fetch(source);
-			source = res.ok ? await res.text() : "// Failed to fetch: " + source;
-		} else if (source_type === "base64") {
-			try {
-				source = decodeBase64(source);
-			} catch (error) {
-				// Failed to decode, treat as raw
-				console.warn("Base64 decode failed, treating as raw source");
-			}
+	if (source_type === "url") {
+		const res = await fetch(source);
+		source = res.ok ? await res.text() : "// Failed to fetch: " + source;
+	} else if (source_type === "base64") {
+		try {
+			source = decodeBase64(source);
+		} catch (error) {
+			console.warn("Base64 decode failed, treating as raw source");
 		}
-		// else: raw source, use as-is
+	}
 
+	return source;
+}
+
+const CodeEditor = registerCustomTag("code-editor", {
+	attrs: ["source"],
+
+	async onconnected() {
+		const source_attr = this.getAttribute("source") || "";
+		const source = await processSource(source_attr);
 		const language = this.getAttribute("language") || "plaintext";
 		const theme = this.getAttribute("theme") || "dark";
+
+		this.value = source;
 
 		this.editor = createEditor({
 			host: this,
 			language,
 			source,
 			theme,
-			onInput: (new_value) => {
-				this.dispatchEvent(new CustomEvent("input"));
+			onChange: (new_value) => {
 				this.value = new_value;
+				this.dispatchEvent(new CustomEvent("change"));
 			},
 		});
+	},
+
+	async onattributechanged(name, old_value, new_value) {
+		if (name === "source" && this.editor && old_value !== new_value) {
+			const source = await processSource(new_value || "");
+			this.value = source;
+			updateEditorContent(this.editor, source);
+		}
+	},
+
+	ondisconnected() {
+		if (this.editor) {
+			this.editor.destroy();
+		}
 	},
 });
 
