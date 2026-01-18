@@ -47,6 +47,17 @@ function sellCandy() {
 	cash += 2;
 }
 
+function generatePassiveIncome() {
+	const random_income = Math.floor(Math.random() * 16); // 0 to 15
+	cash += random_income;
+}
+
+function saveInBank() {
+	if (cash < 100) return;
+	bank += cash;
+	cash = 0;
+}
+
 function resetGame() {
 	localStorage.removeItem("student_debt_game");
 	location.reload();
@@ -93,11 +104,10 @@ setInterval(() => {
 	saveGameState();
 }, 100);
 
-function saveInBank() {
-	if (cash < 100) return;
-	bank += cash;
-	cash = 0;
-}
+// Generate passive income every second
+setInterval(() => {
+	generatePassiveIncome();
+}, 1000);
 
 //
 // Layout
