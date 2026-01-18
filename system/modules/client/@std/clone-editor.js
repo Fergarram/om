@@ -17,6 +17,7 @@ let doc_clone = null;
 let preview_ref = { current: null };
 let preview_html = null;
 let preview_html_blob_url = null;
+let split_view_enabled = false;
 
 //
 // Main Component
@@ -110,7 +111,7 @@ export async function CloneEditor(document_url) {
 				),
 				PreviewTabButton(),
 				DocumentTabButton(),
-				// SyncTabButton(),
+				SyncTabButton(),
 				...ModuleSection("scripts", "scripts"),
 				...ModuleSection("styles", "styles"),
 				...ModuleSection("media", "media"),
@@ -125,12 +126,12 @@ export async function CloneEditor(document_url) {
 				}
 			`,
 		}),
-		PreviewPanel(),
 		DocumentPanel(),
-		// SyncPanel(),
+		SyncPanel(),
 		...initial_modules.scripts.map((mod) => EditorPanel("scripts", mod)),
 		...initial_modules.styles.map((mod) => EditorPanel("styles", mod)),
 		...initial_modules.media.map((mod) => EditorPanel("media", mod)),
+		PreviewPanel(),
 	);
 }
 
@@ -349,12 +350,28 @@ function Button(...args) {
 					background: rgba(255, 255, 255, 0.15);
 				}
 
+				&:active {
+					background: rgba(255, 255, 255, 0.1);
+				}
+
 				&:hover {
 					background: rgba(255, 255, 255, 0.125);
 				}
 
-				&:active {
+				&[toggle="false"] {
+					background: rgba(255, 255, 255, 0);
+				}
+
+				&[toggle="true"] {
+					background: rgba(255, 255, 255, 0.125);
+				}
+
+				&[toggle]:hover {
 					background: rgba(255, 255, 255, 0.1);
+				}
+
+				&[toggle]:active {
+					background: rgba(255, 255, 255, 0.05);
 				}
 
 				& icon {
@@ -372,12 +389,6 @@ function PreviewTabButton() {
 		{
 			onclick() {
 				current_module_tab = "preview";
-
-				if (doc_clone && preview_ref.current) {
-					updatePreviewHtml();
-					preview_ref.current.removeAttribute("src");
-					preview_ref.current.srcdoc = preview_html;
-				}
 			},
 			selected: () => current_module_tab === "preview",
 			styles: css`
@@ -540,6 +551,7 @@ function EditorPanel(mod_type, mod) {
 			onchange() {
 				if (mod.metadata && mod.metadata.generated) return;
 				updateDocCloneModule(mod_type, mod.name, this.value);
+				updatePreviewHtml();
 			},
 			style: css`
 				position: absolute;
@@ -559,9 +571,12 @@ function PreviewPanel() {
 	return $.div(
 		{
 			style: () => css`
-				display: ${current_module_tab === "preview" ? "block" : "none"};
-
 				--titlebar-height: 32px;
+				display: ${!split_view_enabled
+					? current_module_tab === "preview"
+						? "block"
+						: "none"
+					: "block"};
 			`,
 			styles: css`
 				& {
@@ -631,9 +646,15 @@ function PreviewPanel() {
 			}),
 			Button(
 				{
-					onclick() {},
+					toggle: () => split_view_enabled,
+					onclick() {
+						split_view_enabled = !split_view_enabled;
+						current_module_tab = split_view_enabled ? "document" : "preview";
+					},
 				},
-				"split view",
+				$.icon({
+					name: "add_column_left",
+				}),
 			),
 		),
 		$.iframe({
@@ -1327,4 +1348,9 @@ function updatePreviewHtml() {
 	const blob = new Blob([preview_html], { type: "text/html" });
 
 	preview_html_blob_url = URL.createObjectURL(blob);
+
+	if (preview_ref.current) {
+		preview_ref.current.removeAttribute("src");
+		preview_ref.current.srcdoc = preview_html;
+	}
 }
