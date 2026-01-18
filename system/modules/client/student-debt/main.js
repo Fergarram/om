@@ -18,6 +18,7 @@ let passive_income_interval = 1000;
 let stress_level = 0; // 0 to 100
 let click_worth = 2;
 let click_button_label = "Sell candy";
+let next_payment_due_day = 30;
 
 let days_passed = 0;
 let months_passed = 0;
@@ -100,9 +101,28 @@ function updateGameTime() {
 	const days_elapsed = Math.floor(elapsed_ms / MILLISECONDS_PER_DAY);
 
 	if (days_elapsed > 0) {
+		const previous_days = days_passed;
 		days_passed += days_elapsed;
 		months_passed = Math.floor(days_passed / 30);
 		years_passed = Math.floor(days_passed / 365);
+
+		// Check if we've crossed a payment due date
+		if (days_passed >= next_payment_due_day && previous_days < next_payment_due_day) {
+			const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
+
+			// Check if player can pay from bank
+			if (bank >= monthly_payment) {
+				bank -= monthly_payment;
+				debt -= monthly_payment;
+			} else {
+				// Punishment for missing payment
+				debt = debt * 1.025; // Increase debt by 2.5%
+				bank -= 500; // Penalty
+			}
+
+			// Set next payment due date
+			next_payment_due_day += 30;
+		}
 
 		last_update_time = current_time - (elapsed_ms % MILLISECONDS_PER_DAY);
 	}
@@ -141,6 +161,7 @@ function saveGameState() {
 		click_button_label,
 		click_worth,
 		passive_income_interval,
+		next_payment_due_day,
 		checked_ideas: ideas.map((idea) => idea.checked),
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
@@ -159,6 +180,7 @@ function loadGameState() {
 		last_update_time = state.last_update_time;
 		stress_level = state.stress_level || 0;
 		passive_income_interval = state.passive_income_interval || 1000;
+		next_payment_due_day = state.next_payment_due_day || 30;
 
 		// Restore checked ideas state and re-apply their effects
 		if (state.checked_ideas) {
@@ -274,7 +296,11 @@ document.body.replaceChildren(
 				),
 				$.p("Monthly payment:"),
 				$.p(
-					$.span({ class: "text-red-700" }, "$", () => bank),
+					$.span(
+						{ class: () => (bank < INITIAL_DEBT / TOTAL_YEARS / 12 ? "text-red-700" : "") },
+						"$",
+						() => bank,
+					),
 					" / ",
 					"$",
 					INITIAL_DEBT / TOTAL_YEARS / 12,
