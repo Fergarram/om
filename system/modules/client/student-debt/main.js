@@ -277,10 +277,19 @@ document.body.replaceChildren(
 					class: "grid grid-cols-2",
 				},
 				$.div(
-					$.p(() => `Days passed: ${days_passed} / 30`),
-					$.p(() => `Months passed: ${months_passed} / 12`),
-					$.p(() => `Years passed: ${years_passed} / ${TOTAL_YEARS}`),
-					$.br(),
+					$.p("Monthly payment:"),
+					$.p(
+						$.span(
+							{
+								class: () => (bank < INITIAL_DEBT / TOTAL_YEARS / 12 ? "text-red-700" : ""),
+							},
+							"$",
+							() => bank,
+						),
+						" / ",
+						"$",
+						INITIAL_DEBT / TOTAL_YEARS / 12,
+					),
 				),
 				$.div(
 					$.p("Stress meter:"),
@@ -294,17 +303,22 @@ document.body.replaceChildren(
 						},
 					),
 				),
-				$.p("Monthly payment:"),
-				$.p(
-					$.span(
-						{ class: () => (bank < INITIAL_DEBT / TOTAL_YEARS / 12 ? "text-red-700" : "") },
-						"$",
-						() => bank,
-					),
-					" / ",
-					"$",
-					INITIAL_DEBT / TOTAL_YEARS / 12,
-				),
+			),
+			$.br(),
+			$.div(
+				{
+					class: "grid grid-cols-2",
+				},
+				$.p(() => `Next payment due in:`),
+				$.p(() => `${next_payment_due_day - days_passed} days`),
+				$.p(() => `Payments left:`),
+				$.p(() => {
+					const total_payments = TOTAL_YEARS * 12;
+					const payments_made = Math.floor(days_passed / 30);
+					return `${total_payments - payments_made}`;
+				}),
+				$.p(() => `Years of debt left:`),
+				$.p(() => TOTAL_YEARS - years_passed),
 			),
 		),
 		PageColumn(
