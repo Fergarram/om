@@ -8,44 +8,84 @@ const $ = useTags();
 
 const INITIAL_DEBT = 1_500_000;
 const TOTAL_YEARS = 50;
+const MILLISECONDS_PER_DAY = 10000; // 3 seconds = 1 day
 
 let cash = 0;
 let debt = INITIAL_DEBT;
 let bank = 50;
+let passive_income_functions = [];
+let passive_income_interval = 1000;
 let stress_level = 0; // 0 to 100
+let click_worth = 2;
+let click_button_label = "Sell candy";
 
 let days_passed = 0;
 let months_passed = 0;
 let years_passed = 0;
 
 let last_update_time = Date.now();
-const MILLISECONDS_PER_DAY = 10000; // 3 seconds = 1 day
 
 const ideas = [
 	{
+		visible: () => true,
 		description: "Sell candy on the street",
 		checked: true,
 		isPurchasable: () => true,
-		implementIdea: () => {},
+		purchase: () => {},
+		effect: () => {},
 		notes: "",
 	},
 	{
+		visible: () => true,
 		description: "Sell homemade cookies for $4 each",
 		checked: false,
 		isPurchasable: () => bank >= 120,
-		implementIdea: () => {
+		purchase: () => {
 			bank -= 120;
+		},
+		effect: () => {
+			click_worth = 4;
+			click_button_label = "Sell cookies";
 		},
 		notes: "Requires $120 in bank",
 	},
 	{
+		visible: () => true,
 		description: "Buy a mini vending machine for $500",
 		checked: false,
 		isPurchasable: () => bank >= 500,
-		implementIdea: () => {
+		purchase: () => {
 			bank -= 500;
 		},
+		effect: () => {
+			passive_income_functions.push(() => {
+				const random_income = Math.floor(Math.random() * 16);
+				cash += random_income;
+			});
+		},
 		notes: "Generate passive income",
+	},
+	{
+		visible: () => true,
+		description: "Get a weed prescription for $1,500",
+		checked: false,
+		isPurchasable: () => bank >= 1500,
+		purchase: () => {
+			bank -= 1500;
+		},
+		effect: () => {},
+		notes: "Relaxation and new ideas",
+	},
+	{
+		visible: () => ideas[3].checked,
+		description: "Sell magic cookies for $20 each",
+		checked: false,
+		isPurchasable: () => bank >= 1500,
+		purchase: () => {
+			bank -= 1500;
+		},
+		effect: () => {},
+		notes: "Could go wrong, but let's see",
 	},
 ];
 
@@ -73,12 +113,7 @@ function updateGameTime() {
 }
 
 function sellCandy() {
-	cash += 2;
-}
-
-function generatePassiveIncome() {
-	const random_income = Math.floor(Math.random() * 16); // 0 to 15
-	cash += random_income;
+	cash += click_worth;
 }
 
 function saveInBank() {
@@ -103,6 +138,10 @@ function saveGameState() {
 		years_passed,
 		last_update_time,
 		stress_level,
+		click_button_label,
+		click_worth,
+		passive_income_interval,
+		checked_ideas: ideas.map((idea) => idea.checked),
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
 }
@@ -119,6 +158,22 @@ function loadGameState() {
 		years_passed = state.years_passed;
 		last_update_time = state.last_update_time;
 		stress_level = state.stress_level || 0;
+		passive_income_interval = state.passive_income_interval || 1000;
+
+		// Restore checked ideas state and re-apply their effects
+		if (state.checked_ideas) {
+			state.checked_ideas.forEach((checked, index) => {
+				if (checked && index < ideas.length) {
+					ideas[index].checked = checked;
+					// Re-apply effects only (no cost)
+					ideas[index].effect();
+				}
+			});
+		}
+
+		// Override these after reapplying effects
+		click_button_label = state.click_button_label || "Sell candy";
+		click_worth = state.click_worth || 2;
 
 		// Calculate time passed since last save
 		updateGameTime();
@@ -135,9 +190,9 @@ setInterval(() => {
 }, 100);
 
 // Generate passive income every second
-// setInterval(() => {
-// 	generatePassiveIncome();
-// }, 1000);
+setInterval(() => {
+	passive_income_functions.forEach((fn) => fn());
+}, passive_income_interval);
 
 //
 // Layout
@@ -167,7 +222,7 @@ document.body.replaceChildren(
 					{
 						onclick: sellCandy,
 					},
-					"Sell candy",
+					() => click_button_label,
 				),
 				$.div(
 					{
@@ -231,11 +286,23 @@ document.body.replaceChildren(
 			$.br(),
 			...ideas.map((idea, i) => {
 				return $.div(
+					{
+						style: () => (!idea.visible() ? "display: none" : ""),
+					},
 					() => {
 						if (idea.checked) {
 							return $.p({ class: "line-through decoration-2" }, `- ${idea.description}`);
 						} else if (idea.isPurchasable()) {
-							return $.button(`- ${idea.description}`);
+							return $.button(
+								{
+									onclick() {
+										idea.checked = true;
+										idea.purchase();
+										idea.effect();
+									},
+								},
+								`- ${idea.description}`,
+							);
 						} else {
 							return $.p(`- ${idea.description}`);
 						}
