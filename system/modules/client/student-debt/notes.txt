@@ -1,0 +1,79 @@
+NAME
+       debtclicker — incremental clicker about paying debt by subtraction
+
+SYNOPSIS
+       You start with a huge debt.
+       Clicking sells items.
+       Time advances.
+       If you fail to pay the minimum, things get worse.
+
+TIME SCALE
+       1 day        = 3 seconds
+       1 month      = 90 seconds
+       1 year       ≈ 18.25 minutes
+       20 years     ≈ 6 hours
+
+CORE VARIABLES
+       debt         Large negative number (e.g. -300k to -500k)
+       cash         Liquid money
+       bank         Locked savings used for upgrades
+       stress       Risk multiplier
+       month        Advances every 90s
+
+CORE LOOP
+       Click        → sell goods → +$1 per click (base)
+       Month tick   → interest added to debt
+                   → minimum payment checked
+                   → stress + unlucky events rolled
+
+CLICKING
+       ~1000 clicks per minute max
+       ≈ $1,500 per month from pure clicking
+       Clicking alone can pay debt in theory
+
+MONTHLY MINIMUM
+       Set slightly below max click income:
+           $900–$1,200 early game
+       Missing minimum:
+           tax penalty
+           stress increase
+
+BANK
+       Cash moved to bank:
+           cannot pay debt
+           unlocks upgrades
+       Protects money from robbery
+
+UPGRADES
+       better candy              +click value
+       home-made cookies         +click value, monthly cost
+       magic cookies             big +click, +stress, legal risk
+       t-shirts                  passive income
+       little brother seller     salary OR commission
+       vending machine           repeatable passive income,
+                                 increases monthly obligations
+
+STRESS
+       Increases event chance and severity
+       Reduces click efficiency
+       Never blocks clicking completely
+
+UNLUCKY EVENTS (MONTHLY)
+       caught selling magic cookies
+           fine, income disabled, stress spike
+       robbed
+           lose % of cash (bank safe)
+       car accident
+           cash loss or forced monthly expense
+       getting sick
+           reduced or disabled clicking for N months
+
+DESIGN CONSTRAINTS
+       Clicking must always work
+       No hard softlocks
+       Progress is subtraction only
+       Zero debt is not the end
+
+END
+       The player doesn’t escape the system.
+       They only manage it better.
