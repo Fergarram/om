@@ -571,7 +571,61 @@ document.body.replaceChildren(
 					class: "flex flex-col",
 				},
 				$.br(),
+				$.br(),
 				$.h2("EVENTS"),
+				$.br(),
+				$.div(
+					{
+						class: "flex gap-8",
+					},
+					$.p("4:46 AM"),
+					$.p(
+						{
+							class: "whitespace-normal",
+						},
+						"You were walking late at night, someone jumped in front with a knife. You lost all your cash.",
+					),
+				),
+				$.br(),
+				$.div(
+					{
+						class: "flex gap-8",
+					},
+					$.p("4:46 AM"),
+					$.p(
+						{
+							class: "whitespace-normal",
+						},
+						"You credit card got cloned. You got charged with $1,200.",
+					),
+				),
+				$.br(),
+				$.div(
+					{
+						class: "flex gap-8",
+					},
+					$.p("4:46 AM"),
+					$.p(
+						{
+							class: "whitespace-normal",
+						},
+						"You had a small car accident and now have to pay 50% of your cash to bribe out of it.",
+					),
+				),
+				$.br(),
+				$.div(
+					{
+						class: "flex gap-8",
+					},
+					$.p("4:46 AM"),
+					$.p(
+						{
+							class: "whitespace-normal",
+						},
+						"You were looking down while walking and saw 100 bucks.",
+					),
+				),
+				$.br(),
 			),
 		),
 		...[1, 2, 3, 4, 5, 6].map(() => PageColumn()),
