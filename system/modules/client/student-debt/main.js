@@ -20,7 +20,6 @@ let click_worth = 2;
 let click_button_label = "Sell candy";
 let next_payment_due_day = 30;
 let has_weed_prescription = false;
-let vending_machines = 0;
 let vending_machine_base_cost = 500;
 
 let days_passed = 0;
@@ -28,6 +27,42 @@ let months_passed = 0;
 let years_passed = 0;
 
 let last_update_time = Date.now();
+
+const vending_machine_types = [
+	{
+		name: "Mini vending machine",
+		description: "A few good bucks every once in a while",
+		min_income: 1,
+		max_income: 15,
+	},
+	{
+		name: "Snack dispenser",
+		description: "Placed in front of a school",
+		min_income: 5,
+		max_income: 25,
+	},
+	{
+		name: "Coffee machine",
+		description: "Near the train station",
+		min_income: 10,
+		max_income: 40,
+	},
+	{
+		name: "Combo machine",
+		description: "Drinks and snacks combo",
+		min_income: 15,
+		max_income: 60,
+	},
+	{
+		name: "Premium kiosk",
+		description: "High-end goods for high-end prices",
+		min_income: 25,
+		max_income: 100,
+	},
+];
+
+// Each owned machine: { type_index: number, accumulated: number }
+let owned_vending_machines = [];
 
 const ideas = [
 	{
@@ -62,10 +97,9 @@ const ideas = [
 			bank -= 500;
 		},
 		effect: () => {
-			vending_machines++;
-			passive_income_functions.push(() => {
-				const random_income = Math.floor(Math.random() * 16);
-				cash += random_income;
+			owned_vending_machines.push({
+				type_index: 0,
+				accumulated: 0,
 			});
 		},
 		notes: "Generate passive income",
@@ -168,22 +202,43 @@ function saveInBank() {
 }
 
 function getNextVendingMachineCost() {
-	return Math.floor(vending_machine_base_cost * Math.pow(1.5, vending_machines));
+	return Math.floor(vending_machine_base_cost * Math.pow(1.5, owned_vending_machines.length));
+}
+
+function getNextVendingMachineType() {
+	return owned_vending_machines.length;
 }
 
 function buyVendingMachine() {
+	if (owned_vending_machines.length >= 5) return;
 	const cost = getNextVendingMachineCost();
-	if (bank < cost || vending_machines >= 5) return;
+	if (bank < cost) return;
 
 	bank -= cost;
-	vending_machines++;
-
-	passive_income_functions.push(() => {
-		const random_income = Math.floor(Math.random() * 16);
-		cash += random_income;
+	owned_vending_machines.push({
+		type_index: getNextVendingMachineType(),
+		accumulated: 0,
 	});
 
 	saveGameState();
+}
+
+function collectFromMachine(index) {
+	if (index >= owned_vending_machines.length) return;
+	if (owned_vending_machines[index].accumulated <= 0) return;
+
+	cash += owned_vending_machines[index].accumulated;
+	owned_vending_machines[index].accumulated = 0;
+	saveGameState();
+}
+
+function updateVendingMachines() {
+	owned_vending_machines.forEach((machine) => {
+		const machine_type = vending_machine_types[machine.type_index];
+		const income_range = machine_type.max_income - machine_type.min_income + 1;
+		const random_income = machine_type.min_income + Math.floor(Math.random() * income_range);
+		machine.accumulated += random_income;
+	});
 }
 
 async function resetGame() {
@@ -207,7 +262,7 @@ function saveGameState() {
 		passive_income_interval,
 		next_payment_due_day,
 		has_weed_prescription,
-		vending_machines,
+		owned_vending_machines,
 		checked_ideas: ideas.map((idea) => idea.checked),
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
@@ -228,27 +283,18 @@ function loadGameState() {
 		passive_income_interval = state.passive_income_interval || 1000;
 		next_payment_due_day = state.next_payment_due_day || 30;
 		has_weed_prescription = state.has_weed_prescription || false;
-		vending_machines = state.vending_machines || 0;
+		owned_vending_machines = state.owned_vending_machines || [];
 
 		// Restore checked ideas state and re-apply their effects
 		if (state.checked_ideas) {
 			state.checked_ideas.forEach((checked, index) => {
 				if (checked && index < ideas.length) {
 					ideas[index].checked = checked;
-					// Re-apply effects only for non-vending machine ideas
+					// Skip vending machine idea effect - machines already restored
 					if (index !== 2) {
 						ideas[index].effect();
 					}
 				}
-			});
-		}
-
-		// Restore passive income functions based on vending machines count
-		passive_income_functions = [];
-		for (let i = 0; i < vending_machines; i++) {
-			passive_income_functions.push(() => {
-				const random_income = Math.floor(Math.random() * 16);
-				cash += random_income;
 			});
 		}
 
@@ -270,9 +316,14 @@ setInterval(() => {
 	saveGameState();
 }, 100);
 
-// Generate passive income every second
+// Generate passive income every second (for future ideas)
 setInterval(() => {
 	passive_income_functions.forEach((fn) => fn());
+}, passive_income_interval);
+
+// Update vending machines every second
+setInterval(() => {
+	updateVendingMachines();
 }, passive_income_interval);
 
 //
@@ -339,27 +390,64 @@ document.body.replaceChildren(
 					class: () => (!ideas[2].checked ? "hidden" : ""),
 				},
 				$.h2("VENDING MACHINES"),
+				$.p({ class: "opacity-40" }, "Easy money $_$"),
+				$.br(),
+				...[0, 1, 2, 3, 4].map((index) => {
+					return $.div(
+						{
+							style: () => (index >= owned_vending_machines.length ? "display: none" : ""),
+							class: "grid grid-cols-2",
+						},
+						$.div(
+							$.p(() => {
+								if (index >= owned_vending_machines.length) return "";
+								return vending_machine_types[owned_vending_machines[index].type_index].name;
+							}),
+							$.p({ class: "opacity-40 " }, () => {
+								if (index >= owned_vending_machines.length) return "";
+								return vending_machine_types[owned_vending_machines[index].type_index]
+									.description;
+							}),
+							$.br(),
+						),
+						$.button(
+							{
+								disabled: () => {
+									if (index >= owned_vending_machines.length) return "true";
+									return owned_vending_machines[index].accumulated <= 0
+										? "true"
+										: undefined;
+								},
+								onclick: () => collectFromMachine(index),
+							},
+							() => {
+								if (index >= owned_vending_machines.length) return "Collect $0";
+								return `Collect $${owned_vending_machines[index].accumulated}`;
+							},
+						),
+					);
+				}),
 				$.br(),
 				$.div(
 					{
-						class: "grid grid-cols-2",
+						style: () => (owned_vending_machines.length >= 5 ? "display: none" : ""),
 					},
-					$.div(
-						$.p(() => `Mini vending machine (${vending_machines}/5)`),
-						$.p({ class: "opacity-40" }, "Gives a few bucks every once in a while"),
-					),
+					$.p({ class: "opacity-40 " }, () => {
+						const next_type = getNextVendingMachineType();
+						if (next_type >= 5) return "";
+						return `Next: ${vending_machine_types[next_type].name}`;
+					}),
 				),
-				$.br(),
 				$.button(
 					{
 						disabled: () =>
-							vending_machines >= 5 || bank < getNextVendingMachineCost()
+							owned_vending_machines.length >= 5 || bank < getNextVendingMachineCost()
 								? "true"
 								: undefined,
 						onclick: buyVendingMachine,
 					},
 					() =>
-						vending_machines >= 5
+						owned_vending_machines.length >= 5
 							? "Max machines acquired"
 							: `Acquire new machine for $${getNextVendingMachineCost()}`,
 				),
@@ -406,15 +494,15 @@ document.body.replaceChildren(
 				{
 					class: "grid grid-cols-2",
 				},
-				$.p(() => `Next payment due in:`),
+				$.p(`Next payment due in:`),
 				$.p(() => `${next_payment_due_day - days_passed} days`),
-				$.p(() => `Payments left:`),
+				$.p(`Payments left:`),
 				$.p(() => {
 					const total_payments = TOTAL_YEARS * 12;
 					const payments_made = Math.floor(days_passed / 30);
 					return `${total_payments - payments_made}`;
 				}),
-				$.p(() => `Years of debt left:`),
+				$.p(`Years of debt left:`),
 				$.p(() => TOTAL_YEARS - years_passed),
 			),
 		),
