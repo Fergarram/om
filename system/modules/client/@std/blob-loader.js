@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.98.0
+// BLOB LOADER v0.99.0
 // by fergarram
 //
 
@@ -25,6 +25,20 @@
 		script: ["type", "encode", "autorun"],
 		style: ["blob-module"],
 		media: ["href", "type", "source"],
+		font: [
+			"font-style",
+			"font-weight",
+			"font-stretch",
+			"font-display",
+			"unicode-range",
+			"font-variant",
+			"font-feature-settings",
+			"font-variation-settings",
+			"ascent-override",
+			"descent-override",
+			"line-gap-override",
+			"size-adjust",
+		],
 	};
 	const SKIP_CACHE_CHECK = localStorage.getItem("BLOB_LOADER_SKIP_CACHE") ? true : false;
 
@@ -400,7 +414,7 @@
 					});
 
 					// Create @font-face CSS with the data URL
-					final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+					final_css = buildFontFaceCss(font_name, data_url, style);
 					blob_style_sources.set(font_name, final_css);
 
 					if (remote_url) {
@@ -426,7 +440,7 @@
 						});
 
 						// Create @font-face CSS with the data URL
-						final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+						final_css = buildFontFaceCss(font_name, data_url, style);
 						blob_style_sources.set(font_name, final_css);
 
 						if (remote_url) {
@@ -459,7 +473,7 @@
 						});
 
 						// Create @font-face CSS
-						final_css = `@font-face {\n\tfont-family: '${font_name}';\n\tsrc: url('${data_url}');\n\tfont-weight: 100 700;\n}`;
+						final_css = buildFontFaceCss(font_name, data_url, style);
 						blob_style_sources.set(font_name, final_css);
 						remote_styles_hrefs.set(font_name, remote_url);
 					}
@@ -1901,12 +1915,27 @@
 	}
 
 	function extractCustomMetadata(element, module_type) {
-		const known = new Set([...KNOWN_ATTRIBUTES.shared, ...(KNOWN_ATTRIBUTES[module_type] || [])]);
+		const blob_module_attr = element.getAttribute("blob-module");
+		const is_font = blob_module_attr === "font";
+
+		let known_set;
+		if (is_font) {
+			known_set = new Set([
+				...KNOWN_ATTRIBUTES.shared,
+				...KNOWN_ATTRIBUTES.style,
+				...KNOWN_ATTRIBUTES.font,
+			]);
+		} else {
+			known_set = new Set([
+				...KNOWN_ATTRIBUTES.shared,
+				...(KNOWN_ATTRIBUTES[module_type] || []),
+			]);
+		}
 
 		const metadata = {};
 
 		Array.from(element.attributes).forEach((attr) => {
-			if (!known.has(attr.name)) {
+			if (!known_set.has(attr.name)) {
 				metadata[attr.name] = attr.value;
 			}
 		});
@@ -1977,5 +2006,27 @@
 			);
 			return response;
 		}
+	}
+
+	function buildFontFaceCss(font_name, data_url, element) {
+		let css = `@font-face {\n`;
+		css += `\tfont-family: '${font_name}';\n`;
+		css += `\tsrc: url('${data_url}');\n`;
+
+		const font_attrs = KNOWN_ATTRIBUTES.font;
+		font_attrs.forEach((attr) => {
+			const value = element.getAttribute(attr);
+			if (value !== null && value !== "") {
+				css += `\t${attr}: ${value};\n`;
+			}
+		});
+
+		// Default font-weight if not specified
+		if (!element.hasAttribute("font-weight")) {
+			css += `\tfont-weight: 100 700;\n`;
+		}
+
+		css += `}`;
+		return css;
 	}
 })();
