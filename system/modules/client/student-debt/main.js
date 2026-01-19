@@ -19,6 +19,8 @@ let stress_level = 0; // 0 to 100
 let click_worth = 2;
 let click_button_label = "Sell candy";
 let next_payment_due_day = 30;
+let has_weed_prescription = false;
+
 
 let days_passed = 0;
 let months_passed = 0;
@@ -74,18 +76,23 @@ const ideas = [
 		purchase: () => {
 			bank -= 1500;
 		},
-		effect: () => {},
+		effect: () => {
+			has_weed_prescription = true;
+		},
 		notes: "Relaxation and new ideas",
 	},
 	{
 		visible: () => ideas[3].checked,
 		description: "Sell magic cookies for $20 each",
 		checked: false,
-		isPurchasable: () => bank >= 1500,
+		isPurchasable: () => bank >= 100,
 		purchase: () => {
-			bank -= 1500;
+			bank -= 100;
 		},
-		effect: () => {},
+		effect: () => {
+			click_worth = 20;
+			click_button_label = "Sell magic cookies";
+		},
 		notes: "Could go wrong, but let's see",
 	},
 ];
@@ -114,6 +121,7 @@ function updateGameTime() {
 			if (bank >= monthly_payment) {
 				bank -= monthly_payment;
 				debt -= monthly_payment;
+				stress_level = 10; // Reset stress to 10% after payment
 			} else {
 				// Punishment for missing payment
 				debt = debt * 1.025; // Increase debt by 2.5%
@@ -129,7 +137,22 @@ function updateGameTime() {
 
 	// Update stress level based on current day in month
 	const day_in_month = days_passed % 30;
-	stress_level = Math.floor((day_in_month / 30) * 100);
+	const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
+
+	// Calculate base stress growth
+	let stress_growth_rate = 1.0;
+
+	// If player has enough money in bank, stress grows half as fast
+	if (bank >= monthly_payment) {
+		stress_growth_rate *= 0.5;
+	}
+
+	// If player has weed prescription, cap stress growth at 50%
+	if (has_weed_prescription) {
+		stress_growth_rate = Math.min(stress_growth_rate, 0.5);
+	}
+
+	stress_level = Math.floor((day_in_month / 30) * 100 * stress_growth_rate);
 }
 
 function sellCandy() {
@@ -162,6 +185,7 @@ function saveGameState() {
 		click_worth,
 		passive_income_interval,
 		next_payment_due_day,
+		has_weed_prescription,
 		checked_ideas: ideas.map((idea) => idea.checked),
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
@@ -181,6 +205,7 @@ function loadGameState() {
 		stress_level = state.stress_level || 0;
 		passive_income_interval = state.passive_income_interval || 1000;
 		next_payment_due_day = state.next_payment_due_day || 30;
+		has_weed_prescription = state.has_weed_prescription || false;
 
 		// Restore checked ideas state and re-apply their effects
 		if (state.checked_ideas) {
@@ -267,6 +292,10 @@ document.body.replaceChildren(
 					class: "text-sm text-gray-600",
 				},
 				"Reset Game",
+			),
+			$.br(),
+			$.h2(
+				"VENDING MACHINES"
 			),
 		),
 		PageColumn(
