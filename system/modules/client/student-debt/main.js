@@ -34,30 +34,35 @@ const vending_machine_types = [
 		description: "A few good bucks every once in a while",
 		min_income: 1,
 		max_income: 15,
+		interval_ticks: 1,
 	},
 	{
 		name: "Snack dispenser",
 		description: "Placed in front of a school",
 		min_income: 5,
 		max_income: 25,
+		interval_ticks: 2,
 	},
 	{
 		name: "Coffee machine",
 		description: "Near the train station",
 		min_income: 10,
 		max_income: 40,
+		interval_ticks: 3,
 	},
 	{
 		name: "Combo machine",
 		description: "Drinks and snacks combo",
 		min_income: 15,
 		max_income: 60,
+		interval_ticks: 5,
 	},
 	{
 		name: "Premium kiosk",
 		description: "High-end goods for high-end prices",
 		min_income: 25,
 		max_income: 100,
+		interval_ticks: 8,
 	},
 ];
 
@@ -100,6 +105,7 @@ const ideas = [
 			owned_vending_machines.push({
 				type_index: 0,
 				accumulated: 0,
+				ticks: 0,
 			});
 		},
 		notes: "Generate passive income",
@@ -218,6 +224,7 @@ function buyVendingMachine() {
 	owned_vending_machines.push({
 		type_index: getNextVendingMachineType(),
 		accumulated: 0,
+		ticks: 0,
 	});
 
 	saveGameState();
@@ -235,9 +242,14 @@ function collectFromMachine(index) {
 function updateVendingMachines() {
 	owned_vending_machines.forEach((machine) => {
 		const machine_type = vending_machine_types[machine.type_index];
-		const income_range = machine_type.max_income - machine_type.min_income + 1;
-		const random_income = machine_type.min_income + Math.floor(Math.random() * income_range);
-		machine.accumulated += random_income;
+		machine.ticks = (machine.ticks || 0) + 1;
+
+		if (machine.ticks >= machine_type.interval_ticks) {
+			const income_range = machine_type.max_income - machine_type.min_income + 1;
+			const random_income = machine_type.min_income + Math.floor(Math.random() * income_range);
+			machine.accumulated += random_income;
+			machine.ticks = 0;
+		}
 	});
 }
 
@@ -440,16 +452,14 @@ document.body.replaceChildren(
 				),
 				$.button(
 					{
+						class: () => (owned_vending_machines.length >= 5 ? "hidden!" : ""),
 						disabled: () =>
 							owned_vending_machines.length >= 5 || bank < getNextVendingMachineCost()
 								? "true"
 								: undefined,
 						onclick: buyVendingMachine,
 					},
-					() =>
-						owned_vending_machines.length >= 5
-							? "Max machines acquired"
-							: `Acquire new machine for $${getNextVendingMachineCost()}`,
+					() => `Acquire new machine for $${getNextVendingMachineCost()}`,
 				),
 			),
 		),
