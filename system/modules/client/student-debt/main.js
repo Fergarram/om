@@ -32,7 +32,7 @@ let last_update_time = Date.now();
 const event_types = [
 	{
 		description:
-			"You were walking late at night, someone jumped in front with a knife. You lost all your cash.",
+			"I was walking late at night, someone jumped in front of me with a knife. I lost all my cash.",
 		min_hour: 22,
 		max_hour: 4,
 		is_positive: false,
@@ -41,7 +41,7 @@ const event_types = [
 		},
 	},
 	{
-		description: "Your credit card got cloned. You got charged with $1,200.",
+		description: "My credit card got cloned. I got charged $1,200.",
 		min_hour: 0,
 		max_hour: 23,
 		is_positive: false,
@@ -51,7 +51,7 @@ const event_types = [
 	},
 	{
 		description:
-			"You had a small car accident and now have to pay 50% of your cash to bribe out of it.",
+			"I had a small car accident and now have to pay 50% of my cash to bribe my way out of it.",
 		min_hour: 8,
 		max_hour: 18,
 		is_positive: false,
@@ -60,7 +60,7 @@ const event_types = [
 		},
 	},
 	{
-		description: "You were looking down while walking and saw 100 bucks.",
+		description: "I was looking down while walking and found 100 bucks.",
 		min_hour: 7,
 		max_hour: 21,
 		is_positive: true,
@@ -455,7 +455,7 @@ setInterval(() => {
 document.body.replaceChildren(
 	$.main(
 		{
-			class: "flex whitespace-nowrap w-full overflow-scroll min-h-screen bg-neutral-200",
+			class: "flex whitespace-nowrap min-w-fit min-h-screen bg-neutral-200",
 		},
 		PageColumn(
 			$.h1("HOW THE FUCK WILL I PAY THIS?"),
@@ -710,10 +710,83 @@ function PageColumn(...children) {
 		{
 			class: "pl-6 min-w-[32rem] max-w-[32rem] pt-8",
 			style: `
-			background-image: url(/modules/student-debt/bg.png);
+			background-image: var(--BM-paper-bg);
 			background-size: 100%;
 		`,
 		},
 		...children,
 	);
 }
+
+//
+// Drag to Scroll
+//
+
+function initDragScroll() {
+	let is_dragging = false;
+	let start_x = 0;
+	let start_y = 0;
+	let scroll_start_x = 0;
+	let scroll_start_y = 0;
+
+	function isInteractiveElement(element) {
+		if (!element) return false;
+
+		const tag = element.tagName.toLowerCase();
+		if (tag === "button" || tag === "a" || tag === "input" || tag === "textarea") {
+			return true;
+		}
+
+		if (element.isContentEditable) {
+			return true;
+		}
+
+		if (element.closest("button, a, input, textarea, [contenteditable]")) {
+			return true;
+		}
+
+		return false;
+	}
+
+	document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+	document.addEventListener("mousedown", (event) => {
+		if (isInteractiveElement(event.target)) return;
+
+		is_dragging = true;
+		start_x = event.clientX;
+		start_y = event.clientY;
+		scroll_start_x = window.scrollX;
+		scroll_start_y = window.scrollY;
+
+		document.body.style.cursor = "grabbing";
+		document.body.style.userSelect = "none";
+	});
+
+	document.addEventListener("mousemove", (event) => {
+		if (!is_dragging) return;
+
+		const delta_x = start_x - event.clientX;
+		const delta_y = start_y - event.clientY;
+
+		window.scrollTo(scroll_start_x + delta_x, scroll_start_y + delta_y);
+	});
+
+	document.addEventListener("mouseup", () => {
+		if (!is_dragging) return;
+
+		is_dragging = false;
+		document.body.style.cursor = "";
+		document.body.style.userSelect = "";
+	});
+
+	document.addEventListener("mouseleave", () => {
+		if (!is_dragging) return;
+
+		is_dragging = false;
+		document.body.style.cursor = "";
+		document.body.style.userSelect = "";
+	});
+}
+
+initDragScroll();
