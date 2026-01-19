@@ -26,7 +26,49 @@ let days_passed = 0;
 let months_passed = 0;
 let years_passed = 0;
 
+let event_log = [];
 let last_update_time = Date.now();
+
+const event_types = [
+	{
+		description:
+			"You were walking late at night, someone jumped in front with a knife. You lost all your cash.",
+		min_hour: 22,
+		max_hour: 4,
+		is_positive: false,
+		effect: () => {
+			cash = 0;
+		},
+	},
+	{
+		description: "Your credit card got cloned. You got charged with $1,200.",
+		min_hour: 0,
+		max_hour: 23,
+		is_positive: false,
+		effect: () => {
+			bank -= 1200;
+		},
+	},
+	{
+		description:
+			"You had a small car accident and now have to pay 50% of your cash to bribe out of it.",
+		min_hour: 8,
+		max_hour: 18,
+		is_positive: false,
+		effect: () => {
+			cash = Math.floor(cash * 0.5);
+		},
+	},
+	{
+		description: "You were looking down while walking and saw 100 bucks.",
+		min_hour: 7,
+		max_hour: 21,
+		is_positive: true,
+		effect: () => {
+			cash += 100;
+		},
+	},
+];
 
 const vending_machine_types = [
 	{
@@ -155,6 +197,11 @@ function updateGameTime() {
 		months_passed = Math.floor(days_passed / 30);
 		years_passed = Math.floor(days_passed / 365);
 
+		// Check for random events for each day that passed
+		for (let i = 0; i < days_elapsed; i++) {
+			checkForRandomEvent();
+		}
+
 		// Check if we've crossed a payment due date
 		if (days_passed >= next_payment_due_day && previous_days < next_payment_due_day) {
 			const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
@@ -253,6 +300,53 @@ function updateVendingMachines() {
 	});
 }
 
+function generateEventTime(min_hour, max_hour) {
+	let hour;
+	if (min_hour > max_hour) {
+		// Wraps around midnight (e.g., 22 to 4)
+		const range = 24 - min_hour + max_hour + 1;
+		const random_offset = Math.floor(Math.random() * range);
+		hour = (min_hour + random_offset) % 24;
+	} else {
+		hour = min_hour + Math.floor(Math.random() * (max_hour - min_hour + 1));
+	}
+
+	const minute = Math.floor(Math.random() * 60);
+	const period = hour >= 12 ? "PM" : "AM";
+	const display_hour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+
+	return `${display_hour}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+function checkForRandomEvent() {
+	// 0% stress = 1 event per 6 months = ~0.167 per month
+	// 100% stress = 4 events per month
+	const stress_factor = stress_level / 100;
+	const events_per_month = 0.167 + stress_factor * (4 - 0.167);
+	const daily_probability = events_per_month / 30;
+
+	if (Math.random() < daily_probability) {
+		triggerRandomEvent();
+	}
+}
+
+function triggerRandomEvent() {
+	const event_type = event_types[Math.floor(Math.random() * event_types.length)];
+	const time = generateEventTime(event_type.min_hour, event_type.max_hour);
+
+	event_type.effect();
+
+	event_log.unshift({
+		time: time,
+		description: event_type.description,
+		day: days_passed,
+	});
+
+	if (event_log.length > 20) {
+		event_log.pop();
+	}
+}
+
 function payDebtManually() {
 	const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
 	if (bank < monthly_payment) return;
@@ -290,6 +384,7 @@ function saveGameState() {
 		has_weed_prescription,
 		owned_vending_machines,
 		checked_ideas: ideas.map((idea) => idea.checked),
+		event_log,
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
 }
@@ -310,6 +405,7 @@ function loadGameState() {
 		next_payment_due_day = state.next_payment_due_day || 30;
 		has_weed_prescription = state.has_weed_prescription || false;
 		owned_vending_machines = state.owned_vending_machines || [];
+		event_log = state.event_log || [];
 
 		// Restore checked ideas state and re-apply their effects
 		if (state.checked_ideas) {
@@ -574,58 +670,27 @@ document.body.replaceChildren(
 				$.br(),
 				$.h2("EVENTS"),
 				$.br(),
-				$.div(
-					{
-						class: "flex gap-8",
-					},
-					$.p("4:46 AM"),
-					$.p(
-						{
-							class: "whitespace-normal",
-						},
-						"You were walking late at night, someone jumped in front with a knife. You lost all your cash.",
-					),
-				),
-				$.br(),
-				$.div(
-					{
-						class: "flex gap-8",
-					},
-					$.p("4:46 AM"),
-					$.p(
-						{
-							class: "whitespace-normal",
-						},
-						"You credit card got cloned. You got charged with $1,200.",
-					),
-				),
-				$.br(),
-				$.div(
-					{
-						class: "flex gap-8",
-					},
-					$.p("4:46 AM"),
-					$.p(
-						{
-							class: "whitespace-normal",
-						},
-						"You had a small car accident and now have to pay 50% of your cash to bribe out of it.",
-					),
-				),
-				$.br(),
-				$.div(
-					{
-						class: "flex gap-8",
-					},
-					$.p("4:46 AM"),
-					$.p(
-						{
-							class: "whitespace-normal",
-						},
-						"You were looking down while walking and saw 100 bucks.",
-					),
-				),
-				$.br(),
+				() => {
+					return $.div(
+						...event_log.map((event) =>
+							$.div(
+								{
+									class: "flex gap-8",
+								},
+								$.p({ class: "min-w-16" }, event.time),
+								$.div(
+									$.p(
+										{
+											class: "whitespace-normal",
+										},
+										event.description,
+									),
+									$.br(),
+								),
+							),
+						),
+					);
+				},
 			),
 		),
 		...[1, 2, 3, 4, 5, 6].map(() => PageColumn()),
