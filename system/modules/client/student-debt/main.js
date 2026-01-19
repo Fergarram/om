@@ -293,7 +293,6 @@ document.body.replaceChildren(
 			$.button(
 				{
 					onclick: resetGame,
-					class: "text-sm text-gray-600",
 				},
 				"Reset Game",
 			),
@@ -305,6 +304,18 @@ document.body.replaceChildren(
 					class: () => (!ideas[2].checked ? "hidden" : ""),
 				},
 				$.h2("VENDING MACHINES"),
+				$.br(),
+				$.div(
+					{
+						class: "grid grid-cols-2",
+					},
+					$.div(
+						$.p("Mini vending machine"),
+						$.p({ class: "opacity-40" }, "Gives a few bucks every once in a while"),
+					)
+				),
+				$.br(),
+				$.button("Aquire new machine for $750")
 			),
 		),
 		PageColumn(
@@ -397,7 +408,7 @@ document.body.replaceChildren(
 function PageColumn(...children) {
 	return $.div(
 		{
-			class: "pl-6 min-w-[32rem] pt-8",
+			class: "pl-6 min-w-[32rem] max-w-[32rem] pt-8",
 			style: `
 			background-image: url(/modules/student-debt/bg.png);
 			background-size: 100%;
