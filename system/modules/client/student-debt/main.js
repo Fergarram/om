@@ -355,11 +355,18 @@ document.body.replaceChildren(
 					class: "grid grid-cols-2",
 				},
 				$.p(() => `Debt: $${debt.toLocaleString()}`),
-				$.p(
+				$.div(
 					{
-						class: () => (bank < 0 ? "text-red-700" : ""),
+						class: () => "flex justify-between w-full " + (bank < 0 ? "text-red-700" : ""),
 					},
-					() => `Bank: $${bank}`,
+					$.p(() => `Bank: $${bank}`),
+					$.button(
+						{
+							disabled: () => (cash < 100 ? "true" : undefined),
+							onclick: saveInBank,
+						},
+						"Make transfer",
+					),
 				),
 			),
 			$.br(),
@@ -386,13 +393,6 @@ document.body.replaceChildren(
 						"Save in bank",
 					),
 				),
-			),
-			$.br(),
-			$.button(
-				{
-					onclick: resetGame,
-				},
-				"Reset Game",
 			),
 			$.br(),
 			$.br(),
@@ -460,8 +460,38 @@ document.body.replaceChildren(
 						onclick: buyVendingMachine,
 					},
 					() => `Acquire new machine for $${getNextVendingMachineCost()}`,
+					$.br(),
 				),
 			),
+			$.p("IDEAS"),
+			$.br(),
+			...ideas.map((idea, i) => {
+				return $.div(
+					{
+						style: () => (!idea.visible() ? "display: none" : ""),
+					},
+					() => {
+						if (idea.checked) {
+							return $.p({ class: "line-through decoration-2" }, `- ${idea.description}`);
+						} else if (idea.isPurchasable()) {
+							return $.button(
+								{
+									onclick() {
+										idea.checked = true;
+										idea.purchase();
+										idea.effect();
+									},
+								},
+								`- ${idea.description}`,
+							);
+						} else {
+							return $.p(`- ${idea.description}`);
+						}
+					},
+					$.p({ class: "opacity-40 pl-4" }, idea.notes),
+					$.br(),
+				);
+			}),
 		),
 		PageColumn(
 			$.h2("JOURNAL"),
@@ -515,37 +545,22 @@ document.body.replaceChildren(
 				$.p(`Years of debt left:`),
 				$.p(() => TOTAL_YEARS - years_passed),
 			),
+			$.div(
+				{
+					class: "flex flex-col",
+				},
+				$.br(),
+				$.h2("EVENTS"),
+			),
 		),
+		...[1, 2, 3, 4, 5, 6].map(() => PageColumn()),
 		PageColumn(
-			$.p("IDEAS"),
-			$.br(),
-			...ideas.map((idea, i) => {
-				return $.div(
-					{
-						style: () => (!idea.visible() ? "display: none" : ""),
-					},
-					() => {
-						if (idea.checked) {
-							return $.p({ class: "line-through decoration-2" }, `- ${idea.description}`);
-						} else if (idea.isPurchasable()) {
-							return $.button(
-								{
-									onclick() {
-										idea.checked = true;
-										idea.purchase();
-										idea.effect();
-									},
-								},
-								`- ${idea.description}`,
-							);
-						} else {
-							return $.p(`- ${idea.description}`);
-						}
-					},
-					$.p({ class: "opacity-40 pl-4" }, idea.notes),
-					$.br(),
-				);
-			}),
+			$.button(
+				{
+					onclick: resetGame,
+				},
+				"Reset Game",
+			),
 		),
 	),
 );
