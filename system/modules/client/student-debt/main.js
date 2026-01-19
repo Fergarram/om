@@ -253,6 +253,20 @@ function updateVendingMachines() {
 	});
 }
 
+function payDebtManually() {
+	const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
+	if (bank < monthly_payment) return;
+	if (debt <= 0) return;
+
+	const payment = Math.min(monthly_payment, debt);
+	bank -= payment;
+	debt -= payment;
+	next_payment_due_day += 30;
+	stress_level = Math.max(0, stress_level - 20);
+
+	saveGameState();
+}
+
 async function resetGame() {
 	localStorage.removeItem("student_debt_game");
 	await finish();
@@ -362,10 +376,13 @@ document.body.replaceChildren(
 					$.p(() => `Bank: $${bank}`),
 					$.button(
 						{
-							disabled: () => (cash < 100 ? "true" : undefined),
-							onclick: saveInBank,
+							disabled: () => {
+								const monthly_payment = INITIAL_DEBT / TOTAL_YEARS / 12;
+								return bank < monthly_payment || debt <= 0 ? "true" : undefined;
+							},
+							onclick: payDebtManually,
 						},
-						"Make transfer",
+						"Pay debt",
 					),
 				),
 			),
@@ -535,7 +552,11 @@ document.body.replaceChildren(
 					class: "grid grid-cols-2",
 				},
 				$.p(`Next payment due in:`),
-				$.p(() => `${next_payment_due_day - days_passed} days`),
+				$.p(() => {
+					const day_in_cycle = days_passed % 30;
+					const days_remaining = day_in_cycle === 0 ? 30 : 30 - day_in_cycle;
+					return `${days_remaining} days`;
+				}),
 				$.p(`Payments left:`),
 				$.p(() => {
 					const total_payments = TOTAL_YEARS * 12;
