@@ -20,6 +20,8 @@ let click_worth = 2;
 let click_button_label = "Sell candy";
 let next_payment_due_day = 30;
 let has_weed_prescription = false;
+let vending_machines = 0;
+let vending_machine_base_cost = 500;
 
 let days_passed = 0;
 let months_passed = 0;
@@ -60,6 +62,7 @@ const ideas = [
 			bank -= 500;
 		},
 		effect: () => {
+			vending_machines++;
 			passive_income_functions.push(() => {
 				const random_income = Math.floor(Math.random() * 16);
 				cash += random_income;
@@ -164,6 +167,25 @@ function saveInBank() {
 	cash = 0;
 }
 
+function getNextVendingMachineCost() {
+	return Math.floor(vending_machine_base_cost * Math.pow(1.5, vending_machines));
+}
+
+function buyVendingMachine() {
+	const cost = getNextVendingMachineCost();
+	if (bank < cost || vending_machines >= 5) return;
+
+	bank -= cost;
+	vending_machines++;
+
+	passive_income_functions.push(() => {
+		const random_income = Math.floor(Math.random() * 16);
+		cash += random_income;
+	});
+
+	saveGameState();
+}
+
 async function resetGame() {
 	localStorage.removeItem("student_debt_game");
 	await finish();
@@ -185,6 +207,7 @@ function saveGameState() {
 		passive_income_interval,
 		next_payment_due_day,
 		has_weed_prescription,
+		vending_machines,
 		checked_ideas: ideas.map((idea) => idea.checked),
 	};
 	localStorage.setItem("student_debt_game", JSON.stringify(game_state));
@@ -205,15 +228,27 @@ function loadGameState() {
 		passive_income_interval = state.passive_income_interval || 1000;
 		next_payment_due_day = state.next_payment_due_day || 30;
 		has_weed_prescription = state.has_weed_prescription || false;
+		vending_machines = state.vending_machines || 0;
 
 		// Restore checked ideas state and re-apply their effects
 		if (state.checked_ideas) {
 			state.checked_ideas.forEach((checked, index) => {
 				if (checked && index < ideas.length) {
 					ideas[index].checked = checked;
-					// Re-apply effects only (no cost)
-					ideas[index].effect();
+					// Re-apply effects only for non-vending machine ideas
+					if (index !== 2) {
+						ideas[index].effect();
+					}
 				}
+			});
+		}
+
+		// Restore passive income functions based on vending machines count
+		passive_income_functions = [];
+		for (let i = 0; i < vending_machines; i++) {
+			passive_income_functions.push(() => {
+				const random_income = Math.floor(Math.random() * 16);
+				cash += random_income;
 			});
 		}
 
@@ -310,12 +345,24 @@ document.body.replaceChildren(
 						class: "grid grid-cols-2",
 					},
 					$.div(
-						$.p("Mini vending machine"),
+						$.p(() => `Mini vending machine (${vending_machines}/5)`),
 						$.p({ class: "opacity-40" }, "Gives a few bucks every once in a while"),
-					)
+					),
 				),
 				$.br(),
-				$.button("Aquire new machine for $750")
+				$.button(
+					{
+						disabled: () =>
+							vending_machines >= 5 || bank < getNextVendingMachineCost()
+								? "true"
+								: undefined,
+						onclick: buyVendingMachine,
+					},
+					() =>
+						vending_machines >= 5
+							? "Max machines acquired"
+							: `Acquire new machine for $${getNextVendingMachineCost()}`,
+				),
 			),
 		),
 		PageColumn(
