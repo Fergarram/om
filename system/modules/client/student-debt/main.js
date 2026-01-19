@@ -21,7 +21,6 @@ let click_button_label = "Sell candy";
 let next_payment_due_day = 30;
 let has_weed_prescription = false;
 
-
 let days_passed = 0;
 let months_passed = 0;
 let years_passed = 0;
@@ -258,7 +257,12 @@ document.body.replaceChildren(
 					class: "grid grid-cols-2",
 				},
 				$.p(() => `Debt: $${debt.toLocaleString()}`),
-				$.p(() => `Bank: $${bank}`),
+				$.p(
+					{
+						class: () => (bank < 0 ? "text-red-700" : ""),
+					},
+					() => `Bank: $${bank}`,
+				),
 			),
 			$.br(),
 			$.div(
@@ -294,8 +298,13 @@ document.body.replaceChildren(
 				"Reset Game",
 			),
 			$.br(),
-			$.h2(
-				"VENDING MACHINES"
+			$.br(),
+
+			$.div(
+				{
+					class: () => (!ideas[2].checked ? "hidden" : ""),
+				},
+				$.h2("VENDING MACHINES"),
 			),
 		),
 		PageColumn(
@@ -327,7 +336,8 @@ document.body.replaceChildren(
 							class: "border w-full h-5 text-red-700 font-mono flex items-center px-1",
 						},
 						() => {
-							const filled_slashes = Math.floor((stress_level / 100) * 30);
+							const clamped_stress = Math.min(stress_level, 100);
+							const filled_slashes = Math.floor((clamped_stress / 100) * 30);
 							return "/".repeat(filled_slashes);
 						},
 					),
