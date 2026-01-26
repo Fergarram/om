@@ -11,7 +11,7 @@ const params = new URLSearchParams(window.location.search);
 
 if (params.get("clone-editor") === "true") {
 	document.body.appendChild(
-		CloneEditor(window.location.href.replace("clone-editor=true", "clone-editor=false")),
+		await CloneEditor(window.location.href.replace("clone-editor=true", "clone-editor=false")),
 	);
 }
 
