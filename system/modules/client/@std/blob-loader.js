@@ -1,5 +1,5 @@
 //
-// BLOB LOADER v0.99.0
+// BLOB LOADER v0.100.0
 // by fergarram
 //
 
@@ -22,7 +22,7 @@
 	const MODULE_TYPES = [SCRIPT_MODULE_TYPE, STYLE_MODULE_TYPE, MEDIA_MODULE_TYPE];
 	const KNOWN_ATTRIBUTES = {
 		shared: ["name", "remote", "disabled", "blob", "nodownload", "nocache"],
-		script: ["type", "encode", "autorun"],
+		script: ["type", "encode", "autorun", "external"],
 		style: ["blob-module"],
 		media: ["href", "type", "source"],
 		font: [
@@ -939,6 +939,7 @@
 			const module_name = script.getAttribute("name");
 			const remote_url = script.getAttribute("remote");
 			const is_disabled = script.hasAttribute("disabled");
+			const is_external = script.hasAttribute("external");
 			const encoded = script.hasAttribute("encode");
 			const no_cache = script.hasAttribute("nocache");
 			const autorun = script.hasAttribute("autorun");
@@ -959,6 +960,34 @@
 				console.warn(
 					`Module name collision detected: "${module_name}" already exists. Skipping duplicate.`,
 				);
+				continue;
+			}
+
+			// Handle external modules: pass remote URL directly to importmap
+			if (is_external) {
+				if (!remote_url) {
+					console.warn(`External module "${module_name}" missing remote attribute`);
+					continue;
+				}
+
+				blob_module_urls.set(module_name, remote_url);
+				script.setAttribute("blob", remote_url);
+
+				const metadata = extractCustomMetadata(script, SCRIPT_MODULE_TYPE);
+
+				blob_module_map.set(module_name, {
+					name: module_name,
+					size_bytes: 0,
+					remote_url: remote_url,
+					blob_url: remote_url,
+					is_disabled: false,
+					is_external: true,
+					encoded: false,
+					autorun,
+					metadata,
+				});
+
+				console.log(`Registered external module "${module_name}" -> ${remote_url}`);
 				continue;
 			}
 
@@ -1148,10 +1177,11 @@
 			const name = script.getAttribute("name");
 			const remote_url = script.getAttribute("remote");
 			const is_disabled = script.hasAttribute("disabled");
+			const is_external = script.hasAttribute("external");
 			const no_cache = script.hasAttribute("nocache");
 			const has_inline = script.textContent.trim().length > 0;
 
-			if (!name || is_disabled || !remote_url || has_inline) continue;
+			if (!name || is_disabled || is_external || !remote_url || has_inline) continue;
 
 			const cached = await getCachedModule(name, SCRIPT_MODULE_TYPE);
 			if (cached && !no_cache && !SKIP_CACHE_CHECK) continue;
@@ -1779,6 +1809,7 @@
 			const remote_url = script.getAttribute("remote");
 			const no_download = script.hasAttribute("nodownload");
 			const is_disabled = script.hasAttribute("disabled");
+			const is_external = script.hasAttribute("external");
 			const should_encode = script.hasAttribute("encode");
 
 			if (script.hasAttribute("blob")) {
@@ -1786,6 +1817,15 @@
 			}
 
 			if (is_disabled) {
+				return;
+			}
+
+			// External modules can't be inlined, keep remote reference
+			if (is_external) {
+				if (!force_inline) {
+					script.textContent = "";
+				}
+				// Keep the external and remote attributes
 				return;
 			}
 
