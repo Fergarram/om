@@ -77,6 +77,7 @@
 			<button id="forward_button" title="Forward">&gt;</button>
 			<button id="reload_button" title="Reload">R</button>
 			<input id="url_input" spellcheck="false" placeholder="Enter URL" />
+			<span id="stats" style="color: #7dffb4; white-space: nowrap"></span>
 		</div>
 		<div id="viewport">
 			<canvas id="webview_canvas" tabindex="0"></canvas>
@@ -94,57 +95,402 @@
 			const forward_button = document.getElementById("forward_button");
 			const reload_button = document.getElementById("reload_button");
 
-			const ctx = canvas.getContext("2d");
+			const stats_span = document.getElementById("stats");
 
 			//
 			// State
 			//
 
-			let rgba_scratch = null;
+			let frame_mode = "cpu";
+			let stat_frames = 0;
+			let stat_draw_ms = 0;
+			let stat_last_report = performance.now();
+			let webgl = null;
+			let gpu = null;
+			let gpu_init_promise = null;
 
 			//
-			// Frame drawing
+			// Canvas sizing
+			//
+			// Frames arrive in physical pixels at the display scale
+			// factor. Keep the backing store at full resolution and size
+			// the element in CSS pixels so the bitmap maps 1:1 to display
+			// pixels and input coords stay in DIP.
 			//
 
-			window.__sys.on("webview:frame", (frame) => {
-				if (canvas.width !== frame.width || canvas.height !== frame.height) {
-					// Frames arrive in physical pixels at the display scale
-					// factor. Keep the backing store at full resolution and
-					// size the element in CSS pixels so the bitmap maps 1:1
-					// to display pixels and input coords stay in DIP.
-					canvas.width = frame.width;
-					canvas.height = frame.height;
-					canvas.style.width = `${frame.width / window.devicePixelRatio}px`;
-					canvas.style.height = `${frame.height / window.devicePixelRatio}px`;
+			function ensureCanvasSize(width, height, css_width, css_height) {
+				if (canvas.width === width && canvas.height === height) return false;
+				canvas.width = width;
+				canvas.height = height;
+				canvas.style.width = `${css_width || width / window.devicePixelRatio}px`;
+				canvas.style.height = `${css_height || height / window.devicePixelRatio}px`;
+				return true;
+			}
+
+			function countFrame(draw_start) {
+				stat_frames++;
+				stat_draw_ms += performance.now() - draw_start;
+				const now = performance.now();
+				if (now - stat_last_report >= 1000) {
+					const avg_ms = stat_frames > 0 ? stat_draw_ms / stat_frames : 0;
+					stats_span.textContent = `${frame_mode} ${stat_frames}fps ${avg_ms.toFixed(2)}ms`;
+					stat_frames = 0;
+					stat_draw_ms = 0;
+					stat_last_report = now;
+				}
+			}
+
+			window.__sys.on("webview:mode", (mode) => {
+				frame_mode = mode;
+			});
+
+			//
+			// Shared texture path (Electron 43+)
+			//
+			// The main process transfers the frame's GPU texture, which
+			// arrives here as a VideoFrame. It is imported as a WebGPU
+			// external texture (zero copy) and a fullscreen quad samples
+			// it into a persistent texture, scissored to the update rect,
+			// because frames come from a rotating surface pool where only
+			// that region is guaranteed fresh. The persistent texture
+			// accumulates and is copied to the canvas each frame. This is
+			// the path Electron's own shared texture tests use; canvas 2d
+			// drawImage renders these frames black.
+			//
+
+			if (window.__sys.shared_texture_supported) {
+				window.__sys.setSharedTextureReceiver(async (imported, meta) => {
+					const draw_start = performance.now();
+					try {
+						if (!gpu_init_promise) {
+							gpu_init_promise = initWebgpu().catch((error) => {
+								gpu_init_promise = null;
+								throw error;
+							});
+						}
+						gpu = await gpu_init_promise;
+						const video_frame = imported.getVideoFrame();
+						drawVideoFrame(video_frame, meta || {});
+						video_frame.close();
+					} catch (error) {
+						window.__sys.send("webview:log", `webgpu render failed: ${error.message}`);
+					}
+					// release happens in the preload after this resolves
+					countFrame(draw_start);
+				});
+			}
+			window.__sys.send("webview:ready");
+
+			async function initWebgpu() {
+				if (!navigator.gpu) throw new Error("WebGPU unavailable");
+				const adapter = await navigator.gpu.requestAdapter();
+				if (!adapter) throw new Error("no WebGPU adapter");
+				const device = await adapter.requestDevice();
+				const context = canvas.getContext("webgpu");
+				if (!context) {
+					// Distinguish a poisoned canvas (another context type
+					// already claimed it) from WebGPU being unavailable
+					const probe = document.createElement("canvas").getContext("webgpu");
+					throw new Error(
+						probe
+							? "canvas already claimed by another context type"
+							: "webgpu context unavailable in this renderer",
+					);
+				}
+				const format = navigator.gpu.getPreferredCanvasFormat();
+				context.configure({
+					device,
+					format,
+					alphaMode: "opaque",
+					usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
+				});
+
+				const bind_group_layout = device.createBindGroupLayout({
+					entries: [
+						{ binding: 0, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+						{ binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+					],
+				});
+
+				const vertex_wgsl = `
+					struct VSOut {
+						@builtin(position) pos: vec4<f32>,
+						@location(0) uv: vec2<f32>,
+					};
+					@vertex
+					fn main(@builtin(vertex_index) index: u32) -> VSOut {
+						var positions = array<vec2<f32>, 6>(
+							vec2<f32>(-1.0, -1.0),
+							vec2<f32>(1.0, -1.0),
+							vec2<f32>(-1.0, 1.0),
+							vec2<f32>(-1.0, 1.0),
+							vec2<f32>(1.0, -1.0),
+							vec2<f32>(1.0, 1.0)
+						);
+						let p = positions[index];
+						var out: VSOut;
+						out.pos = vec4<f32>(p, 0.0, 1.0);
+						out.uv = vec2<f32>((p.x + 1.0) * 0.5, (1.0 - p.y) * 0.5);
+						return out;
+					}
+				`;
+
+				const fragment_wgsl = `
+					@group(0) @binding(0) var ext_tex: texture_external;
+					@group(0) @binding(1) var samp: sampler;
+					@fragment
+					fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+						return textureSampleBaseClampToEdge(ext_tex, samp, uv);
+					}
+				`;
+
+				const pipeline = device.createRenderPipeline({
+					layout: device.createPipelineLayout({ bindGroupLayouts: [bind_group_layout] }),
+					vertex: {
+						module: device.createShaderModule({ code: vertex_wgsl }),
+						entryPoint: "main",
+					},
+					fragment: {
+						module: device.createShaderModule({ code: fragment_wgsl }),
+						entryPoint: "main",
+						targets: [{ format }],
+					},
+					primitive: { topology: "triangle-list" },
+				});
+
+				return {
+					device,
+					context,
+					format,
+					bind_group_layout,
+					pipeline,
+					sampler: device.createSampler(),
+					frame_texture: null,
+				};
+			}
+
+			let frame_debug_logs = 0;
+
+			function drawVideoFrame(video_frame, meta) {
+				// The VideoFrame's own display size is the authoritative
+				// drawing space. The metadata rects share the space of
+				// meta.visible_rect, which may be at a different scale,
+				// so rescale them into VideoFrame coords. CSS size comes
+				// from the guest's DIP size, not devicePixelRatio math.
+				const frame_width = video_frame.displayWidth;
+				const frame_height = video_frame.displayHeight;
+				const content = meta.content_size || null;
+
+				if (frame_debug_logs < 3) {
+					frame_debug_logs++;
+					window.__sys.send(
+						"webview:log",
+						`videoframe coded=${video_frame.codedWidth}x${video_frame.codedHeight}`
+						+ ` display=${frame_width}x${frame_height}`
+						+ ` meta_visible=${JSON.stringify(meta.visible_rect)}`
+						+ ` content=${JSON.stringify(content)}`,
+					);
 				}
 
-				const { dirty, pixels } = frame;
+				const resized = ensureCanvasSize(
+					frame_width,
+					frame_height,
+					content && content.width,
+					content && content.height,
+				);
+
+				if (resized || !gpu.frame_texture) {
+					if (gpu.frame_texture) gpu.frame_texture.destroy();
+					gpu.frame_texture = gpu.device.createTexture({
+						size: { width: frame_width, height: frame_height },
+						format: gpu.format,
+						usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+					});
+				}
+
+				const meta_full = meta.visible_rect || { width: frame_width, height: frame_height };
+				const scale_x = frame_width / meta_full.width;
+				const scale_y = frame_height / meta_full.height;
+
+				// Full redraw after a resize or when no update rect came
+				let rect = resized ? null : meta.update_rect;
+				if (rect) {
+					rect = {
+						x: Math.floor(rect.x * scale_x),
+						y: Math.floor(rect.y * scale_y),
+						width: Math.ceil(rect.width * scale_x),
+						height: Math.ceil(rect.height * scale_y),
+					};
+				}
+				const fits = rect
+					&& rect.width > 0
+					&& rect.height > 0
+					&& rect.x >= 0
+					&& rect.y >= 0
+					&& rect.x + rect.width <= frame_width
+					&& rect.y + rect.height <= frame_height;
+				const full_draw = !fits;
+				if (full_draw) rect = { x: 0, y: 0, width: frame_width, height: frame_height };
+
+				const external_texture = gpu.device.importExternalTexture({ source: video_frame });
+				const bind_group = gpu.device.createBindGroup({
+					layout: gpu.bind_group_layout,
+					entries: [
+						{ binding: 0, resource: external_texture },
+						{ binding: 1, resource: gpu.sampler },
+					],
+				});
+
+				const encoder = gpu.device.createCommandEncoder();
+				const pass = encoder.beginRenderPass({
+					colorAttachments: [
+						{
+							view: gpu.frame_texture.createView(),
+							loadOp: full_draw ? "clear" : "load",
+							storeOp: "store",
+							clearValue: { r: 0, g: 0, b: 0, a: 1 },
+						},
+					],
+				});
+				pass.setPipeline(gpu.pipeline);
+				pass.setBindGroup(0, bind_group);
+				pass.setScissorRect(rect.x, rect.y, rect.width, rect.height);
+				pass.draw(6);
+				pass.end();
+
+				encoder.copyTextureToTexture(
+					{ texture: gpu.frame_texture },
+					{ texture: gpu.context.getCurrentTexture() },
+					{ width: frame_width, height: frame_height },
+				);
+				gpu.device.queue.submit([encoder.finish()]);
+			}
+
+			//
+			// Pixel path (iosurface and cpu modes)
+			//
+			// Frames arrive as byte buffers over IPC and upload through
+			// WebGL: raw bgra/rgba bytes go into an RGBA texture and a
+			// fullscreen triangle swaps channels in the shader, so no per
+			// pixel work happens in JS. UNPACK_ROW_LENGTH handles the
+			// IOSurface row stride natively. Initialized on first use so
+			// the shared texture path can own the canvas otherwise.
+			//
+
+			function initWebgl() {
+				const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false });
+
+				const vertex_src = `#version 300 es
+				layout(location = 0) in vec2 pos;
+				out vec2 uv;
+				void main() {
+					uv = pos * 0.5 + 0.5;
+					uv.y = 1.0 - uv.y;
+					gl_Position = vec4(pos, 0.0, 1.0);
+				}`;
+
+				const fragment_src = `#version 300 es
+				precision mediump float;
+				uniform sampler2D frame_tex;
+				uniform bool swap_rb;
+				in vec2 uv;
+				out vec4 color;
+				void main() {
+					vec4 c = texture(frame_tex, uv);
+					color = vec4(swap_rb ? c.bgr : c.rgb, 1.0);
+				}`;
+
+				function compileShader(type, source) {
+					const shader = gl.createShader(type);
+					gl.shaderSource(shader, source);
+					gl.compileShader(shader);
+					if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+						throw new Error(gl.getShaderInfoLog(shader));
+					}
+					return shader;
+				}
+
+				const program = gl.createProgram();
+				gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertex_src));
+				gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragment_src));
+				gl.linkProgram(program);
+				if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+					throw new Error(gl.getProgramInfoLog(program));
+				}
+				gl.useProgram(program);
+
+				const swap_rb_location = gl.getUniformLocation(program, "swap_rb");
+
+				// Fullscreen triangle
+				const quad_buffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, quad_buffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+				gl.enableVertexAttribArray(0);
+				gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+				const frame_texture = gl.createTexture();
+				gl.bindTexture(gl.TEXTURE_2D, frame_texture);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+				return { gl, swap_rb_location };
+			}
+
+			window.__sys.on("webview:frame", (frame) => {
+				// Pixel frames must never claim the canvas in shared
+				// texture mode, WebGPU needs it
+				if (frame_mode === "shared-texture") return;
+
+				const draw_start = performance.now();
+
+				if (!webgl) webgl = initWebgl();
+				const { gl, swap_rb_location } = webgl;
+
+				if (ensureCanvasSize(frame.width, frame.height)) {
+					gl.viewport(0, 0, frame.width, frame.height);
+					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, frame.width, frame.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+				}
+
+				const { dirty } = frame;
 				if (dirty.x + dirty.width > canvas.width || dirty.y + dirty.height > canvas.height) {
 					// Stale frame from before a resize, a full repaint follows
 					return;
 				}
 
-				drawDirtyRect(dirty, pixels);
+				drawFrame(frame);
+				countFrame(draw_start);
 			});
 
-			function drawDirtyRect(dirty, pixels) {
-				const pixel_count = dirty.width * dirty.height * 4;
-				if (!rgba_scratch || rgba_scratch.length < pixel_count) {
-					rgba_scratch = new Uint8ClampedArray(pixel_count);
-				}
+			// The frame carries a band of full rows covering the dirty
+			// rect. band_x/band_y locate the band's origin in frame
+			// coords and bytes_per_row is its stride. UNPACK parameters
+			// select the dirty subregion out of the band, so the same
+			// code handles both the cropped cpu bitmap and the raw
+			// IOSurface band with its aligned stride.
+			function drawFrame(frame) {
+				const { dirty, pixels, band_x, band_y, bytes_per_row, pixel_format } = frame;
+				const { gl, swap_rb_location } = webgl;
 
-				// Bitmap arrives as BGRA, canvas wants RGBA
-				const src = pixels;
-				const dst = rgba_scratch;
-				for (let i = 0; i < pixel_count; i += 4) {
-					dst[i] = src[i + 2];
-					dst[i + 1] = src[i + 1];
-					dst[i + 2] = src[i];
-					dst[i + 3] = 255;
-				}
+				gl.pixelStorei(gl.UNPACK_ROW_LENGTH, bytes_per_row >> 2);
+				gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, dirty.x - band_x);
+				gl.pixelStorei(gl.UNPACK_SKIP_ROWS, dirty.y - band_y);
+				gl.texSubImage2D(
+					gl.TEXTURE_2D,
+					0,
+					dirty.x,
+					dirty.y,
+					dirty.width,
+					dirty.height,
+					gl.RGBA,
+					gl.UNSIGNED_BYTE,
+					pixels,
+					0,
+				);
 
-				const image_data = new ImageData(dst.subarray(0, pixel_count), dirty.width, dirty.height);
-				ctx.putImageData(image_data, dirty.x, dirty.y);
+				gl.uniform1i(swap_rb_location, pixel_format !== "rgba" ? 1 : 0);
+				gl.drawArrays(gl.TRIANGLES, 0, 3);
 			}
 
 			//

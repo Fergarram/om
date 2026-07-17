@@ -11,7 +11,7 @@
 // without touching the IPC shape or the host page.
 //
 
-const { app, BrowserWindow, ipcMain } = require("electron/main");
+const { app, BrowserWindow, ipcMain, screen, sharedTexture } = require("electron/main");
 const fs = require("fs");
 const path = require("path");
 
@@ -19,10 +19,24 @@ const path = require("path");
 // Constants
 //
 
-const FRAME_RATE = 60;
+const FRAME_RATE = 120;
 const INITIAL_GUEST_WIDTH = 1024;
 const INITIAL_GUEST_HEIGHT = 640;
 const INITIAL_URL = `file://${path.join(__dirname, "guest_test_page.html")}`;
+
+// Frame source, best first. Override with OM_WEBVIEW_MODE=cpu.
+//
+//   shared-texture  Electron 43+ sharedTexture module. The texture is
+//                   imported and transferred to the host renderer as a
+//                   GPU resource, pixels never touch the CPU.
+//   cpu             Plain offscreen paint bitmaps (works everywhere).
+//
+const mode = sharedTexture && process.env.OM_WEBVIEW_MODE !== "cpu" ? "shared-texture" : "cpu";
+const use_shared_texture = mode === "shared-texture";
+
+// Keep frames 8 bit rgba/bgra. On wide gamut displays Chromium may
+// otherwise produce rgbaf16 textures which we do not handle.
+app.commandLine.appendSwitch("force-color-profile", "srgb");
 
 //
 // State
@@ -30,6 +44,7 @@ const INITIAL_URL = `file://${path.join(__dirname, "guest_test_page.html")}`;
 
 let host_window = null;
 let guest_window = null;
+let host_receiver_ready = false;
 
 //
 // Code execution
@@ -41,6 +56,7 @@ app.whenReady().then(async () => {
 	wireIpc();
 
 	await host_window.loadFile(path.join(__dirname, "host.html"));
+	sendToHost("webview:mode", mode);
 	guest_window.loadURL(INITIAL_URL);
 
 	// Screenshot mode for automated verification
@@ -68,10 +84,11 @@ function createHostWindow() {
 		height: INITIAL_GUEST_HEIGHT + 40,
 		useContentSize: true,
 		backgroundColor: "#1a1a1a",
+		// Default sandboxed renderer with contextBridge, the exact
+		// configuration Electron's shared texture tests run under.
+		// WebGPU canvas contexts come back null with sandbox disabled.
 		webPreferences: {
 			preload: path.join(__dirname, "preload.js"),
-			contextIsolation: true,
-			sandbox: true,
 		},
 	});
 }
@@ -83,26 +100,38 @@ function createGuestWindow() {
 		show: false,
 		frame: false,
 		webPreferences: {
-			offscreen: true,
+			// Electron 43 pins offscreen output to 1x unless
+			// deviceScaleFactor is set (39 followed the display scale
+			// implicitly). Match the display so text stays retina sharp.
+			offscreen: {
+				useSharedTexture: use_shared_texture,
+				deviceScaleFactor: screen.getPrimaryDisplay().scaleFactor,
+			},
 		},
 	});
 
 	guest_window.webContents.setFrameRate(FRAME_RATE);
 
-	// Frame source. This is the only part that changes for the
-	// shared texture path.
+	// Frame source. Both paths emit the same message shape: a band of
+	// rows covering the dirty rect, plus stride and format info.
 	guest_window.webContents.on("paint", (event, dirty, image) => {
-		if (!host_window || host_window.isDestroyed()) return;
-		const size = image.getSize();
-		const cropped = dirty.width === size.width && dirty.height === size.height
-			? image
-			: image.crop(dirty);
-		host_window.webContents.send("webview:frame", {
-			width: size.width,
-			height: size.height,
-			dirty,
-			pixels: cropped.getBitmap(),
-		});
+		if (!host_window || host_window.isDestroyed()) {
+			if (event.texture) event.texture.release();
+			return;
+		}
+		if (mode === "shared-texture") {
+			// Early paints can arrive without a texture while the GPU
+			// pipeline spins up. Never route them to the pixel path:
+			// the first getContext claims the host canvas forever and
+			// would break WebGPU. Drop them, a texture paint follows.
+			if (event.texture) handleSharedTextureFrame(event.texture);
+			return;
+		}
+		if (event.texture) {
+			event.texture.release();
+			return;
+		}
+		handleBitmapFrame(dirty, image);
 	});
 
 	guest_window.webContents.on("cursor-changed", (event, type) => {
@@ -132,12 +161,100 @@ function createGuestWindow() {
 	});
 }
 
+function handleBitmapFrame(dirty, image) {
+	const size = image.getSize();
+	const cropped = dirty.width === size.width && dirty.height === size.height
+		? image
+		: image.crop(dirty);
+	sendToHost("webview:frame", {
+		width: size.width,
+		height: size.height,
+		dirty,
+		band_x: dirty.x,
+		band_y: dirty.y,
+		bytes_per_row: dirty.width * 4,
+		pixel_format: "bgra",
+		pixels: cropped.toBitmap(),
+	});
+}
+
+// Set OM_WEBVIEW_DEBUG=1 to log per frame geometry, mainly to catch
+// frames arriving at unexpected sizes.
+const debug_frames = Boolean(process.env.OM_WEBVIEW_DEBUG);
+
+// Zero copy path. The texture is imported as a Chromium SharedImage
+// reference and transferred to the host renderer, which draws it as a
+// VideoFrame. Pixels never leave the GPU. The source texture is
+// released via allReferencesReleased once main and the renderer have
+// both released their imports and the GPU is done.
+async function handleSharedTextureFrame(texture) {
+	const info = texture.textureInfo;
+
+	if (debug_frames) {
+		const r = (rect) => rect ? `${rect.x},${rect.y} ${rect.width}x${rect.height}` : "none";
+		console.log(
+			`frame widget=${info.widgetType} fmt=${info.pixelFormat}`
+			+ ` coded=${info.codedSize.width}x${info.codedSize.height}`
+			+ ` visible=${r(info.visibleRect)} update=${r(info.metadata && info.metadata.captureUpdateRect)}`,
+		);
+	}
+
+	// Popup widgets (select dropdowns etc) arrive as separate
+	// textures. Not composited yet. The receiver must be registered
+	// before sendSharedTexture or it times out.
+	if (info.widgetType !== "frame" || !host_receiver_ready) {
+		texture.release();
+		return;
+	}
+
+	const imported = sharedTexture.importSharedTexture({
+		textureInfo: {
+			codedSize: info.codedSize,
+			colorSpace: info.colorSpace,
+			handle: info.handle,
+			pixelFormat: info.pixelFormat,
+			timestamp: info.timestamp,
+			visibleRect: info.visibleRect,
+		},
+		allReferencesReleased: () => texture.release(),
+	});
+
+	try {
+		const [content_width, content_height] = guest_window.getContentSize();
+		await sharedTexture.sendSharedTexture(
+			{ frame: host_window.webContents.mainFrame, importedSharedTexture: imported },
+			{
+				visible_rect: info.visibleRect,
+				update_rect: (info.metadata && info.metadata.captureUpdateRect) || null,
+				// Guest size in DIP, for the canvas CSS size
+				content_size: { width: content_width, height: content_height },
+			},
+		);
+	} catch (error) {
+		console.error("shared texture transfer failed:", error.message);
+	} finally {
+		imported.release();
+	}
+}
+
 function sendToHost(channel, ...args) {
 	if (!host_window || host_window.isDestroyed()) return;
 	host_window.webContents.send(channel, ...args);
 }
 
 function wireIpc() {
+	ipcMain.on("webview:log", (event, message) => {
+		console.log(message);
+	});
+
+	ipcMain.on("webview:ready", () => {
+		host_receiver_ready = true;
+		// Frames painted before the receiver existed were dropped
+		if (guest_window && !guest_window.isDestroyed()) {
+			guest_window.webContents.invalidate();
+		}
+	});
+
 	ipcMain.on("webview:input", (event, input_event) => {
 		if (!guest_window || guest_window.isDestroyed()) return;
 		guest_window.webContents.sendInputEvent(input_event);

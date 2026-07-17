@@ -1,5 +1,5 @@
 {
-	"default_version": "22.3.27",
+	"default_version": "43.1.1",
 	"base_url": "https://github.com/electron/electron/releases/download",
 	"output_dir": "bin/electron-packages",
 	"packages": {
