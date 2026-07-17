@@ -1,0 +1,353 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Om Webview Demo</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				height: 100%;
+				background: #1a1a1a;
+				color: #ddd;
+				font-family: monospace;
+				overflow: hidden;
+			}
+
+			#toolbar {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				height: 40px;
+				padding: 0 8px;
+				background: #262626;
+				border-bottom: 1px solid #333;
+			}
+
+			#toolbar button {
+				background: #333;
+				color: #ddd;
+				border: 1px solid #444;
+				border-radius: 4px;
+				padding: 4px 10px;
+				font-family: monospace;
+				cursor: pointer;
+			}
+
+			#toolbar button:hover {
+				background: #3d3d3d;
+			}
+
+			#url_input {
+				flex: 1;
+				background: #1a1a1a;
+				color: #ddd;
+				border: 1px solid #444;
+				border-radius: 4px;
+				padding: 5px 8px;
+				font-family: monospace;
+				outline: none;
+			}
+
+			#url_input:focus {
+				border-color: #666;
+			}
+
+			#viewport {
+				position: relative;
+				width: 100%;
+				height: calc(100% - 40px);
+				overflow: hidden;
+			}
+
+			#webview_canvas {
+				display: block;
+				outline: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="toolbar">
+			<button id="back_button" title="Back">&lt;</button>
+			<button id="forward_button" title="Forward">&gt;</button>
+			<button id="reload_button" title="Reload">R</button>
+			<input id="url_input" spellcheck="false" placeholder="Enter URL" />
+		</div>
+		<div id="viewport">
+			<canvas id="webview_canvas" tabindex="0"></canvas>
+		</div>
+
+		<script>
+			//
+			// Elements
+			//
+
+			const canvas = document.getElementById("webview_canvas");
+			const viewport = document.getElementById("viewport");
+			const url_input = document.getElementById("url_input");
+			const back_button = document.getElementById("back_button");
+			const forward_button = document.getElementById("forward_button");
+			const reload_button = document.getElementById("reload_button");
+
+			const ctx = canvas.getContext("2d");
+
+			//
+			// State
+			//
+
+			let rgba_scratch = null;
+
+			//
+			// Frame drawing
+			//
+
+			window.__sys.on("webview:frame", (frame) => {
+				if (canvas.width !== frame.width || canvas.height !== frame.height) {
+					// Frames arrive in physical pixels at the display scale
+					// factor. Keep the backing store at full resolution and
+					// size the element in CSS pixels so the bitmap maps 1:1
+					// to display pixels and input coords stay in DIP.
+					canvas.width = frame.width;
+					canvas.height = frame.height;
+					canvas.style.width = `${frame.width / window.devicePixelRatio}px`;
+					canvas.style.height = `${frame.height / window.devicePixelRatio}px`;
+				}
+
+				const { dirty, pixels } = frame;
+				if (dirty.x + dirty.width > canvas.width || dirty.y + dirty.height > canvas.height) {
+					// Stale frame from before a resize, a full repaint follows
+					return;
+				}
+
+				drawDirtyRect(dirty, pixels);
+			});
+
+			function drawDirtyRect(dirty, pixels) {
+				const pixel_count = dirty.width * dirty.height * 4;
+				if (!rgba_scratch || rgba_scratch.length < pixel_count) {
+					rgba_scratch = new Uint8ClampedArray(pixel_count);
+				}
+
+				// Bitmap arrives as BGRA, canvas wants RGBA
+				const src = pixels;
+				const dst = rgba_scratch;
+				for (let i = 0; i < pixel_count; i += 4) {
+					dst[i] = src[i + 2];
+					dst[i + 1] = src[i + 1];
+					dst[i + 2] = src[i];
+					dst[i + 3] = 255;
+				}
+
+				const image_data = new ImageData(dst.subarray(0, pixel_count), dirty.width, dirty.height);
+				ctx.putImageData(image_data, dirty.x, dirty.y);
+			}
+
+			//
+			// Resize sync
+			//
+
+			const resize_observer = new ResizeObserver((entries) => {
+				const rect = entries[0].contentRect;
+				window.__sys.send("webview:resize", { width: rect.width, height: rect.height });
+			});
+			resize_observer.observe(viewport);
+
+			//
+			// Mouse forwarding
+			//
+
+			function eventModifiers(event) {
+				const modifiers = [];
+				if (event.ctrlKey) modifiers.push("control");
+				if (event.shiftKey) modifiers.push("shift");
+				if (event.altKey) modifiers.push("alt");
+				if (event.metaKey) modifiers.push("meta");
+				return modifiers;
+			}
+
+			function mouseButtonName(button) {
+				if (button === 1) return "middle";
+				if (button === 2) return "right";
+				return "left";
+			}
+
+			function canvasCoords(event) {
+				const rect = canvas.getBoundingClientRect();
+				return {
+					x: Math.round(event.clientX - rect.left),
+					y: Math.round(event.clientY - rect.top),
+				};
+			}
+
+			canvas.addEventListener("mousemove", (event) => {
+				const { x, y } = canvasCoords(event);
+				window.__sys.send("webview:input", {
+					type: "mouseMove",
+					x,
+					y,
+					modifiers: eventModifiers(event),
+				});
+			});
+
+			canvas.addEventListener("mousedown", (event) => {
+				canvas.focus();
+				window.__sys.send("webview:focus");
+				const { x, y } = canvasCoords(event);
+				window.__sys.send("webview:input", {
+					type: "mouseDown",
+					x,
+					y,
+					button: mouseButtonName(event.button),
+					clickCount: event.detail || 1,
+					modifiers: eventModifiers(event),
+				});
+			});
+
+			canvas.addEventListener("mouseup", (event) => {
+				const { x, y } = canvasCoords(event);
+				window.__sys.send("webview:input", {
+					type: "mouseUp",
+					x,
+					y,
+					button: mouseButtonName(event.button),
+					clickCount: event.detail || 1,
+					modifiers: eventModifiers(event),
+				});
+			});
+
+			canvas.addEventListener("wheel", (event) => {
+				event.preventDefault();
+				const { x, y } = canvasCoords(event);
+				window.__sys.send("webview:input", {
+					type: "mouseWheel",
+					x,
+					y,
+					deltaX: -event.deltaX,
+					deltaY: -event.deltaY,
+					canScroll: true,
+					modifiers: eventModifiers(event),
+				});
+			}, { passive: false });
+
+			canvas.addEventListener("contextmenu", (event) => {
+				event.preventDefault();
+			});
+
+			//
+			// Keyboard forwarding
+			//
+
+			const special_key_codes = {
+				ArrowUp: "Up",
+				ArrowDown: "Down",
+				ArrowLeft: "Left",
+				ArrowRight: "Right",
+				" ": "Space",
+			};
+
+			function electronKeyCode(event) {
+				return special_key_codes[event.key] || event.key;
+			}
+
+			canvas.addEventListener("keydown", (event) => {
+				event.preventDefault();
+				const key_code = electronKeyCode(event);
+				const modifiers = eventModifiers(event);
+
+				window.__sys.send("webview:input", {
+					type: "keyDown",
+					keyCode: key_code,
+					modifiers,
+				});
+
+				// Printable characters and Enter need a char event for text input
+				if (event.key.length === 1 || event.key === "Enter") {
+					window.__sys.send("webview:input", {
+						type: "char",
+						keyCode: event.key === "Enter" ? "Return" : event.key,
+						modifiers,
+					});
+				}
+			});
+
+			canvas.addEventListener("keyup", (event) => {
+				event.preventDefault();
+				window.__sys.send("webview:input", {
+					type: "keyUp",
+					keyCode: electronKeyCode(event),
+					modifiers: eventModifiers(event),
+				});
+			});
+
+			//
+			// Cursor sync
+			//
+
+			const cursor_map = {
+				default: "default",
+				pointer: "pointer",
+				hand: "pointer",
+				text: "text",
+				crosshair: "crosshair",
+				wait: "wait",
+				help: "help",
+				move: "move",
+				"not-allowed": "not-allowed",
+				"no-drop": "no-drop",
+				grab: "grab",
+				grabbing: "grabbing",
+				"col-resize": "col-resize",
+				"row-resize": "row-resize",
+				"n-resize": "n-resize",
+				"s-resize": "s-resize",
+				"e-resize": "e-resize",
+				"w-resize": "w-resize",
+				"ne-resize": "ne-resize",
+				"nw-resize": "nw-resize",
+				"se-resize": "se-resize",
+				"sw-resize": "sw-resize",
+				"ew-resize": "ew-resize",
+				"ns-resize": "ns-resize",
+				"nesw-resize": "nesw-resize",
+				"nwse-resize": "nwse-resize",
+				"zoom-in": "zoom-in",
+				"zoom-out": "zoom-out",
+				none: "none",
+			};
+
+			window.__sys.on("webview:cursor", (type) => {
+				canvas.style.cursor = cursor_map[type] || "default";
+			});
+
+			//
+			// Navigation
+			//
+
+			window.__sys.on("webview:url", (url) => {
+				if (document.activeElement !== url_input) {
+					url_input.value = url;
+				}
+			});
+
+			window.__sys.on("webview:title", (title) => {
+				document.title = title ? `${title} - Om Webview Demo` : "Om Webview Demo";
+			});
+
+			url_input.addEventListener("keydown", (event) => {
+				if (event.key === "Enter") {
+					window.__sys.invoke("webview:navigate", url_input.value);
+					canvas.focus();
+				}
+			});
+
+			back_button.addEventListener("click", () => window.__sys.invoke("webview:back"));
+			forward_button.addEventListener("click", () => window.__sys.invoke("webview:forward"));
+			reload_button.addEventListener("click", () => window.__sys.invoke("webview:reload"));
+		</script>
+	</body>
+</html>

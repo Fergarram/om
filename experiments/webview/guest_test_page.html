@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Guest Test Page</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			body {
+				font-family: monospace;
+				background: linear-gradient(135deg, #1e3a5f, #4a1e5f);
+				color: #fff;
+				min-height: 200vh;
+				padding: 40px;
+			}
+
+			h1 {
+				font-size: 32px;
+				margin-bottom: 8px;
+			}
+
+			.subtitle {
+				color: #aaa;
+				margin-bottom: 24px;
+			}
+
+			.panel {
+				background: rgba(0, 0, 0, 0.35);
+				border: 1px solid rgba(255, 255, 255, 0.15);
+				border-radius: 8px;
+				padding: 20px;
+				margin-bottom: 20px;
+				max-width: 640px;
+			}
+
+			button {
+				font-family: monospace;
+				font-size: 14px;
+				padding: 8px 16px;
+				border: none;
+				border-radius: 4px;
+				background: #3d7bfa;
+				color: #fff;
+				cursor: pointer;
+				margin-right: 8px;
+			}
+
+			button:hover {
+				background: #5a91ff;
+			}
+
+			input[type="text"] {
+				font-family: monospace;
+				font-size: 14px;
+				padding: 8px;
+				border: 1px solid #555;
+				border-radius: 4px;
+				background: #111;
+				color: #fff;
+				width: 300px;
+			}
+
+			a {
+				color: #7db4ff;
+			}
+
+			#clock {
+				font-size: 24px;
+				color: #7dffb4;
+			}
+
+			#click_count {
+				font-size: 24px;
+				color: #ffd47d;
+			}
+
+			.scroll_note {
+				margin-top: 60vh;
+				color: #7dffb4;
+				font-size: 20px;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Om Webview Guest</h1>
+		<div class="subtitle">This page renders offscreen and is composited into a canvas.</div>
+
+		<div class="panel">
+			<div>Animation (frame updates):</div>
+			<div id="clock">--:--:--</div>
+		</div>
+
+		<div class="panel">
+			<div>Mouse input:</div>
+			<p style="margin: 12px 0"><span id="click_count">0</span> clicks</p>
+			<button id="click_button">Click me</button>
+			<button onclick="document.body.style.filter = document.body.style.filter ? '' : 'invert(1)'">
+				Invert colors
+			</button>
+		</div>
+
+		<div class="panel">
+			<div>Keyboard input:</div>
+			<p style="margin: 12px 0">
+				<input type="text" id="text_input" placeholder="Type here" />
+			</p>
+			<div>You typed: <span id="typed_echo"></span></div>
+		</div>
+
+		<div class="panel">
+			<div>Cursor types:</div>
+			<p style="margin: 12px 0">
+				<a href="https://example.com">a link (pointer)</a> |
+				<span style="cursor: crosshair">crosshair</span> |
+				<span style="cursor: move">move</span> |
+				some text to select
+			</p>
+		</div>
+
+		<div class="scroll_note">You scrolled. Scroll forwarding works.</div>
+
+		<script>
+			//
+			// State
+			//
+
+			let click_count = 0;
+
+			//
+			// Code execution
+			//
+
+			setInterval(() => {
+				const now = new Date();
+				document.getElementById("clock").textContent = now.toTimeString().split(" ")[0] + "." + String(now.getMilliseconds()).padStart(3, "0");
+			}, 50);
+
+			document.getElementById("click_button").addEventListener("click", () => {
+				click_count++;
+				document.getElementById("click_count").textContent = String(click_count);
+			});
+
+			document.getElementById("text_input").addEventListener("input", (event) => {
+				document.getElementById("typed_echo").textContent = event.target.value;
+			});
+		</script>
+	</body>
+</html>
