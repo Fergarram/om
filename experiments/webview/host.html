@@ -530,7 +530,10 @@
 				};
 			}
 
-			canvas.addEventListener("mousemove", (event) => {
+			// mousemove is rAF aligned (coalesced to one event per host
+			// display frame), which adds up to a frame of input latency.
+			// pointerrawupdate delivers movement unaligned at device rate.
+			function forwardMouseMove(event) {
 				const { x, y } = canvasCoords(event);
 				window.__sys.send("webview:input", {
 					type: "mouseMove",
@@ -538,7 +541,13 @@
 					y,
 					modifiers: eventModifiers(event),
 				});
-			});
+			}
+
+			if ("onpointerrawupdate" in window) {
+				canvas.addEventListener("pointerrawupdate", forwardMouseMove);
+			} else {
+				canvas.addEventListener("mousemove", forwardMouseMove);
+			}
 
 			canvas.addEventListener("mousedown", (event) => {
 				canvas.focus();
@@ -566,15 +575,26 @@
 				});
 			});
 
+			// hasPreciseScrollingDeltas marks the deltas as trackpad
+			// style so the guest compositor applies them immediately,
+			// instead of treating each event as a wheel tick and easing
+			// it through the smooth scroll animation, which reads as lag.
 			canvas.addEventListener("wheel", (event) => {
 				event.preventDefault();
 				const { x, y } = canvasCoords(event);
+				const line_mode = event.deltaMode === WheelEvent.DOM_DELTA_LINE;
+				const scale = line_mode ? 16 : 1;
+				const delta_x = -event.deltaX * scale;
+				const delta_y = -event.deltaY * scale;
 				window.__sys.send("webview:input", {
 					type: "mouseWheel",
 					x,
 					y,
-					deltaX: -event.deltaX,
-					deltaY: -event.deltaY,
+					deltaX: delta_x,
+					deltaY: delta_y,
+					wheelTicksX: delta_x / 120,
+					wheelTicksY: delta_y / 120,
+					hasPreciseScrollingDeltas: !line_mode,
 					canScroll: true,
 					modifiers: eventModifiers(event),
 				});
@@ -600,19 +620,43 @@
 				return special_key_codes[event.key] || event.key;
 			}
 
+			// Synthesized key events do not trigger clipboard or menu
+			// actions, so editing shortcuts dispatch as webContents
+			// commands instead of key events
+			function editCommandFor(event) {
+				if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
+				const key = event.key.toLowerCase();
+				if (key === "c" && !event.shiftKey) return "copy";
+				if (key === "x" && !event.shiftKey) return "cut";
+				if (key === "v") return event.shiftKey ? "pasteAndMatchStyle" : "paste";
+				if (key === "a" && !event.shiftKey) return "selectAll";
+				if (key === "z") return event.shiftKey ? "redo" : "undo";
+				return null;
+			}
+
 			canvas.addEventListener("keydown", (event) => {
 				event.preventDefault();
-				const key_code = electronKeyCode(event);
+
+				const command = editCommandFor(event);
+				if (command) {
+					window.__sys.send("webview:command", command);
+					return;
+				}
+
 				const modifiers = eventModifiers(event);
+				if (event.repeat) modifiers.push("isAutoRepeat");
 
 				window.__sys.send("webview:input", {
 					type: "keyDown",
-					keyCode: key_code,
+					keyCode: electronKeyCode(event),
 					modifiers,
 				});
 
-				// Printable characters and Enter need a char event for text input
-				if (event.key.length === 1 || event.key === "Enter") {
+				// Printable characters and Enter need a char event for
+				// text input. Skip it when a command modifier is held so
+				// shortcuts do not insert stray text.
+				const printable = event.key.length === 1 && !event.metaKey && !event.ctrlKey;
+				if (printable || event.key === "Enter") {
 					window.__sys.send("webview:input", {
 						type: "char",
 						keyCode: event.key === "Enter" ? "Return" : event.key,

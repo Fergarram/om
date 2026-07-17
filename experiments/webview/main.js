@@ -19,7 +19,10 @@ const path = require("path");
 // Constants
 //
 
-const FRAME_RATE = 120;
+// With shared texture the frame rate is uncapped (no 240 limit) and
+// frames never leave the GPU, so a high rate mainly buys input to
+// paint latency: the guest repaints sooner after a forwarded event.
+const FRAME_RATE = 240;
 const INITIAL_GUEST_WIDTH = 1024;
 const INITIAL_GUEST_HEIGHT = 640;
 const INITIAL_URL = `file://${path.join(__dirname, "guest_test_page.html")}`;
@@ -258,6 +261,14 @@ function wireIpc() {
 	ipcMain.on("webview:input", (event, input_event) => {
 		if (!guest_window || guest_window.isDestroyed()) return;
 		guest_window.webContents.sendInputEvent(input_event);
+	});
+
+	const edit_commands = new Set(["copy", "cut", "paste", "pasteAndMatchStyle", "selectAll", "undo", "redo"]);
+
+	ipcMain.on("webview:command", (event, command) => {
+		if (!guest_window || guest_window.isDestroyed()) return;
+		if (!edit_commands.has(command)) return;
+		guest_window.webContents[command]();
 	});
 
 	ipcMain.on("webview:resize", (event, size) => {
