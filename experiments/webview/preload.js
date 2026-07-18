@@ -8,8 +8,10 @@ contextBridge.exposeInMainWorld("__sys", {
 		ipcRenderer.on(channel, listener);
 		return () => ipcRenderer.removeListener(channel, listener);
 	},
+
 	// false on Electron versions without the sharedTexture module
 	shared_texture_supported: Boolean(sharedTexture),
+
 	// The imported texture object crosses the bridge as a proxy, same
 	// pattern as Electron's shared texture test fixtures. The page
 	// draws from it; release happens here once the page is done.
