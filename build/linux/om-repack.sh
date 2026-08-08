@@ -1,20 +1,22 @@
 #!/bin/sh
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get the directory where this script is located, resolving symlinks so the
+# script works when invoked through a symlink on PATH
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 # Navigate to the script directory
 cd "$SCRIPT_DIR"
 
 # Define paths
-PACK_SCRIPT="../../../../../../build/pack.js"
-ASAR_FILE="../../../../../../build/default_app.asar"
+PACK_SCRIPT="../../build/pack.js"
+ASAR_FILE="../../build/default_app.asar"
 RESOURCES_DIR="./resources"
-OM_EXECUTABLE="./Om"
+OM_EXECUTABLE="./om"
 
-# Check if Om executable exists
+# Check if om executable exists
 if [ ! -f "$OM_EXECUTABLE" ]; then
-    echo "Error: Om executable not found at $OM_EXECUTABLE"
+    echo "Error: om executable not found at $OM_EXECUTABLE"
     exit 1
 fi
 
