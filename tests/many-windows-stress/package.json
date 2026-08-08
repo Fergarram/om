@@ -1,0 +1,6 @@
+{
+  "name": "many-windows-stress",
+  "productName": "Many Windows Stress",
+  "version": "1.0.0",
+  "main": "main.js"
+}
